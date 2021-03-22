@@ -108,41 +108,79 @@ async function checkTime() {
 }
 
 async function getLookup(item, key) {
-  console.log('getLookup', item, key);
-  let jobId = key;
-  let trellisId = item.config.pdf._id;
+  try {
+    let jobId = key;
+    let trellisId = item.config.pdf._id;
+    trace(`New target job [${key}]: Trellis pdf: [${trellisId}]`);
 
-  console.log('getLookup trellisId', trellisId)
-  if (!trellisId) return;
-  let flId = TARGET_PDFs[trellisId];
-  console.log('getLookup flId', flId);
+    if (!trellisId) return;
+    let flId = TARGET_PDFS[trellisId] ? TARGET_PDFS[trellisId].flId : false;
 
-  if (!flId) return false;
-  console.log('got a fl id', flDocId)
+    if (!flId) trace(`No FL id found to associate to this particular job`);
+    if (!flId) return false;
+    TARGET_JOBS[key] = {
+      flId,
+      trellisId,
+      tp: TARGET_JOBS[key].tp
+    }
+    
+    let docId = TARGET_JOBS[key].flId;
 
-  TARGET_JOBS[key] = {
-    flId: TARGET_PDFS[trellisId],
-    trellisId
+    trace(`Posting new message to FL for document _id [${flId}]`)
+    let resp = await axios({
+      method: 'post',
+      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/capa`,
+      headers: {Authorization: FL_TOKEN},
+      data: {
+        details: "TARGET STARTING",
+        type: "change_request",
+      }
+    })
+  } catch(err) {
+    error(`Error associating new target job to FL documents`)
+    error(err);
   }
-
 }
 
-async function onTargetUpdate() {
-  console.log('onTargetUpdate');
+async function onTargetUpdate(c, jobId) {
+  trace(`Recieved update for job [${jobId}]`);
+  let docId = TARGET_JOBS[jobId].flId;
 
+  if (!docId) trace(`No Food Logiq document associated to this job. Ignoring`)
+
+  trace(`Posting new update to FL docId ${docId}`);
+
+  await axios({
+    method: 'post',
+    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/capa`,
+    headers: {Authorization: FL_TOKEN},
+    data: {
+      details: "TARGET UPDATE",
+      type: "change_request",
+    }
+  })
+
+  // Handle finished target results 
+  await Promise.each(Object.keys(c.result || {}), async type => {
+    await Promise.each(Object.keys(c.result[type]), async key => {
+      trace(`Job result stored at trading partner /bookmarks/trellisfw/${type}/${key}`)
+      TARGET_JOBS[jobId].result = {type, key};
+
+      await handleScrapedResult(jobId)
+    })
+  })
 }
 
 async function watchTargetJobs() {
-
+  trace(`Started ListWatch on jobs of the target service...`)
   const watch = new ListWatch({
     path: `/bookmarks/services/target/jobs`,
     name: `target-jobs-fl-sync`,
     conn: CONNECTION,
     resume: true,
-    //onAddItem: getLookup,
+    onAddItem: getLookup,
     onChangeItem: onTargetUpdate
   })
-  console.log('listwatching target jobs');
 }
 
 async function initialize() {
@@ -150,15 +188,16 @@ async function initialize() {
   TOKEN = await getToken();
   // Connect to oada
   try {
-  var conn = await oada.connect({
-    domain: 'https://'+DOMAIN,
-    token: TOKEN,
-  })
+    var conn = await oada.connect({
+      domain: 'https://'+DOMAIN,
+      token: TOKEN,
+    })
   } catch(err) {
-     console.log(err);
+    error(`Initializing Trellis connection failed`);
+    error(err)
   }
   setConnection(conn); 
-//  await watchTargetJobs();
+  await watchTargetJobs();
   await checkTime();
 //  await pollFl();
 
@@ -172,27 +211,25 @@ async function initialize() {
 async function getResourcesByMember(member) {
   let bid = member.business._id;
   let tp = await businessToTp(member);
+
+  if (!tp) error(`No trading partner found for business ${bid}`)
   if (!tp) return;
+  trace(`Found trading partner [${tp}] for FL business ${bid}`)
   //Format date
   let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
 
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
-    console.log('fetching ', type);
+    trace(`Retrieving Food Logiq ${type} for supplier ${member._id}`)
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/${type}?sourceCommunities=${SF_FL_CID}&sourceBusiness=${bid}&versionUpdated=${date}..`,
       to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
       forEach: async function handleItems(item) {
-        console.log('handling items', type, item._id);
-        if (type === 'locations') return console.log(item);
-        if (type === 'documents') console.log(item.shareSource.approvalInfo.status)
+        if (type === 'locations') return trace(`Handling FL locations resource ${item._id}`)
         if (item.shareSource && item.shareSource.approvalInfo.status === "approved") {
-          console.log('found an approved', item._id);
           await handleApproved(item, type, bid, tp)
         } else if (item.shareSource && item.shareSource.approvalInfo.status === 'rejected') {
-          console.log("found a reject", item._id);
         } else if (item.shareSource && item.shareSource.approvalInfo.status === 'awaiting-review') {
-          console.log('found a pending', item._id);
           await handlePending(item, type, bid, tp)
         }
       }
@@ -211,85 +248,94 @@ async function handlePending(item, fltype, bid, tp) {
 }
 
 async function fetchDocAttachments(item, bid, tp, destination) {
-    try {
-  // retrieve the attachments and unzip
-  let file = await axios({
-    method: 'get',
-    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${item._id}/attachments`,
-    headers: {Authorization: FL_TOKEN},
-    responseType: 'arrayBuffer',
-    responseEncoding: 'binary'
-  }).then(r => r.data);
+  try {
+    // retrieve the attachments and unzip
+    let file = await axios({
+      method: 'get',
+      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${item._id}/attachments`,
+      headers: {Authorization: FL_TOKEN},
+      responseType: 'arrayBuffer',
+      responseEncoding: 'binary'
+    }).then(r => r.data);
 
-  let zip = await new jszip().loadAsync(file);
+    let zip = await new jszip().loadAsync(file);
 
-  // create oada resources for each attachment
-  await Promise.map(Object.keys(zip.files || {}), async (key) => {
-    let data = await zip.file(key).async("arraybuffer");
-    let response = await axios({
-      method: 'post',
-      url: `https://${DOMAIN}/resources`,
-      data,
-      headers: {
-        'Content-Disposition': 'inline',
-        'Content-Type': 'application/pdf',
-        Authorization: 'Bearer '+TRELLIS_TOKEN
+    // create oada resources for each attachment
+    await Promise.map(Object.keys(zip.files || {}), async (key) => {
+      let data = await zip.file(key).async("arraybuffer");
+      let response = await axios({
+        method: 'post',
+        url: `https://${DOMAIN}/resources`,
+        data,
+        headers: {
+          'Content-Disposition': 'inline',
+          'Content-Type': 'application/pdf',
+          Authorization: 'Bearer '+TRELLIS_TOKEN
+        }
+      })
+
+      let _id = response.headers['content-location'];
+      await CONNECTION.put({
+        path: `${_id}/_meta`,
+        data: {filename: key},
+        headers: {'content-type': 'application/json'},
+      })
+
+      _id = _id.replace(/^\//, '');
+
+      // Create a lookup in order to track target updates
+      trace(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
+      TARGET_PDFS[_id] = {
+        tp,
+        flId: item._id,
+        pdfId: _id
       }
-    })
 
-    /* TODO: Fix this in ?client?
-    let response = await CONNECTION.post({
-      path: `/resources`,
-      data,
-      headers: {
-        'Content-Disposition': 'inline',
-        'Content-Type': 'application/pdf'
-      }
-    })
-    */
-
-    let _id = response.headers['content-location'];
-    await CONNECTION.put({
-      path: `${_id}/_meta`,
-      data: {filename: key},
-      headers: {'content-type': 'application/json'},
-    })
-
-    _id = _id.replace(/^\//, '');
-
-    // Create a lookup in order to track target updates
-    console.log(`creating lookup from trellis ${_id} to fl ${item._id}`);
-    TARGET_PDFS[_id] = item._id
-
-    //link the file into the documents list
-    console.log('putting to shared now', `${TP_PATH}/${tp}/${destination}/trellisfw/documents/${item._id}`);
+      //link the file into the documents list
+      trace(`Moving file to documents list at ${TP_PATH}/${tp}/${destination}/trellisfw/documents/${item._id}`);
       data = { _id}
-    await CONNECTION.post({
-      path: `${TP_PATH}/${tp}/${destination}/trellisfw/documents`,
-      data,
-      tree,
+      await CONNECTION.post({
+        path: `${TP_PATH}/${tp}/${destination}/trellisfw/documents`,
+        data,
+        tree,
+      })
     })
-  })
-    } catch(err) {
-      console.log(err);
-    }
+  } catch(err) {
+    error(`Error occurred while fetching FL attachments`);
+    error(err)
+  }
 }
 
 // Move approved docs into final location
 //TODO No need to rescrape if accepted? Lookup and link in the already-scraped 
 // result
 async function handleApproved(item, type, bid, tp) {
+  trace(`Handling approved ${type} resource [${item._id}]`)
   if (type === 'documents') {
-    // Retrieve the attachment(s)
-   // await fetchDocAttachments(item, type, bid, tp, 'bookmarks');
-    // put FL data into the virtual doc
+    //1. Get reference of corresponding pending scraped pdf
+    let found = _.find(Object.values(TARGET_JOBS, ['flId', item._id]))
 
+    if (!found) return;
+    if (!found.result) return;
+
+    //2. 
+    trace(`Moving approved document`);
+    try {
+      await CONNECTION.put({
+        path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
+        data: {_id},
+        headers: {'content-type': 'application/json'},
+      })
+    } catch(err) {
+      error('Error moving document result into trading-partner indexed docs')
+      error(err)
+    }
   }
 }
 
 // Validate documents that have not yet be approved
 async function validatePending(item) {
-  console.log('validating document result', item);
+  trace(`Validating pending document [${item._id}]`);
   return true;
   // 2. Access relevant internal system lookups
   // 3. Compare extracted data against Food Logiq fields
@@ -306,26 +352,10 @@ async function businessToTp(member) {
 
 };
 
-async function handleScrapedFsqaAudit(tp) {
-  return async function(item, key) {
-    console.log('DETECTED FSQA audit');
-    /*
-    let valid = await validatePending(item);
-
-    //Approve
-    if (valid) await axios({
-      method: 'put',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${item._id}/approvalStatus/approved`,
-      headers: {Authorization: FL_TOKEN},
-      data: {}
-    })
-    */
-
-  }
-}
-
-async function watchDocs(tp) {
-  console.log('watching shared for tp', tp);
+async function handleScrapedResult(jobId) {
+  let job = TARGET_JOBS[jobId];
+  trace(`Watching trading partner documents [${tp}]`);
+  //let valid = await validatePending(item);
 
   // Ensure watch endpoint exists
   await CONNECTION.put({
@@ -333,18 +363,6 @@ async function watchDocs(tp) {
     data: {},
     tree,
   })
-
-  let func = handleScrapedFsqaAudit(tp);
-  /*
-  const watch = new ListWatch({
-    path: `${TP_PATH}/${tp}/shared/trellisfw/fsqa-audits`,
-    name: `target-result-fsqa-audits-${tp}`,
-    conn: CONNECTION,
-    resume: true,
-    onAddItem: func,
-  })
-  */
-
 }
 
 // The main routine to check for food logiq updates
@@ -361,33 +379,25 @@ async function pollFl() {
       let item = TPs[i];
       if (!item.sap_id) return;
       BUSINESSES[item.sap_id] = i;
-
-      // 2. Handle docs processed by target
-      await watchDocs(i);
-       
     })
 
     if (!CURRENTLY_POLLING) {
       CURRENTLY_POLLING = true;
 
     // Sync list of suppliers
-      console.log('fetching trading partner businesses');
+      trace(`Fetching FL community members...`)
       await fetchAndSync({
         from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/communities/${SF_FL_CID}/memberships`,
         to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
         forEach: async (item) => {
-          console.log('get resources', item.business.name);
           await getResourcesByMember(item);
         }
       })
     }
   } catch(err) {
-    console.log(err);
+    error(`Error occurred while polling`);
+    error(err);
   }
-}
-
-async function handleTargetUpdates() {
-  console.log('got an update');
 }
 
 async function fetchAndSync({from, to, pageIndex, forEach}) {
@@ -412,7 +422,8 @@ async function fetchAndSync({from, to, pageIndex, forEach}) {
             sync = true;
           }
         } catch(err) {
-          console.log(err);
+          error(`An error occurred during fetchAndSync`);
+          error(err);
           if (err.status === 404) {
             sync = true;
           } else throw err
