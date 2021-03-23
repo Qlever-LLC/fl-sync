@@ -121,7 +121,7 @@ async function getLookup(item, key) {
     TARGET_JOBS[key] = {
       flId,
       trellisId,
-      tp: TARGET_JOBS[key].tp
+      tp: TARGET_PDFS[trellisId].tp
     }
     
     let docId = TARGET_JOBS[key].flId;
@@ -240,6 +240,7 @@ async function getResourcesByMember(member) {
 
 // Handle docs pending approval
 async function handlePending(item, fltype, bid, tp) {
+  trace(`Handling Pending ${fltype} [${item._id}]`);
   //1. Post the documents to target
   if (fltype === 'documents') {
     // Retrieve the attachment(s)
@@ -409,7 +410,6 @@ async function fetchAndSync({from, to, pageIndex, forEach}) {
     }
     if (pageIndex) request.params = {pageIndex};
     response = await axios(request);
-    info(`GET ${from}`)
 
     await Promise.each(response.data.pageItems, async (item) => {
       let sync;
