@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "DEBUG=\"fl-sync*,${DEBUG}\" mocha 'test/*.mjs'"
   },
   "author": "",
   "license": "ISC",
@@ -14,12 +14,21 @@
     "adm-zip": "^0.5.3",
     "axios": "^0.21.1",
     "bluebird": "^3.7.2",
+    "debug": "^4.3.1",
+    "esm": "^3.2.25",
+    "http2": "^3.3.7",
     "json-pointer": "^0.6.1",
     "jszip": "^3.6.0",
+    "lodash": "^4.17.21",
     "moment": "^2.29.1",
     "momentjs": "^2.0.0",
     "sha256": "^0.2.0",
     "uuid": "^8.3.2",
     "zip-stream": "^4.1.0"
+  },
+  "devDependencies": {
+    "chai": "^4.3.4",
+    "chai-as-promised": "^7.1.1",
+    "mocha": "^8.3.2"
   }
 }
