@@ -36,13 +36,13 @@ let headers = {
 
 describe("document flow (rejection, corrective action, change request, approval.)", () => {
   before(async function () {
-    this.timeout(20000);
+    this.timeout(60000);
     //con = await oada.connect({ domain, token });
     //clean up if necessary
   })
 
   it("step 1: should reject document ", async () => {
-    let path = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/documents/${DOC_ID}/submitCorrectiveActions`;
+    let path = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${DOC_ID}/submitCorrectiveActions`;
     let result = await axios({
       method: "put",
       url: path,
@@ -56,7 +56,7 @@ describe("document flow (rejection, corrective action, change request, approval.
       "type": "change_request",
       "details": "[Automated from tests] -> Need to verify document."
     };
-    let path = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/documents/${DOC_ID}/capa`;
+    let path = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${DOC_ID}/capa`;
     let result = await axios({
       method: "post",
       url: path,
@@ -67,7 +67,7 @@ describe("document flow (rejection, corrective action, change request, approval.
   });
 
   it("step 3: should approve the document ", async () => {
-    let path = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/documents/${DOC_ID}/approvalStatus/approved`;
+    let path = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${DOC_ID}/approvalStatus/approved`;
     let result = await axios({
       method: "put",
       url: path,
