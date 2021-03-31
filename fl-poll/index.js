@@ -39,7 +39,7 @@ let tree = require('./tree.js');
 let TOKEN;
 let CURRENTLY_POLLING = false;
 let checkInterval = 0.5*60*1000; //check oada every 1 minute
-let INTERVAL_MS = 1*60*1000; //1 min in ms
+let INTERVAL_MS = 1*45*1000; //1 min in ms
 let lastPoll;
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
@@ -68,7 +68,7 @@ async function checkTime() {
     let freshPoll = process.env.FRESH_POLL;
 
     info(`/lastPoll endpoint found; last update was: ${response.data.lastPoll}`);
-    if (!freshPoll && response.data.lastPoll) lastPoll = moment(response.data.lastPoll);
+    if (!freshPoll && response.data.lastPoll) lastPoll = moment(response.data.lastPoll).utc();
   } catch (err) {
     if (err.status === 404) {
       info(`/lastPoll does not exist. Omitting versionUpdate param for a fresh poll.`);
@@ -83,10 +83,11 @@ async function checkTime() {
 //    if (lastPoll) lastPoll = lastPoll.format('ddd, DD MMM YYYY HH:mm:ss +0000');
     current = current.format();
     try {
+      info('Polling FL...')
       await pollFl();
     } catch (err) {
-      info('CheckTime Error', err);
       error(err);
+      throw err;
     }
   // 3. Success. Now store update the last checked time.
     info(`Storing new "lastPoll" value: ${current}. Next run will occur on or after this time.`);
@@ -110,11 +111,13 @@ async function checkTime() {
 async function getLookup(item, key) {
   try {
     let jobId = key;
+    if (!(item.config && item.config.pdf && item.config.pdf._id)) return
     let trellisId = item.config.pdf._id;
     trace(`New target job [${key}]: Trellis pdf: [${trellisId}]`);
+    console.log('TARGET_PDFS', TARGET_PDFS);
 
     if (!trellisId) return;
-    let flId = TARGET_PDFS[trellisId] ? TARGET_PDFS[trellisId].flId : false;
+    let flId = TARGET_PDFS[trellisId] && TARGET_PDFS[trellisId].flId;
 
     if (!flId) trace(`No FL id found to associate to this particular job`);
     if (!flId) return false;
@@ -165,7 +168,6 @@ async function onTargetUpdate(c, jobId) {
     await Promise.each(Object.keys(c.result[type]), async key => {
       trace(`Job result stored at trading partner /bookmarks/trellisfw/${type}/${key}`)
       TARGET_JOBS[jobId].result = {type, key};
-
       await handleScrapedResult(jobId)
     })
   })
@@ -199,13 +201,35 @@ async function initialize() {
   setConnection(conn); 
   await watchTargetJobs();
   await checkTime();
-//  await pollFl();
-
-  /*
-
-  await checkTime();
   setInterval(checkTime, checkInterval)
-  */
+}
+
+async function handleFlLocation(item, bid, tp) {
+  trace(`Handling FL location ${item._id}. No handlers currently.`);
+  return
+}
+
+async function handleFlProduct(item, bid, tp) {
+  trace(`Handling FL product ${item._id}. No handlers currently.`);
+  return
+}
+
+async function handleFlDocument(item, bid, tp) {
+  trace(`Handling fl document ${item._id}`)
+  let status = item.shareSource && item.shareSource.approvalInfo.status;
+  switch(status) {
+    case 'approved':
+      await handleApprovedDoc(item, bid, tp);
+      break;
+    case 'rejected':
+      trace(`Doc [${item._id}] rejected. Awaiting supplier action`);
+      break;
+    case 'awaiting-review':
+      await handlePendingDoc(item, bid, tp)
+      break;
+    default:
+      break;
+  }
 }
 
 async function getResourcesByMember(member) {
@@ -220,17 +244,23 @@ async function getResourcesByMember(member) {
 
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
-    trace(`Retrieving Food Logiq ${type} for supplier ${member._id}`)
+    trace(`Retrieving Food Logiq ${type} for supplier ${member._id} with date ${date}`)
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/${type}?sourceCommunities=${SF_FL_CID}&sourceBusiness=${bid}&versionUpdated=${date}..`,
       to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
       forEach: async function handleItems(item) {
-        if (type === 'locations') return trace(`Handling FL locations resource ${item._id}`)
-        if (item.shareSource && item.shareSource.approvalInfo.status === "approved") {
-          await handleApproved(item, type, bid, tp)
-        } else if (item.shareSource && item.shareSource.approvalInfo.status === 'rejected') {
-        } else if (item.shareSource && item.shareSource.approvalInfo.status === 'awaiting-review') {
-          await handlePending(item, type, bid, tp)
+        switch(type) {
+          case 'locations':
+            await handleFlLocation(item, bid, tp);
+            break;
+          case 'documents':
+            await handleFlDocument(item, bid, tp);
+            break;
+          case 'products':
+            await handleFlProduct(item, bid, tp);
+            break;
+          default:
+            break;
         }
       }
     })
@@ -239,16 +269,8 @@ async function getResourcesByMember(member) {
 }
 
 // Handle docs pending approval
-async function handlePending(item, fltype, bid, tp) {
-  trace(`Handling Pending ${fltype} [${item._id}]`);
-  //1. Post the documents to target
-  if (fltype === 'documents') {
-    // Retrieve the attachment(s)
-    await fetchDocAttachments(item, bid, tp, 'shared');
-  }
-}
-
-async function fetchDocAttachments(item, bid, tp, destination) {
+async function handlePendingDoc(item, bid, tp) {
+  trace(`Handling Pending document [${item._id}]`);
   try {
     // retrieve the attachments and unzip
     let file = await axios({
@@ -278,11 +300,27 @@ async function fetchDocAttachments(item, bid, tp, destination) {
       let _id = response.headers['content-location'];
       await CONNECTION.put({
         path: `${_id}/_meta`,
-        data: {filename: key},
+        //TODO: How should this be formatted?
+        data: {
+          filename: key, 
+        },
         headers: {'content-type': 'application/json'},
       })
 
       _id = _id.replace(/^\//, '');
+
+      await CONNECTION.put({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
+        //TODO: again with the formatting
+        data: {
+          vdoc: {
+            pdf: {
+              [key]: {_id}
+            }
+          }
+        },
+        headers: {'content-type': 'application/json'},
+      })
 
       // Create a lookup in order to track target updates
       trace(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
@@ -291,12 +329,13 @@ async function fetchDocAttachments(item, bid, tp, destination) {
         flId: item._id,
         pdfId: _id
       }
+      console.log('HERE', TARGET_PDFS);
 
       //link the file into the documents list
-      trace(`Moving file to documents list at ${TP_PATH}/${tp}/${destination}/trellisfw/documents/${item._id}`);
+      trace(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents`);
       data = { _id}
       await CONNECTION.post({
-        path: `${TP_PATH}/${tp}/${destination}/trellisfw/documents`,
+        path: `${TP_PATH}/${tp}/shared/trellisfw/documents`,
         data,
         tree,
       })
@@ -304,33 +343,32 @@ async function fetchDocAttachments(item, bid, tp, destination) {
   } catch(err) {
     error(`Error occurred while fetching FL attachments`);
     error(err)
+    throw err;
   }
 }
 
 // Move approved docs into final location
 //TODO No need to rescrape if accepted? Lookup and link in the already-scraped 
 // result
-async function handleApproved(item, type, bid, tp) {
-  trace(`Handling approved ${type} resource [${item._id}]`)
-  if (type === 'documents') {
-    //1. Get reference of corresponding pending scraped pdf
-    let found = _.find(Object.values(TARGET_JOBS, ['flId', item._id]))
+async function handleApprovedDoc(item, bid, tp) {
+  trace(`Handling approved document resource [${item._id}]`)
+  //1. Get reference of corresponding pending scraped pdf
+  let found = _.find(Object.values(TARGET_JOBS, ['flId', item._id]))
 
-    if (!found) return;
-    if (!found.result) return;
+  if (!found) return;
+  if (!found.result) return;
 
-    //2. 
-    trace(`Moving approved document`);
-    try {
-      await CONNECTION.put({
-        path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
-        data: {_id},
-        headers: {'content-type': 'application/json'},
-      })
-    } catch(err) {
-      error('Error moving document result into trading-partner indexed docs')
-      error(err)
-    }
+  //2. 
+  trace(`Moving approved document`);
+  try {
+    await CONNECTION.put({
+      path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
+      data: {_id},
+      headers: {'content-type': 'application/json'},
+    })
+  } catch(err) {
+    error('Error moving document result into trading-partner indexed docs')
+    error(err)
   }
 }
 
@@ -356,14 +394,26 @@ async function businessToTp(member) {
 async function handleScrapedResult(jobId) {
   let job = TARGET_JOBS[jobId];
   trace(`Watching trading partner documents [${tp}]`);
+
+  await CONNECTION.put({
+    path: `/bookmarks/trellisfw/${type}/${key}/_meta`,
+    data: {
+      vdoc: {'fl-sync': TARGET_JOBS[jobId].flId}
+    }
+  })
+
   //let valid = await validatePending(item);
 
-  // Ensure watch endpoint exists
+  delete TARGET_PDFS[TARGET_JOBS[jobId].trellisId];
+  delete TARGET_JOBS[jobId];
+
+  /*
   await CONNECTION.put({
     path: `${TP_PATH}/${tp}/shared/trellisfw/fsqa-audits`,
     data: {},
     tree,
   })
+  */
 }
 
 // The main routine to check for food logiq updates
@@ -385,7 +435,7 @@ async function pollFl() {
     if (!CURRENTLY_POLLING) {
       CURRENTLY_POLLING = true;
 
-    // Sync list of suppliers
+      // Sync list of suppliers
       trace(`Fetching FL community members...`)
       await fetchAndSync({
         from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/communities/${SF_FL_CID}/memberships`,
@@ -394,10 +444,12 @@ async function pollFl() {
           await getResourcesByMember(item);
         }
       })
+      CURRENTLY_POLLING=false;
     }
   } catch(err) {
-    error(`Error occurred while polling`);
+    CURRENTLY_POLLING=false;
     error(err);
+    throw err;
   }
 }
 
@@ -411,14 +463,19 @@ async function fetchAndSync({from, to, pageIndex, forEach}) {
     if (pageIndex) request.params = {pageIndex};
     response = await axios(request);
 
+
+    // Manually check for changes; Only update the resource if it has changed!
     await Promise.each(response.data.pageItems, async (item) => {
       let sync;
       if (to) {
         let path = typeof(to) === 'function' ? await to(item) : `${to}/${item._id}`
         try {
           let resp = await CONNECTION.get({path})
+
           // Check for changes to the resources
-          if (true) {
+          let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
+          if (!equals) trace('Document difference detected. Syncing...');
+          if (!equals) {
             sync = true;
           }
         } catch(err) {
@@ -462,7 +519,6 @@ function setPath(newPath) {
 }
 
 async function mockFL({url}) {
-  console.log('running a mock', url);
   //1. Strip query parameters
   let u = urlLib.parse(url);
   let path = u.pathname.replace(/\/businesses\/\S*?\//, '/businesses/{{BusinessID}}/')
