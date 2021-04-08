@@ -32,6 +32,7 @@ const DOC_ID = TEST_DOC_ID;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
 const BS_DEMO = `/bookmarks/services/fl-sync/businesses/bs-0002`;
+const TL_TP_DEMO = "/bookmarks/trellisfw/trading-partners/bs-0002";
 let business_hash = "";
 
 let trellisTPTemplate = {
@@ -168,7 +169,7 @@ describe("testing mirror - creating a business.", () => {
   });
 
   it("should exist a business in trellisfw/trading-partners ", async () => {
-    let path = "/bookmarks/trellisfw/trading-partners/bs-0002";
+    let path = TL_TP_DEMO;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
     expect(_result.status).to.equal(200);
   });
@@ -176,7 +177,7 @@ describe("testing mirror - creating a business.", () => {
   it("sapid and masterid should match to sha256(content of food-logiq-mirror) ", async () => {
     let path = BS_DEMO;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
-    let _path = "/bookmarks/trellisfw/trading-partners/bs-0002";
+    let _path = TL_TP_DEMO;
     let _result_tp = await con.get({ path: _path }).catch((error) => { console.log(error) });
     expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.sapid);
     expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.masterid);

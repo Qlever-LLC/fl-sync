@@ -220,11 +220,9 @@ async function initialize() {
     error(err)
   }
   setConnection(conn);
-  //await watchTargetJobs();
-  //await checkTime();
+  await watchTargetJobs();
+  await checkTime();
   await watchTrellisFLBusinesses();
-  // await addTP2Trellis({ data: "test" }, "test");
-  // await addTP2Trellis({ data: "test" }, "test");
   //setInterval(checkTime, checkInterval)
 }
 
