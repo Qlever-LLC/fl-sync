@@ -53,6 +53,7 @@ let trellisTPTemplate = {
 
 let trellisfw_tp_tree = require('./trellis_tp_tree.js');
 let TL_TP_PATH = "/bookmarks/trellisfw/trading-partners";
+let TL_TP_UNIDENTIFIED_PATH = "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners";
 
 //const { getToken } = require(SHARED_PATH+'/service-user');
 
@@ -535,28 +536,38 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
  * @param {*} key 
  */
 async function addTP2Trellis(item, key) {
-  let _path_tp = TL_TP_PATH;
-  let _path_tp_id = _path_tp + key;
+  let _path_tp_id = TL_TP_PATH + key;
   try {
+    //console.log("--> TP ", TradingPartners[key]);
     if (typeof TradingPartners[key] === 'undefined') {//adds the business as trading partner
       let data = _.cloneDeep(trellisTPTemplate);
-      let hash = sha256(JSON.stringify(item[FL_MIRROR]));
-      data.sapid = hash;
-      data.masterid = hash;
+      //console.log("--> masterid ", item["masterid"]);
+      if (typeof item["masterid"] === 'undefined') {
+        _path_tp_id = TL_TP_UNIDENTIFIED_PATH + key;
+      } else {
+        data.sapid = item["masterid"];
+        data.masterid = item["masterid"];
+      }
+      //let hash = sha256(JSON.stringify(item[FL_MIRROR]));
+
       data.name = item[FL_MIRROR]["business"]["name"];
       data.address = item[FL_MIRROR]["business"]["address"]["addressLineOne"];
       data.city = item[FL_MIRROR]["business"]["address"]["city"];
       data.email = item[FL_MIRROR]["business"]["email"];
       data.phone = item[FL_MIRROR]["business"]["phone"];
       data.foodlogiq = item[FL_MIRROR];
+      console.log(_path_tp_id);
       let _tp = await CONNECTION.put({
         path: _path_tp_id,
         tree: trellisfw_tp_tree,
         data: data
       }).then((result) => {
         info("--> business mirrored. ", result);
+        // console.log("--> business mirrored. ", result);
+        // console.log("--> business mirrored. Path: ", _path_tp_id);
       }).catch((error) => {
         info("--> error when mirroring ", error);
+        // console.log("--> Error: business not mirrored. ", error);
       });
       TradingPartners[key] = data;
     } else {

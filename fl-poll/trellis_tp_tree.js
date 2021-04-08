@@ -30,7 +30,15 @@ module.exports = {
                 }
               }
             }
-          },
+          }
+        },
+        "unidentified-trading-partners": {
+          "_type": "application/vnd.trellisfw.trading-partners.1+json",
+          "_rev": 0,
+          "*": {
+            "_type": "application/vnd.trellisfw.trading-partner.1+json",
+            "_rev": 0
+          }
         }
       }
     }

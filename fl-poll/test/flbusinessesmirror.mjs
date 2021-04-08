@@ -32,11 +32,13 @@ const DOC_ID = TEST_DOC_ID;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
 const BS_DEMO = `/bookmarks/services/fl-sync/businesses/bs-0002`;
-const TL_TP_DEMO = "/bookmarks/trellisfw/trading-partners/bs-0002";
-let business_hash = "";
+const BS_DEMO_MASTERID = `/bookmarks/services/fl-sync/businesses/bs-0002-masterid`;
+const TL_TP_DEMO = "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners/bs-0002";
+const TL_TP_DEMO_MASTERID = "/bookmarks/trellisfw/trading-partners/bs-0002-masterid";
+let business_hash = "78c3b3991fe6085a6db8dacbe94957194a072f0afa386be7f2baf4bfe500729c";
 
 let trellisTPTemplate = {
-  sap_id: "",
+  sapid: "",
   masterid: "",
   name: "",
   address: "",
@@ -62,6 +64,14 @@ let trellisfw_tp_tree = {
         "*": {
           "_type": "application/vnd.trellisfw.trading-partner.1+json",
           "_rev": 0,
+        },
+        "unidentified-trading-partners": {
+          "_type": "application/vnd.trellisfw.trading-partners.1+json",
+          "_rev": 0,
+          "*": {
+            "_type": "application/vnd.trellisfw.trading-partner.1+json",
+            "_rev": 0
+          }
         }
       }
     }
@@ -76,13 +86,19 @@ const FL_MIRROR = "food-logiq-mirror";
  */
 async function cleanUp(OADA) {
   let _path = BS_DEMO;
-  console.log(_path);
   let _business = await OADA.delete({
     path: _path
   }).then((result) => {
     //console.log("--> business deleted. ", result);
   }).catch((error) => {
-    console.log("--> error when deleting an asn ", error);
+    console.log("--> error when deleting a business ", error);
+  });
+  let _business_masterid = await OADA.delete({
+    path: BS_DEMO_MASTERID
+  }).then((result) => {
+    //console.log("--> business deleted. ", result);
+  }).catch((error) => {
+    console.log("--> error when deleting a business ", error);
   });
 }//cleanUp
 
@@ -100,8 +116,18 @@ async function putData(OADA) {
     data: _data
   }).then((result) => {
     let _json = JSON.stringify(_data[FL_MIRROR]);
-    business_hash = sha256(_json);
-    console.log(`--> business created -> hash [${business_hash}]`);
+  }).catch((error) => {
+    console.log("--> error when creating a business ", error);
+  });
+
+  _data.masterid = business_hash;
+  _data.sapid = business_hash;
+  let _business_masterid = await OADA.put({
+    path: BS_DEMO_MASTERID,
+    tree: business_tree,
+    data: _data
+  }).then((result) => {
+    let _json = JSON.stringify(_data[FL_MIRROR]);
   }).catch((error) => {
     console.log("--> error when creating a business ", error);
   });
@@ -132,7 +158,7 @@ async function flBusinessesMirror(OADA) {
       console.log(JSON.stringify(_business.data[FL_MIRROR]));
       console.log(_business.data[FL_MIRROR]["business"]);
       let data = _.cloneDeep(trellisTPTemplate);
-      data.sap_id = hash;
+      data.sapid = hash;
       data.masterid = hash;
       data.name = _business.data[FL_MIRROR]["business"]["name"];
       data.address = _business.data[FL_MIRROR]["business"]["address"]["addressLineOne"];
@@ -160,6 +186,7 @@ describe("testing mirror - creating a business.", () => {
     await cleanUp(con);
     await putData(con);
     //await flBusinessesMirror(con);
+    Promise.delay(2000);
   });
 
   it("should exist a business in fl-sync/businesses ", async () => {
@@ -174,13 +201,21 @@ describe("testing mirror - creating a business.", () => {
     expect(_result.status).to.equal(200);
   });
 
+  it("should exist a business in trellisfw/trading-partners/unidentified ", async () => {
+    let path = TL_TP_DEMO_MASTERID;
+    let _result = await con.get({ path }).catch((error) => { console.log(error) });
+    expect(_result.status).to.equal(200);
+  });
+
   it("sapid and masterid should match to sha256(content of food-logiq-mirror) ", async () => {
     let path = BS_DEMO;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
     let _path = TL_TP_DEMO;
     let _result_tp = await con.get({ path: _path }).catch((error) => { console.log(error) });
-    expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.sapid);
-    expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.masterid);
+    // expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.sapid);
+    // expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.masterid);
+    expect(business_hash).to.equal(_result_tp.data.sapid);
+    expect(business_hash).to.equal(_result_tp.data.masterid);
   });
 
 });
