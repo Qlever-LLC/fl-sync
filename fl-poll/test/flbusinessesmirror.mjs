@@ -31,7 +31,7 @@ const DOC_ID = TEST_DOC_ID;
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
-const BS_DEMO = `/bookmarks/services/fl-sync/businesses/bs-0001`;
+const BS_DEMO = `/bookmarks/services/fl-sync/businesses/bs-0002`;
 let business_hash = "";
 
 let trellisTPTemplate = {
@@ -67,6 +67,8 @@ let trellisfw_tp_tree = {
   }
 };
 
+const FL_MIRROR = "food-logiq-mirror";
+
 /**
  * cleans up the demo business data
  * @param OADA 
@@ -96,7 +98,7 @@ async function putData(OADA) {
     tree: business_tree,
     data: _data
   }).then((result) => {
-    let _json = JSON.stringify(_data["food-logiq-mirror"]);
+    let _json = JSON.stringify(_data[FL_MIRROR]);
     business_hash = sha256(_json);
     console.log(`--> business created -> hash [${business_hash}]`);
   }).catch((error) => {
@@ -116,26 +118,26 @@ async function flBusinessesMirror(OADA) {
   let _result = await OADA.get({ path: _path });
 
   for (const [k, v] of Object.entries(_result.data)) {
-    if (k.substring(0, 1) !== '_' && k === "bs-0001") {
+    if (k.substring(0, 1) !== '_' && k === "bs-0002") {
       let _dataStr = JSON.stringify(_result.data);
       console.log(_dataStr);
       console.log("--> key ", k);
       console.log("--> value ", v);
       let _business_path = _path + "/" + k;
       let _business = await OADA.get({ path: _business_path });
-      let hash = sha256(JSON.stringify(_business.data["food-logiq-mirror"]));
+      let hash = sha256(JSON.stringify(_business.data[FL_MIRROR]));
       console.log("--> key hash", hash);
       let _path_tp_id = _path_tp + k;
-      console.log(JSON.stringify(_business.data["food-logiq-mirror"]));
-      console.log(_business.data["food-logiq-mirror"]["business"]);
+      console.log(JSON.stringify(_business.data[FL_MIRROR]));
+      console.log(_business.data[FL_MIRROR]["business"]);
       let data = _.cloneDeep(trellisTPTemplate);
       data.sap_id = hash;
       data.masterid = hash;
-      data.name = _business.data["food-logiq-mirror"]["business"]["name"];
-      data.address = _business.data["food-logiq-mirror"]["business"]["address"]["addressLineOne"];
-      data.city = _business.data["food-logiq-mirror"]["business"]["address"]["city"];
-      data.email = _business.data["food-logiq-mirror"]["business"]["email"];
-      data.phone = _business.data["food-logiq-mirror"]["business"]["phone"];
+      data.name = _business.data[FL_MIRROR]["business"]["name"];
+      data.address = _business.data[FL_MIRROR]["business"]["address"]["addressLineOne"];
+      data.city = _business.data[FL_MIRROR]["business"]["address"]["city"];
+      data.email = _business.data[FL_MIRROR]["business"]["email"];
+      data.phone = _business.data[FL_MIRROR]["business"]["phone"];
       console.log("--> data", data);
       let _tp = await OADA.put({
         path: _path_tp_id,
@@ -156,7 +158,7 @@ describe("testing mirror - creating a business.", () => {
     con = await oada.connect({ domain: DOMAIN, token: TRELLIS_TOKEN });
     await cleanUp(con);
     await putData(con);
-    await flBusinessesMirror(con);
+    //await flBusinessesMirror(con);
   });
 
   it("should exist a business in fl-sync/businesses ", async () => {
@@ -166,18 +168,18 @@ describe("testing mirror - creating a business.", () => {
   });
 
   it("should exist a business in trellisfw/trading-partners ", async () => {
-    let path = "/bookmarks/trellisfw/trading-partners/bs-0001";
+    let path = "/bookmarks/trellisfw/trading-partners/bs-0002";
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
     expect(_result.status).to.equal(200);
   });
 
-  it("sap_id and masterid should match to sha256(content of food-logiq-mirror) ", async () => {
+  it("sapid and masterid should match to sha256(content of food-logiq-mirror) ", async () => {
     let path = BS_DEMO;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
-    let _path = "/bookmarks/trellisfw/trading-partners/bs-0001";
+    let _path = "/bookmarks/trellisfw/trading-partners/bs-0002";
     let _result_tp = await con.get({ path: _path }).catch((error) => { console.log(error) });
-    expect(sha256(JSON.stringify(_result.data["food-logiq-mirror"]))).to.equal(_result_tp.data.sap_id);
-    expect(sha256(JSON.stringify(_result.data["food-logiq-mirror"]))).to.equal(_result_tp.data.masterid);
+    expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.sapid);
+    expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.masterid);
   });
 
 });

@@ -1,12 +1,12 @@
 // TODO: For config library, perhaps rework to use its NODE_CONFIG_DIR feature
-process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const LOCAL = process.env.LOCAL_WINFIELD;
 //if (LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
 const axios = require('axios');
 const debug = require('debug');
 const trace = debug('fl-sync:trace');
-const  info = debug('fl-sync:info');
-const  warn = debug('fl-sync:warn');
+const info = debug('fl-sync:info');
+const warn = debug('fl-sync:warn');
 const error = debug('fl-sync:error');
 
 //const SHARED_PATH = LOCAL ? '../shared' : '/code/fl-shared';
@@ -30,16 +30,37 @@ const sampleDocs = require('./sampleDocs.js');
 const ListWatch = oadalist.ListWatch;
 //const axios = mockFL;
 let BUSINESSES = {};
+let TradingPartners = {};
+const FL_MIRROR = "food-logiq-mirror";
 //let tree = require(SHARED_PATH+'/tree').mirrorTree;
 let tree = require('./tree.js');
+const TL_TP = config.TL_TP;
+const TL_FL_BS = config.TL_FL_BS;
+
+let trellisTPTemplate = {
+  sapid: "",
+  masterid: "",
+  name: "",
+  address: "",
+  city: "",
+  state: "",
+  type: "CUSTOMER",
+  coi_emails: "",
+  fsqa_emails: "",
+  email: "",
+  phone: ""
+};
+
+let trellisfw_tp_tree = require('./trellis_tp_tree.js');
+let TL_TP_PATH = "/bookmarks/trellisfw/trading-partners";
 
 //const { getToken } = require(SHARED_PATH+'/service-user');
 
 //const DOMAIN = config.get('fl-shared:domain') || 'https://localhost'
 let TOKEN;
 let CURRENTLY_POLLING = false;
-let checkInterval = 0.5*60*1000; //check oada every 1 minute
-let INTERVAL_MS = 1*45*1000; //1 min in ms
+let checkInterval = 0.5 * 60 * 1000; //check oada every 1 minute
+let INTERVAL_MS = 1 * 45 * 1000; //1 min in ms
 let lastPoll;
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
@@ -61,7 +82,7 @@ async function checkTime() {
 
   //Get last poll date
   try {
-    let response = await CONNECTION.get({path:`${SERVICE_PATH}`})
+    let response = await CONNECTION.get({ path: `${SERVICE_PATH}` })
 
     manualPoll = response.data.manualPoll || process.env.MANUAL_POLL;
 
@@ -77,10 +98,10 @@ async function checkTime() {
 
   let current = moment().utc();
   let nextUpdate = (lastPoll ? lastPoll.clone() : current.clone()).add(INTERVAL_MS)
-  info(`currentTime is ${current}, nextUpdate is ${nextUpdate}. ${!lastPoll ? 'lastPoll was undefined. Polling.' :  current>nextUpdate ? 'Polling': 'Not Polling'}`);
+  info(`currentTime is ${current}, nextUpdate is ${nextUpdate}. ${!lastPoll ? 'lastPoll was undefined. Polling.' : current > nextUpdate ? 'Polling' : 'Not Polling'}`);
   if (manualPoll) info(`Manual poll detected. Getting changes since last poll`);
-  if (!lastPoll || current>nextUpdate || manualPoll) {
-//    if (lastPoll) lastPoll = lastPoll.format('ddd, DD MMM YYYY HH:mm:ss +0000');
+  if (!lastPoll || current > nextUpdate || manualPoll) {
+    //    if (lastPoll) lastPoll = lastPoll.format('ddd, DD MMM YYYY HH:mm:ss +0000');
     current = current.format();
     try {
       info('Polling FL...')
@@ -89,21 +110,21 @@ async function checkTime() {
       error(err);
       throw err;
     }
-  // 3. Success. Now store update the last checked time.
+    // 3. Success. Now store update the last checked time.
     info(`Storing new "lastPoll" value: ${current}. Next run will occur on or after this time.`);
-    
+
     if (manualPoll) info(`Resetting manualPoll to false`)
 
     if (manualPoll) await CONNECTION.put({
       path: SERVICE_PATH,
       tree,
-      data: {manualPoll: false}
+      data: { manualPoll: false }
     })
 
     return CONNECTION.put({
       path: SERVICE_PATH,
       tree,
-      data: {lastPoll: current}
+      data: { lastPoll: current }
     })
   }
 }
@@ -126,20 +147,20 @@ async function getLookup(item, key) {
       trellisId,
       tp: TARGET_PDFS[trellisId].tp
     }
-    
+
     let docId = TARGET_JOBS[key].flId;
 
     trace(`Posting new message to FL for document _id [${flId}]`)
     let resp = await axios({
       method: 'post',
       url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/capa`,
-      headers: {Authorization: FL_TOKEN},
+      headers: { Authorization: FL_TOKEN },
       data: {
         details: "TARGET STARTING",
         type: "change_request",
       }
     })
-  } catch(err) {
+  } catch (err) {
     error(`Error associating new target job to FL documents`)
     error(err);
   }
@@ -156,7 +177,7 @@ async function onTargetUpdate(c, jobId) {
   await axios({
     method: 'post',
     url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/capa`,
-    headers: {Authorization: FL_TOKEN},
+    headers: { Authorization: FL_TOKEN },
     data: {
       details: "TARGET UPDATE",
       type: "change_request",
@@ -167,7 +188,7 @@ async function onTargetUpdate(c, jobId) {
   await Promise.each(Object.keys(c.result || {}), async type => {
     await Promise.each(Object.keys(c.result[type]), async key => {
       trace(`Job result stored at trading partner /bookmarks/trellisfw/${type}/${key}`)
-      TARGET_JOBS[jobId].result = {type, key};
+      TARGET_JOBS[jobId].result = { type, key };
       await handleScrapedResult(jobId)
     })
   })
@@ -191,17 +212,20 @@ async function initialize() {
   // Connect to oada
   try {
     var conn = await oada.connect({
-      domain: 'https://'+DOMAIN,
+      domain: 'https://' + DOMAIN,
       token: TOKEN,
     })
-  } catch(err) {
+  } catch (err) {
     error(`Initializing Trellis connection failed`);
     error(err)
   }
-  setConnection(conn); 
-  await watchTargetJobs();
-  await checkTime();
-  setInterval(checkTime, checkInterval)
+  setConnection(conn);
+  //await watchTargetJobs();
+  //await checkTime();
+  await watchTrellisFLBusinesses();
+  // await addTP2Trellis({ data: "test" }, "test");
+  // await addTP2Trellis({ data: "test" }, "test");
+  //setInterval(checkTime, checkInterval)
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -217,7 +241,7 @@ async function handleFlProduct(item, bid, tp) {
 async function handleFlDocument(item, bid, tp) {
   trace(`Handling fl document ${item._id}`)
   let status = item.shareSource && item.shareSource.approvalInfo.status;
-  switch(status) {
+  switch (status) {
     case 'approved':
       await handleApprovedDoc(item, bid, tp);
       break;
@@ -249,7 +273,7 @@ async function getResourcesByMember(member) {
       from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/${type}?sourceCommunities=${SF_FL_CID}&sourceBusiness=${bid}&versionUpdated=${date}..`,
       to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
       forEach: async function handleItems(item) {
-        switch(type) {
+        switch (type) {
           case 'locations':
             await handleFlLocation(item, bid, tp);
             break;
@@ -276,7 +300,7 @@ async function handlePendingDoc(item, bid, tp) {
     let file = await axios({
       method: 'get',
       url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${item._id}/attachments`,
-      headers: {Authorization: FL_TOKEN},
+      headers: { Authorization: FL_TOKEN },
       responseType: 'arrayBuffer',
       responseEncoding: 'binary'
     }).then(r => r.data);
@@ -293,7 +317,7 @@ async function handlePendingDoc(item, bid, tp) {
         headers: {
           'Content-Disposition': 'inline',
           'Content-Type': 'application/pdf',
-          Authorization: 'Bearer '+TRELLIS_TOKEN
+          Authorization: 'Bearer ' + TRELLIS_TOKEN
         }
       })
 
@@ -302,9 +326,9 @@ async function handlePendingDoc(item, bid, tp) {
         path: `${_id}/_meta`,
         //TODO: How should this be formatted?
         data: {
-          filename: key, 
+          filename: key,
         },
-        headers: {'content-type': 'application/json'},
+        headers: { 'content-type': 'application/json' },
       })
 
       _id = _id.replace(/^\//, '');
@@ -315,11 +339,11 @@ async function handlePendingDoc(item, bid, tp) {
         data: {
           vdoc: {
             pdf: {
-              [key]: {_id}
+              [key]: { _id }
             }
           }
         },
-        headers: {'content-type': 'application/json'},
+        headers: { 'content-type': 'application/json' },
       })
 
       // Create a lookup in order to track target updates
@@ -333,14 +357,14 @@ async function handlePendingDoc(item, bid, tp) {
 
       //link the file into the documents list
       trace(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents`);
-      data = { _id}
+      data = { _id }
       await CONNECTION.post({
         path: `${TP_PATH}/${tp}/shared/trellisfw/documents`,
         data,
         tree,
       })
     })
-  } catch(err) {
+  } catch (err) {
     error(`Error occurred while fetching FL attachments`);
     error(err)
     throw err;
@@ -363,10 +387,10 @@ async function handleApprovedDoc(item, bid, tp) {
   try {
     await CONNECTION.put({
       path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
-      data: {_id},
-      headers: {'content-type': 'application/json'},
+      data: { _id },
+      headers: { 'content-type': 'application/json' },
     })
-  } catch(err) {
+  } catch (err) {
     error('Error moving document result into trading-partner indexed docs')
     error(err)
   }
@@ -398,7 +422,7 @@ async function handleScrapedResult(jobId) {
   await CONNECTION.put({
     path: `/bookmarks/trellisfw/${type}/${key}/_meta`,
     data: {
-      vdoc: {'fl-sync': TARGET_JOBS[jobId].flId}
+      vdoc: { 'fl-sync': TARGET_JOBS[jobId].flId }
     }
   })
 
@@ -418,7 +442,7 @@ async function handleScrapedResult(jobId) {
 
 // The main routine to check for food logiq updates
 async function pollFl() {
-  try { 
+  try {
     // Get known trading partners
     let resp = await CONNECTION.get({
       path: `${TP_PATH}/expand-index`,
@@ -444,23 +468,23 @@ async function pollFl() {
           await getResourcesByMember(item);
         }
       })
-      CURRENTLY_POLLING=false;
+      CURRENTLY_POLLING = false;
     }
-  } catch(err) {
-    CURRENTLY_POLLING=false;
+  } catch (err) {
+    CURRENTLY_POLLING = false;
     error(err);
     throw err;
   }
 }
 
-async function fetchAndSync({from, to, pageIndex, forEach}) {
+async function fetchAndSync({ from, to, pageIndex, forEach }) {
   try {
     let request = {
       method: `get`,
       url: from,
-      headers: {'Authorization': FL_TOKEN},
+      headers: { 'Authorization': FL_TOKEN },
     }
-    if (pageIndex) request.params = {pageIndex};
+    if (pageIndex) request.params = { pageIndex };
     response = await axios(request);
 
 
@@ -468,9 +492,9 @@ async function fetchAndSync({from, to, pageIndex, forEach}) {
     await Promise.each(response.data.pageItems, async (item) => {
       let sync;
       if (to) {
-        let path = typeof(to) === 'function' ? await to(item) : `${to}/${item._id}`
+        let path = typeof (to) === 'function' ? await to(item) : `${to}/${item._id}`
         try {
-          let resp = await CONNECTION.get({path})
+          let resp = await CONNECTION.get({ path })
 
           // Check for changes to the resources
           let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
@@ -478,7 +502,7 @@ async function fetchAndSync({from, to, pageIndex, forEach}) {
           if (!equals) {
             sync = true;
           }
-        } catch(err) {
+        } catch (err) {
           error(`An error occurred during fetchAndSync`);
           error(err);
           if (err.status === 404) {
@@ -489,7 +513,7 @@ async function fetchAndSync({from, to, pageIndex, forEach}) {
         if (sync) await CONNECTION.put({
           path,
           tree,
-          data: {'food-logiq-mirror': item},
+          data: { 'food-logiq-mirror': item },
         })
       }
       if (forEach) await forEach(item)
@@ -497,14 +521,68 @@ async function fetchAndSync({from, to, pageIndex, forEach}) {
 
     // Repeat for additional pages of FL results
     if (response.data.hasNextPage) {
-      await fetchAndSync({from, to, pageIndex: pageIndex ? pageIndex++ : 1})
+      await fetchAndSync({ from, to, pageIndex: pageIndex ? pageIndex++ : 1 })
     }
     return;
-  } catch(err) {
+  } catch (err) {
     info('getBusinesses Error', err.response ? err.response.status : 'Please check error logs');
     throw err;
   }
 }
+
+/**
+ * adds a trading-partner to the trellisfw when
+ * a new business is found under services/fl-sync/businesses
+ * @param {*} item 
+ * @param {*} key 
+ */
+async function addTP2Trellis(item, key) {
+  let _path_tp = TL_TP_PATH;
+  let _path_tp_id = _path_tp + key;
+  try {
+    if (typeof TradingPartners[key] === 'undefined') {//adds the business as trading partner
+      let data = _.cloneDeep(trellisTPTemplate);
+      let hash = sha256(JSON.stringify(item[FL_MIRROR]));
+      data.sapid = hash;
+      data.masterid = hash;
+      data.name = item[FL_MIRROR]["business"]["name"];
+      data.address = item[FL_MIRROR]["business"]["address"]["addressLineOne"];
+      data.city = item[FL_MIRROR]["business"]["address"]["city"];
+      data.email = item[FL_MIRROR]["business"]["email"];
+      data.phone = item[FL_MIRROR]["business"]["phone"];
+      data.foodlogiq = item[FL_MIRROR];
+      let _tp = await CONNECTION.put({
+        path: _path_tp_id,
+        tree: trellisfw_tp_tree,
+        data: data
+      }).then((result) => {
+        info("--> business mirrored. ", result);
+      }).catch((error) => {
+        info("--> error when mirroring ", error);
+      });
+      TradingPartners[key] = data;
+    } else {
+      console.log("--> do nothing.");
+    }//if
+  } catch (error) {
+    info("--> error ", error);
+    throw error;
+  }
+}//addTP2Trellis
+
+/**
+ * watches for changes in the fl-sync/businesses
+ */
+async function watchTrellisFLBusinesses() {
+  trace(`Started ListWatch on Trellis FL Businesses ...`)
+  const watch = new ListWatch({
+    path: TL_FL_BS,
+    name: `trellis-fl-businesses-trellis-tp-mirror`,
+    conn: CONNECTION,
+    resume: true,
+    onAddItem: addTP2Trellis
+  });
+}//watchTrellisFLBusinesses
 
 function setConnection(conn) {
   CONNECTION = conn;
@@ -518,26 +596,27 @@ function setPath(newPath) {
   SERVICE_PATH = newPath;
 }
 
-async function mockFL({url}) {
+async function mockFL({ url }) {
   //1. Strip query parameters
   let u = urlLib.parse(url);
   let path = u.pathname.replace(/\/businesses\/\S*?\//, '/businesses/{{BusinessID}}/')
   path = path.replace(/\/communities\/\S*?\//, '/communities/{{CommunityID}}/');
   path = path.replace(/\/documents\/\S*?\//, '/documents/{{DocumentID}}/');
 
-  if (u.search) path+=u.search;
+  if (u.search) path += u.search;
   path = path.replace(/sourceBusiness=\S*?\&/, 'sourceBusiness={{SupplierID}}&')
   path = path.replace(/versionUpdated=\S*?$/, 'versionUpdated={{Date}}')
 
   let string = `{{Host}}${path}`
 
-  return {data: sampleDocs[string]};
+  return { data: sampleDocs[string] };
 }
 
 initialize()
+
 async function testMock() {
   let url = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/abc123/attachments`
-  let res = mockFL({url})
+  let res = mockFL({ url });
 }
 
 module.exports = (args) => {

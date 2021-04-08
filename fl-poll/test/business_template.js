@@ -1,10 +1,10 @@
 module.exports = {
   "food-logiq-mirror": {
-    "_id": "bs-0001",
+    "_id": "bs-0002",
     "createdAt": "2021-02-03T19:14:36.373Z",
     "updatedAt": "0001-01-01T00:00:00Z",
     "business": {
-      "_id": "bs-0001",
+      "_id": "bs-0002",
       "name": "Test Business",
       "heroURL": "",
       "iconURL": "",
