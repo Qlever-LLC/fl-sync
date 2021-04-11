@@ -31,11 +31,14 @@ const DOC_ID = TEST_DOC_ID;
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
-const BS_DEMO = `/bookmarks/services/fl-sync/businesses/bs-0002`;
-const BS_DEMO_MASTERID = `/bookmarks/services/fl-sync/businesses/bs-0002-masterid`;
-const TL_TP_DEMO = "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners/bs-0002";
-const TL_TP_DEMO_MASTERID = "/bookmarks/trellisfw/trading-partners/bs-0002-masterid";
+const BID = "bs-0004";
+const BS_DEMO = `/bookmarks/services/fl-sync/businesses/${BID}`;
+const BS_DEMO_MASTERID = `/bookmarks/services/fl-sync/businesses/${BID}-masterid`;
+const TL_TP_DEMO = `/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index/${BID}`;
+const TL_TP_DEMO_MASTERID = `/bookmarks/trellisfw/trading-partners/${BID}-masterid`;
 let business_hash = "78c3b3991fe6085a6db8dacbe94957194a072f0afa386be7f2baf4bfe500729c";
+
+let PATHS = [BS_DEMO, BS_DEMO_MASTERID, TL_TP_DEMO, TL_TP_DEMO_MASTERID];
 
 let trellisTPTemplate = {
   sapid: "",
@@ -85,21 +88,13 @@ const FL_MIRROR = "food-logiq-mirror";
  * @param OADA 
  */
 async function cleanUp(OADA) {
-  let _path = BS_DEMO;
-  let _business = await OADA.delete({
-    path: _path
-  }).then((result) => {
-    //console.log("--> business deleted. ", result);
-  }).catch((error) => {
-    console.log("--> error when deleting a business ", error);
-  });
-  let _business_masterid = await OADA.delete({
-    path: BS_DEMO_MASTERID
-  }).then((result) => {
-    //console.log("--> business deleted. ", result);
-  }).catch((error) => {
-    console.log("--> error when deleting a business ", error);
-  });
+  try {
+    Promise.map(PATHS, async (path) => {
+      await OADA.delete({ path });
+    });
+  } catch (error) {
+    console.log("--> error when deleting a business or trading partner: ", error);
+  }
 }//cleanUp
 
 /**
@@ -109,6 +104,8 @@ async function cleanUp(OADA) {
 async function putData(OADA) {
   let _data = _.cloneDeep(business_template);
   let _path = BS_DEMO;
+  _data.masterid = "";
+  _data.sapid = "";
 
   let _business = await OADA.put({
     path: _path,
@@ -120,6 +117,7 @@ async function putData(OADA) {
     console.log("--> error when creating a business ", error);
   });
 
+  Promise.delay(500);
   _data.masterid = business_hash;
   _data.sapid = business_hash;
   let _business_masterid = await OADA.put({
@@ -183,7 +181,9 @@ describe("testing mirror - creating a business.", () => {
   before(async function () {
     this.timeout(60000);
     con = await oada.connect({ domain: DOMAIN, token: TRELLIS_TOKEN });
-    await cleanUp(con);
+    // Promise.delay(1000);
+    // await cleanUp(con);
+    // Promise.delay(2000);
     await putData(con);
     //await flBusinessesMirror(con);
     Promise.delay(2000);
@@ -195,27 +195,25 @@ describe("testing mirror - creating a business.", () => {
     expect(_result.status).to.equal(200);
   });
 
-  it("should exist a business in trellisfw/trading-partners ", async () => {
+  it("should exist a business in trellisfw/trading-partners/unidentified ", async () => {
+    Promise.delay(2000);
     let path = TL_TP_DEMO;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
     expect(_result.status).to.equal(200);
   });
 
-  it("should exist a business in trellisfw/trading-partners/unidentified ", async () => {
+  it("should exist a business in trellisfw/trading-partners ", async () => {
+    Promise.delay(2000);
     let path = TL_TP_DEMO_MASTERID;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
     expect(_result.status).to.equal(200);
   });
 
   it("sapid and masterid should match to sha256(content of food-logiq-mirror) ", async () => {
-    let path = BS_DEMO;
-    let _result = await con.get({ path }).catch((error) => { console.log(error) });
-    let _path = TL_TP_DEMO;
-    let _result_tp = await con.get({ path: _path }).catch((error) => { console.log(error) });
-    // expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.sapid);
-    // expect(sha256(JSON.stringify(_result.data[FL_MIRROR]))).to.equal(_result_tp.data.masterid);
+    Promise.delay(2000);
+    let _path = TL_TP_DEMO_MASTERID;
+    let _result_tp = await con.get({ path: _path }).catch((error) => { });//console.log(error) });
     expect(business_hash).to.equal(_result_tp.data.sapid);
     expect(business_hash).to.equal(_result_tp.data.masterid);
   });
-
 });

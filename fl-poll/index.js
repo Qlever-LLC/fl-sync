@@ -53,7 +53,7 @@ let trellisTPTemplate = {
 
 let trellisfw_tp_tree = require('./trellis_tp_tree.js');
 let TL_TP_PATH = "/bookmarks/trellisfw/trading-partners";
-let TL_TP_UNIDENTIFIED_PATH = "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners";
+let TL_TP_UNIDENTIFIED_PATH = "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index";
 
 //const { getToken } = require(SHARED_PATH+'/service-user');
 

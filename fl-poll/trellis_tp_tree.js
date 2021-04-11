@@ -32,7 +32,7 @@ module.exports = {
             }
           }
         },
-        "unidentified-trading-partners": {
+        "unidentified-trading-partners-index": {
           "_type": "application/vnd.trellisfw.trading-partners.1+json",
           "_rev": 0,
           "*": {
