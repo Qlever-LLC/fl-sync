@@ -530,6 +530,22 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 }
 
 /**
+ * assigns item data (new business) into the trading partner template
+ * @param {*} data 
+ * @param {*} item 
+ * @returns 
+ */
+async function assignData(data, item) {
+  data.name = item[FL_MIRROR]["business"]["name"] ? item[FL_MIRROR]["business"]["name"] : "";
+  data.address = item[FL_MIRROR]["business"]["address"]["addressLineOne"] ? item[FL_MIRROR]["business"]["address"]["addressLineOne"] : "";
+  data.city = item[FL_MIRROR]["business"]["address"]["city"] ? item[FL_MIRROR]["business"]["address"]["city"] : "";
+  data.email = item[FL_MIRROR]["business"]["email"] ? item[FL_MIRROR]["business"]["email"] : "";
+  data.phone = item[FL_MIRROR]["business"]["phone"] ? item[FL_MIRROR]["business"]["phone"] : "";
+  data.foodlogiq = item[FL_MIRROR] ? item[FL_MIRROR] : "";
+  return data;
+}//assignData
+
+/**
  * adds a trading-partner to the trellisfw when
  * a new business is found under services/fl-sync/businesses
  * @param {*} item 
@@ -538,36 +554,39 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 async function addTP2Trellis(item, key) {
   let _path_tp_id = TL_TP_PATH + key;
   try {
-    //console.log("--> TP ", TradingPartners[key]);
     if (typeof TradingPartners[key] === 'undefined') {//adds the business as trading partner
       let data = _.cloneDeep(trellisTPTemplate);
-      //console.log("--> masterid ", item["masterid"]);
-      if (typeof item["masterid"] === 'undefined') {
+
+      if (typeof item["masterid"] === 'undefined' || item["masterid"] === "") {
         _path_tp_id = TL_TP_UNIDENTIFIED_PATH + key;
       } else {
         data.sapid = item["masterid"];
         data.masterid = item["masterid"];
-      }
-      //let hash = sha256(JSON.stringify(item[FL_MIRROR]));
+      }//if
 
-      data.name = item[FL_MIRROR]["business"]["name"];
-      data.address = item[FL_MIRROR]["business"]["address"]["addressLineOne"];
-      data.city = item[FL_MIRROR]["business"]["address"]["city"];
-      data.email = item[FL_MIRROR]["business"]["email"];
-      data.phone = item[FL_MIRROR]["business"]["phone"];
-      data.foodlogiq = item[FL_MIRROR];
-      console.log(_path_tp_id);
-      let _tp = await CONNECTION.put({
+      if (typeof item[FL_MIRROR] === 'undefined') {
+        let _path = item["_id"];
+        await CONNECTION.get({
+          path: _path
+        }).then(async (result) => {
+          data = await assignData(data, result.data);
+        }).catch((error) => {
+          info("--> error when retrieving business ", error);
+          console.log("--> Error: when retrieving business. ", error);
+        });
+      } else {//if
+        data = await assignData(data, item);
+      }//if
+
+      await CONNECTION.put({
         path: _path_tp_id,
         tree: trellisfw_tp_tree,
         data: data
       }).then((result) => {
         info("--> business mirrored. ", result);
-        // console.log("--> business mirrored. ", result);
-        // console.log("--> business mirrored. Path: ", _path_tp_id);
+        console.log("--> business mirrored. Path: ", _path_tp_id);
       }).catch((error) => {
         info("--> error when mirroring ", error);
-        // console.log("--> Error: business not mirrored. ", error);
       });
       TradingPartners[key] = data;
     } else {

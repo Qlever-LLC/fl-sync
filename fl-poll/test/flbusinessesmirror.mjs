@@ -31,7 +31,7 @@ const DOC_ID = TEST_DOC_ID;
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
-const BID = "bs-0004";
+const BID = "bs-0017";
 const BS_DEMO = `/bookmarks/services/fl-sync/businesses/${BID}`;
 const BS_DEMO_MASTERID = `/bookmarks/services/fl-sync/businesses/${BID}-masterid`;
 const TL_TP_DEMO = `/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index/${BID}`;
@@ -107,25 +107,24 @@ async function putData(OADA) {
   _data.masterid = "";
   _data.sapid = "";
 
-  let _business = await OADA.put({
+  await OADA.put({
     path: _path,
     tree: business_tree,
     data: _data
   }).then((result) => {
-    let _json = JSON.stringify(_data[FL_MIRROR]);
+    console.log("--> business created ", _path);
   }).catch((error) => {
     console.log("--> error when creating a business ", error);
   });
 
-  Promise.delay(500);
   _data.masterid = business_hash;
   _data.sapid = business_hash;
-  let _business_masterid = await OADA.put({
+  await OADA.put({
     path: BS_DEMO_MASTERID,
     tree: business_tree,
     data: _data
   }).then((result) => {
-    let _json = JSON.stringify(_data[FL_MIRROR]);
+    console.log("--> business created ", BS_DEMO_MASTERID);
   }).catch((error) => {
     console.log("--> error when creating a business ", error);
   });
@@ -181,12 +180,10 @@ describe("testing mirror - creating a business.", () => {
   before(async function () {
     this.timeout(60000);
     con = await oada.connect({ domain: DOMAIN, token: TRELLIS_TOKEN });
-    // Promise.delay(1000);
     // await cleanUp(con);
-    // Promise.delay(2000);
     await putData(con);
     //await flBusinessesMirror(con);
-    Promise.delay(2000);
+    await Promise.delay(2000);
   });
 
   it("should exist a business in fl-sync/businesses ", async () => {
@@ -196,21 +193,18 @@ describe("testing mirror - creating a business.", () => {
   });
 
   it("should exist a business in trellisfw/trading-partners/unidentified ", async () => {
-    Promise.delay(2000);
     let path = TL_TP_DEMO;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
     expect(_result.status).to.equal(200);
   });
 
   it("should exist a business in trellisfw/trading-partners ", async () => {
-    Promise.delay(2000);
     let path = TL_TP_DEMO_MASTERID;
     let _result = await con.get({ path }).catch((error) => { console.log(error) });
     expect(_result.status).to.equal(200);
   });
 
   it("sapid and masterid should match to sha256(content of food-logiq-mirror) ", async () => {
-    Promise.delay(2000);
     let _path = TL_TP_DEMO_MASTERID;
     let _result_tp = await con.get({ path: _path }).catch((error) => { });//console.log(error) });
     expect(business_hash).to.equal(_result_tp.data.sapid);
