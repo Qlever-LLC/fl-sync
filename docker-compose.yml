@@ -6,7 +6,7 @@ services:
     volumes:
       - .:/code/fl-sync
     environment:
-      - NODE_TLs_REJECT_UNAUTHORIZED
+      - NODE_TLS_REJECT_UNAUTHORIZED
       - NODE_ENV=${NODE_ENV:-development}
       - DEBUG=${DEBUG-*:error,*:warn,*:info}
       - domain=${DOMAIN}
