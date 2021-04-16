@@ -9,5 +9,5 @@ services:
       - NODE_TLs_REJECT_UNAUTHORIZED
       - NODE_ENV=${NODE_ENV:-development}
       - DEBUG=${DEBUG-*:error,*:warn,*:info}
-      - DOMAIN 
-      - TOKEN
+      - domain=${DOMAIN}
+      - token=${TOKEN}
