@@ -167,7 +167,7 @@ async function onTargetUpdate(c, jobId) {
   // Handle finished target results 
   await Promise.each(Object.keys(c.body && c.body.result || {}), async type => {
     await Promise.each(Object.keys(c.body.result[type]), async key => {
-      console.log('putting _id', _id);
+      console.log('putting _id', c.body.result[type][key]._id);
       TARGET_JOBS[jobId].result = {type, key, _id: c.body.result[type][key]._id};
       await handleScrapedResult(jobId)
     })
@@ -247,7 +247,7 @@ async function initialize() {
   await watchTargetJobs();
   await checkTime();
   await watchTrellisFLBusinesses();
-  //setInterval(checkTime, checkInterval)
+  setInterval(checkTime, checkInterval)
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -316,7 +316,7 @@ async function getResourcesByMember(member) {
 
 // Handle docs pending approval
 async function handlePendingDoc(item, bid, tp) {
-  trace(`Handling Pending document [${item._id}]`);
+  trace(`Handling pending document [${item._id}]`);
   try {
     // retrieve the attachments and unzip
     let file = await axios({
@@ -410,14 +410,23 @@ async function handleApprovedDoc(item, bid, tp) {
   if (!found.result) return;
 
   //2. 
-  trace(`Moving approved document into bookmarks`);
+  trace(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
   console.log('FOUND RESULT', found.result);
   try {
+    //ensure parent exists
     await CONNECTION.put({
-      path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
-      data: {_id: found.result._id},
-      headers: {'content-type': 'application/json'},
+      path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
+      data: {},
       tree
+    })
+    await axios({
+      method: 'put',
+      url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
+      data: {_id: found.result._id},
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${TRELLIS_TOKEN}`
+      },
     })
     delete TARGET_PDFS[TARGET_JOBS[found.jobId].trellisId];
     delete TARGET_JOBS[found.jobId];
@@ -603,11 +612,14 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
             sync = true;
           }
         } catch (err) {
-          error(`An error occurred during fetchAndSync`);
-          error(err);
           if (err.status === 404) {
+            error(`Corresponding resource is not already on trellis. Syncing...`);
             sync = true;
-          } else throw err
+          } else {
+            error(`An error occurred during fetchAndSync`);
+            error(err);
+            throw err
+          }
         }
         // Now, sync
         if (sync) await CONNECTION.put({

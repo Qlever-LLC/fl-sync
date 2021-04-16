@@ -1,7 +1,0 @@
-node_modules
-config.default.js
-.DS_Store
-package-lock.json
-test.zip
-sampleDocs.js
-*.pdf
