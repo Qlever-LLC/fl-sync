@@ -1,4 +1,4 @@
-ervices:
+services:
   fl-sync:
     extends:
       file: ./services/ainz/docker-compose.yml

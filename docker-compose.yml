@@ -1,0 +1,13 @@
+services:
+  fl-sync:
+    build:
+      context: .
+    restart: unless-stopped
+    volumes:
+      - .:/code/fl-sync
+    environment:
+      - NODE_TLs_REJECT_UNAUTHORIZED
+      - NODE_ENV=${NODE_ENV:-development}
+      - DEBUG=${DEBUG-*:error,*:warn,*:info}
+      - domain
+      - token

@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "nodemon --trace-warnings index.js",
     "test": "DEBUG=\"fl-sync*,${DEBUG}\" mocha 'test/*.mjs'"
   },
   "author": "",
@@ -23,6 +24,7 @@
     "lodash": "^4.17.21",
     "moment": "^2.29.1",
     "momentjs": "^2.0.0",
+    "nodemon": "^2.0.7",
     "sha256": "^0.2.0",
     "uuid": "^8.3.2",
     "zip-stream": "^4.1.0"
