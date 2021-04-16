@@ -42,6 +42,18 @@ module.exports = {
                 '*': {
                   '_type': 'application/vnd.oada.trellisfw.document.1+json',
                 }
+              },
+              'fsqa-audits': {
+                '_type': 'application/vnd.oada.trellisfw.fsqa-audits.1+json',
+                '*': {
+                  '_type': 'application/vnd.oada.trellisfw.document.1+json',
+                }
+              },
+              'cois': {
+                '_type': 'application/vnd.oada.trellisfw.cois.1+json',
+                '*': {
+                  '_type': 'application/vnd.oada.trellisfw.coi.1+json',
+                }
               }
             }
           },
