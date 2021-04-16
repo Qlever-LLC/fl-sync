@@ -133,12 +133,12 @@ async function getLookup(item, key) {
     let jobId = key;
     if (!(item.config && item.config.pdf && item.config.pdf._id)) return
     let trellisId = item.config.pdf._id;
-    trace(`New target job [${key}]: Trellis pdf: [${trellisId}]`);
+    info(`New target job [${key}]: Trellis pdf: [${trellisId}]`);
 
     if (!trellisId) return;
     let flId = TARGET_PDFS[trellisId] && TARGET_PDFS[trellisId].flId;
 
-    if (!flId) trace(`No FL id found to associate to this particular job`);
+    if (!flId) info(`No FL id found to associate to this particular job`);
     if (!flId) return false;
     TARGET_JOBS[key] = {
       jobId: key,
@@ -156,10 +156,10 @@ async function getLookup(item, key) {
 }
 
 async function onTargetUpdate(c, jobId) {
-  trace(`Recieved update for job [${jobId}]`);
+  info(`Recieved update for job [${jobId}]`);
   let job = TARGET_JOBS[jobId];
 
-  if (!(job && job.flId)) trace(`No Food Logiq document associated to this job. Ignoring`)
+  if (!(job && job.flId)) info(`No Food Logiq document associated to this job. Ignoring`)
   if (!(job && job.flId)) return;
 
   try {
@@ -194,7 +194,7 @@ async function onTargetUpdate(c, jobId) {
         break;
     }
     if (details) {
-      trace(`Posting new update to FL docId ${job.flId}: ${details}`);
+      info(`Posting new update to FL docId ${job.flId}: ${details}`);
       await axios({
         method: 'post',
         url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
@@ -219,7 +219,7 @@ async function onTargetUpdate(c, jobId) {
 }
 
 async function watchTargetJobs() {
-  trace(`Started ListWatch on jobs of the target service...`)
+  info(`Started ListWatch on jobs of the target service...`)
   const watch = new ListWatch({
     path: `/bookmarks/services/target/jobs`,
     name: `target-jobs-fl-sync`,
@@ -251,24 +251,24 @@ async function initialize() {
 }
 
 async function handleFlLocation(item, bid, tp) {
-  trace(`Handling FL location ${item._id}. No handlers currently.`);
+  info(`Handling FL location ${item._id}. No handlers currently.`);
   return
 }
 
 async function handleFlProduct(item, bid, tp) {
-  trace(`Handling FL product ${item._id}. No handlers currently.`);
+  info(`Handling FL product ${item._id}. No handlers currently.`);
   return
 }
 
 async function handleFlDocument(item, bid, tp) {
-  trace(`Handling fl document ${item._id}`)
+  info(`Handling fl document ${item._id}`)
   let status = item.shareSource && item.shareSource.approvalInfo.status;
   switch (status) {
     case 'approved':
       await handleApprovedDoc(item, bid, tp);
       break;
     case 'rejected':
-      trace(`Doc [${item._id}] rejected. Awaiting supplier action`);
+      info(`Doc [${item._id}] rejected. Awaiting supplier action`);
       break;
     case 'awaiting-review':
       await handlePendingDoc(item, bid, tp)
@@ -284,13 +284,13 @@ async function getResourcesByMember(member) {
 
   if (!tp) error(`No trading partner found for business ${bid}`)
   if (!tp) return;
-  trace(`Found trading partner [${tp}] for FL business ${bid}`)
+  info(`Found trading partner [${tp}] for FL business ${bid}`)
   //Format date
   let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
 
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
-    trace(`Retrieving Food Logiq ${type} for supplier ${member._id} with date ${date}`)
+    info(`Retrieving Food Logiq ${type} for supplier ${member._id} with date ${date}`)
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/${type}?sourceCommunities=${SF_FL_CID}&sourceBusiness=${bid}&versionUpdated=${date}..`,
       to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
@@ -316,7 +316,7 @@ async function getResourcesByMember(member) {
 
 // Handle docs pending approval
 async function handlePendingDoc(item, bid, tp) {
-  trace(`Handling pending document [${item._id}]`);
+  info(`Handling pending document [${item._id}]`);
   try {
     // retrieve the attachments and unzip
     let file = await axios({
@@ -349,6 +349,13 @@ async function handlePendingDoc(item, bid, tp) {
         //TODO: How should this be formatted?
         data: {
           filename: key,
+          services: {
+            'fl-sync': {
+              [item._id]: {
+                _ref: _id,
+              }
+            }
+          }
         },
         headers: { 'content-type': 'application/json' },
       })
@@ -372,7 +379,7 @@ async function handlePendingDoc(item, bid, tp) {
       }).then(r => r.data)
 
       // Create a lookup in order to track target updates
-      trace(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
+      info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
       TARGET_PDFS[_id] = {
         tp,
         flId: item._id,
@@ -381,7 +388,7 @@ async function handlePendingDoc(item, bid, tp) {
       }
 
       //link the file into the documents list
-      trace(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents`);
+      info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents`);
       data = { _id }
       await CONNECTION.post({
         path: `${TP_PATH}/${tp}/shared/trellisfw/documents`,
@@ -400,7 +407,7 @@ async function handlePendingDoc(item, bid, tp) {
 //TODO No need to rescrape if accepted? Lookup and link in the already-scraped 
 // result
 async function handleApprovedDoc(item, bid, tp) {
-  trace(`Handling approved document resource [${item._id}]`)
+  info(`Handling approved document resource [${item._id}]`)
   //1. Get reference of corresponding pending scraped pdf
   let found = _.find(Object.values(TARGET_JOBS, ['flId', item._id]))
 
@@ -410,7 +417,7 @@ async function handleApprovedDoc(item, bid, tp) {
   if (!found.result) return;
 
   //2. 
-  trace(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
+  info(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
   console.log('FOUND RESULT', found.result);
   try {
     //ensure parent exists
@@ -438,19 +445,21 @@ async function handleApprovedDoc(item, bid, tp) {
 
 // Validate documents that have not yet be approved
 async function validatePending(trellisDoc, flDoc, type) {
+  info(`Validating pending doc [${trellisDoc._id}]`);
   let valid;
   switch(type) {
     case 'cois':
       //TODO: how to fix time zone stuff
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
+      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
 
       if (flExp.isSame(trellisExp)) valid = true;
+      if (!valid) info(`Food logiq expiration [${flExp}] Trellis expiration [${trellisExp}]`)
       break;
     default:
       break;
   }
-  trace(`Validation of pending document [${trellisDoc._id}]: ${valid}`);
+  info(`Validation of pending document [${trellisDoc._id}]: ${valid}`);
   return valid;
 }
 
@@ -465,7 +474,10 @@ async function businessToTp(member) {
 
 async function handleScrapedResult(jobId) {
   let job = TARGET_JOBS[jobId];
+  let result;
+  let flDoc;
 
+  try {
   let request = {
     method: 'get',
     url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
@@ -473,7 +485,6 @@ async function handleScrapedResult(jobId) {
       Authorization: `Bearer ${TRELLIS_TOKEN}`,
     },
   }
-  let result;
   await Promise.delay(2000).then(async () => {
     try {
       result = await axios(request).then(r => r.data);
@@ -484,7 +495,7 @@ async function handleScrapedResult(jobId) {
     }
   })
 
-  let flDoc = await CONNECTION.get({
+  flDoc = await CONNECTION.get({
     path: `${job.mirrorId}`
   }).then(r => r.data)
 
@@ -503,7 +514,6 @@ async function handleScrapedResult(jobId) {
       }
     }
   })
-
   let valid = await validatePending(result, flDoc, job.result.type);
 
   if (valid) {
@@ -545,7 +555,10 @@ async function handleScrapedResult(jobId) {
 
   }
 
-  trace(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+  info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+  } catch(err) {
+     console.log(err);
+  }
 
 }
 
@@ -569,7 +582,7 @@ async function pollFl() {
       CURRENTLY_POLLING = true;
 
       // Sync list of suppliers
-      trace(`Fetching FL community members...`)
+      info(`Fetching FL community members...`)
       await fetchAndSync({
         from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/communities/${SF_FL_CID}/memberships`,
         to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
@@ -607,7 +620,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 
           // Check for changes to the resources
           let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
-          if (!equals) trace('Document difference detected. Syncing...');
+          if (!equals) info('Document difference detected. Syncing...');
           if (!equals) {
             sync = true;
           }
@@ -715,7 +728,7 @@ async function addTP2Trellis(item, key) {
  * watches for changes in the fl-sync/businesses
  */
 async function watchTrellisFLBusinesses() {
-  trace(`Started ListWatch on Trellis FL Businesses ...`)
+  info(`Started ListWatch on Trellis FL Businesses ...`)
   const watch = new ListWatch({
     path: TL_FL_BS,
     name: `trellis-fl-businesses-trellis-tp-mirror`,

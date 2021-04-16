@@ -8,6 +8,6 @@ services:
     environment:
       - NODE_TLS_REJECT_UNAUTHORIZED
       - NODE_ENV=${NODE_ENV:-development}
-      - DEBUG=${DEBUG-*:error,*:warn,*:info}
+      - DEBUG=${DEBUG:-"fl-sync:*"}
       - domain=${DOMAIN}
       - token=${TOKEN}
