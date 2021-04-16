@@ -1,5 +1,5 @@
 services:
   fl-sync:
     extends:
-      file: ./services/ainz/docker-compose.yml
+      file: ./services/fl-sync/docker-compose.yml
       service: fl-sync
