@@ -26,7 +26,7 @@ const SF_FL_CID = config.sf_buyer.community_id;
 const SF_FL_BID = config.sf_buyer.business_id;
 const jszip = require('jszip');
 const oadalist = require('@oada/list-lib');
-const sampleDocs = require('./sampleDocs.js');
+//const sampleDocs = require('./sampleDocs.js');
 const ListWatch = oadalist.ListWatch;
 //const axios = mockFL;
 let BUSINESSES = {};
@@ -637,7 +637,7 @@ async function mockFL({ url }) {
 
   let string = `{{Host}}${path}`
 
-  return { data: sampleDocs[string] };
+//  return { data: sampleDocs[string] };
 }
 
 initialize()
