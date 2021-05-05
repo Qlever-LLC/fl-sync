@@ -58,8 +58,8 @@ let TL_TP_UNIDENTIFIED_PATH = "/bookmarks/trellisfw/trading-partners/unidentifie
 //const DOMAIN = config.get('fl-shared:domain') || 'https://localhost'
 let TOKEN;
 let CURRENTLY_POLLING = false;
-let checkInterval = 0.5*30*1000; //check oada every 1 minute
-let INTERVAL_MS = 1*30*1000; //1 min in ms
+let checkInterval = 10*1000; //check oada every 1 minute
+let INTERVAL_MS = 20*1000; //1 min in ms
 let lastPoll;
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
