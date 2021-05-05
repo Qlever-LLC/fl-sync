@@ -389,7 +389,7 @@ async function handlePendingDoc(item, bid, tp) {
 
       //link the file into the documents list
       info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents`);
-      data = { _id }
+      data = { _id, _rev: 0}
       await CONNECTION.post({
         path: `${TP_PATH}/${tp}/shared/trellisfw/documents`,
         data,
@@ -464,7 +464,7 @@ async function validatePending(trellisDoc, flDoc, type) {
 }
 
 async function businessToTp(member) {
-  let sap_id = member.business.internal_id || sha256(JSON.stringify(member));
+  let sap_id = member.internalId || sha256(JSON.stringify(member));
   let tp = BUSINESSES[sap_id];
   return tp;
   //Some magical fuzzy search of trading partners to match to the given
@@ -499,6 +499,7 @@ async function handleScrapedResult(jobId) {
     path: `${job.mirrorId}`
   }).then(r => r.data)
 
+  // Link to the original food-logiq document
   let resp = await axios({
     method: 'put',
     url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
@@ -507,8 +508,8 @@ async function handleScrapedResult(jobId) {
       'Content-Type': 'application/json'
     },
     data: {
-      vdoc: {
-        'foodlogiq': {
+      services: {
+        'fl-sync': {
           document: {_id: job.mirrorId}
         }
       }
