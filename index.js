@@ -330,11 +330,11 @@ async function initialize() {
     error(err)
   }
   setConnection(conn);
-  // await watchTargetJobs();
-  // await checkTime();
-  // await watchTrellisFLBusinesses();
-  // setInterval(checkTime, checkInterval);
-  await spawnAssessment(BID, 2000001, 5000001, 1000001, 1000001, 1000002);
+  await watchTargetJobs();
+  await checkTime();
+  await watchTrellisFLBusinesses();
+  setInterval(checkTime, checkInterval);
+  //await spawnAssessment(BID, 2000001, 5000001, 1000001, 1000001, 1000002);
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -826,7 +826,7 @@ async function watchTrellisFLBusinesses() {
   });
 }//watchTrellisFLBusinesses
 
-/** ====================== ASSESSMENTS =====================================
+/** ====================== ASSESSMENTS ===================================== {
  * updates the content of a spawned assessment
  * @param path spawned assessment url 
  * @param data complete content of the assessment
@@ -899,7 +899,7 @@ async function spawnAssessment(bid, general, aggregate, auto, umbrella, employer
     //console.log("--> Error when spawning an assessment.", error);
   });
 }//spawnAssessment
-
+// ======================  ASSESSMENTS ============================== }
 
 function setConnection(conn) {
   CONNECTION = conn;
