@@ -167,9 +167,10 @@ async function onTargetUpdate(c, jobId) {
   // Handle finished target results 
   await Promise.each(Object.keys(c.body && c.body.result || {}), async type => {
     await Promise.each(Object.keys(c.body.result[type]), async key => {
-      console.log('putting _id', c.body.result[type][key]._id);
-      TARGET_JOBS[jobId].result = {type, key, _id: c.body.result[type][key]._id};
-      await handleScrapedResult(jobId)
+      if (!TARGET_JOBS[jobId].result) {
+        TARGET_JOBS[jobId].result = {type, key, _id: c.body.result[type][key]._id};
+        await handleScrapedResult(jobId)
+      }
     })
   })
 
@@ -185,10 +186,10 @@ async function onTargetUpdate(c, jobId) {
         details = val.information
         break;
       case 'identified':
-        details = `PDF identified as document type: ${val.type}`
+        details = `PDF successfully identified as document type: ${val.type}`
         break;
       case 'success':
-        details = 'PDF successfully extracted.';
+        if (/^Runner/.test(val.meta))details = 'Trellis automation complete.';
         break;
       default:
         break;
@@ -446,21 +447,39 @@ async function handleApprovedDoc(item, bid, tp) {
 // Validate documents that have not yet be approved
 async function validatePending(trellisDoc, flDoc, type) {
   info(`Validating pending doc [${trellisDoc._id}]`);
-  let valid;
+  let message;
+  let status;
   switch(type) {
     case 'cois':
-      //TODO: how to fix time zone stuff
+      //TODO: current fix to timezone stuff:
       let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
 
-      if (flExp.isSame(trellisExp)) valid = true;
-      if (!valid) info(`Food logiq expiration [${flExp}] Trellis expiration [${trellisExp}]`)
+      if (flExp.isSame(trellisExp)) {
+        status = true;
+      } else {
+        message = 'Expiration date does not match PDF document.';
+        status = false;
+      }
+
+      if (!status) info(`Food logiq expiration [${flExp}] Trellis expiration [${trellisExp}]`)
       break;
     default:
       break;
   }
-  info(`Validation of pending document [${trellisDoc._id}]: ${valid}`);
-  return valid;
+  info(`Validation of pending document [${trellisDoc._id}]: ${status}`);
+  await CONNECTION.put({
+    path: `/${trellisDoc._id}/_meta/services/fl-sync`,
+    data: {
+      valid: {
+        status,
+        message
+      }
+    }
+
+  })
+
+  return {message, status}
 }
 
 async function businessToTp(member) {
@@ -515,9 +534,9 @@ async function handleScrapedResult(jobId) {
       }
     }
   })
-  let valid = await validatePending(result, flDoc, job.result.type);
+  let {status, message} = await validatePending(result, flDoc, job.result.type);
 
-  if (valid) {
+  if (status) {
     await axios({
       method: 'post',
       url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
@@ -542,7 +561,7 @@ async function handleScrapedResult(jobId) {
       url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
       headers: {Authorization: FL_TOKEN},
       data: {
-        details: 'Expiration date does not match PDF document. Please correct and resubmit',
+        details: `${message} Please correct and resubmit.`,
         type: "change_request",
       }
     })
