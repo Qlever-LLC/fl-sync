@@ -620,6 +620,10 @@ async function handleScrapedResult(jobId) {
       }
     }
   })
+  let bid = BUSINESSES[job.tp].sap_id;
+    console.log(bid);
+
+  //let assess = await spawnAssessment(BID, 2000001, 5000001, 1000001, 1000001, 1000002);
 
   let {status, message} = await validatePending(result, flDoc, job.result.type);
 
@@ -668,6 +672,17 @@ async function handleScrapedResult(jobId) {
 
 }
 
+async function fetchAssessmentTemplates() {
+  await fetchAndSync({
+    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/assessmenttemplate`,
+    to: `${SERVICE_PATH}/assessment-templates`,
+//    forEach: async (item) => {
+//      console.log(item);
+      
+//    }
+  })
+}
+
 // The main routine to check for food logiq updates
 async function pollFl() {
   try {
@@ -683,6 +698,9 @@ async function pollFl() {
       if (!item.sap_id) return;
       BUSINESSES[item.sap_id] = i;
     })
+
+    //Get assessment templates
+    let templates = await fetchAssessmentTemplates();
 
     if (!CURRENTLY_POLLING) {
       CURRENTLY_POLLING = true;

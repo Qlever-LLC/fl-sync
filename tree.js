@@ -70,6 +70,14 @@ module.exports = {
       'fl-sync': {
         '_type': 'application/vnd.oada.service.1+json',
         '_rev': 0,
+        'assessment-templates': {
+          '_type': 'application/vnd.oada.trellisfw.1+json',
+          '_rev': 0,
+          '*': {
+            '_type': 'application/vnd.oada.trellisfw.1+json',
+            '_rev': 0,
+          }
+        },
         'businesses': {
           '_type': 'application/vnd.oada.trellisfw.1+json',
           '_rev': 0,
