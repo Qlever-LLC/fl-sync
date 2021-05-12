@@ -33,7 +33,93 @@ const FL_MIRROR = "food-logiq-mirror";
 //let tree = require(SHARED_PATH+'/tree').mirrorTree;
 let tree = require('./tree.js');
 const TL_TP = config.TL_TP;
+const TL_UTP = config.TL_UTP;
 const TL_FL_BS = config.TL_FL_BS;
+
+// ======================  ASSESSMENTS ============================== {
+const BID = config.ASSESSMENT_BID;
+const ASSESSMENT_TEMPLATE_ID = config.ASSESSMENT_TEMPLATE_ID;
+const ASSESSMENT_TEMPLATE_NAME = config.ASSESSMENT_TEMPLATE_NAME;
+const CO_ID = config.CO_ID;
+const CO_NAME = config.CO_NAME;
+const COMMUNITY_ID = config.COMMUNITY_ID;
+const COMMUNITY_NAME = config.COMMUNITY_NAME;
+
+// TODO: need to polish this code
+// left here for reference
+let assessment_template = {
+  "assessmentTemplate": {
+    "_id": ASSESSMENT_TEMPLATE_ID,
+    "name": ASSESSMENT_TEMPLATE_NAME
+  },
+  "availableInCommunity": {
+    "community": {
+      "_id": COMMUNITY_ID,
+      "name": COMMUNITY_NAME
+    },
+    "communityOwnerBusiness": {
+      "_id": CO_ID,
+      "name": CO_NAME
+    }
+  },
+  "initiatedByBusiness": {
+    "_id": "605249563a720a000e4154ad",
+    "name": "Centricity Test"
+  },
+  "performedOnBusiness": {
+    "_id": "605249563a720a000e4154ad",
+    "name": "Centricity Test"
+  },
+
+  "name": "Insurance Requirements",
+  "type": "supplier_questionnaire"
+};
+
+// TODO: need to polish this code
+// left here for reference
+let answer_content = {
+  "_id": "6091a3bed4e9d21beb000001",
+  "answers": [
+    {
+      "column": "6086fa35f8960fafbf000003",
+      "answerText": null,
+      "answerBool": null,
+      "answerNumeric": 2000000
+    },
+    {
+      "column": "6086fa63f8960f9ab3000004",
+      "answerText": null,
+      "answerBool": null,
+      "answerNumeric": 5000000
+    },
+    {
+      "column": "6086fa9af8960f29c3000005",
+      "answerText": null,
+      "answerBool": null,
+      "answerNumeric": 1000000
+    },
+    {
+      "column": "6086facdf8960fcb85000006",
+      "answerText": null,
+      "answerBool": null,
+      "answerNumeric": 1000000
+    },
+    {
+      "column": "6086fadcf8960fac16000007",
+      "answerText": null,
+      "answerBool": null,
+      "answerNumeric": 1000000
+    },
+    {
+      "column": "6086fb0cf8960f5046000008",
+      "answerText": null,
+      "answerBool": true,
+      "answerNumeric": null
+    }
+  ]
+};
+
+// ======================  ASSESSMENTS ============================== }
 
 let trellisTPTemplate = {
   sapid: "",
@@ -50,16 +136,16 @@ let trellisTPTemplate = {
 };
 
 let trellisfw_tp_tree = require('./trellis_tp_tree.js');
-let TL_TP_PATH = "/bookmarks/trellisfw/trading-partners";
-let TL_TP_UNIDENTIFIED_PATH = "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index";
+let TL_TP_PATH = TL_TP;
+let TL_TP_UNIDENTIFIED_PATH = TL_UTP;
 
 //const { getToken } = require(SHARED_PATH+'/service-user');
 
 //const DOMAIN = config.get('fl-shared:domain') || 'https://localhost'
 let TOKEN;
 let CURRENTLY_POLLING = false;
-let checkInterval = 10*1000; //check oada every 1 minute
-let INTERVAL_MS = 20*1000; //1 min in ms
+let checkInterval = 10 * 1000; //check oada every 1 minute
+let INTERVAL_MS = 20 * 1000; //1 min in ms
 let lastPoll;
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
@@ -149,7 +235,7 @@ async function getLookup(item, key) {
     }
 
     let docId = TARGET_JOBS[key].flId;
-  } catch(err) {
+  } catch (err) {
     error(`Error associating new target job to FL documents`)
     error(err);
   }
@@ -164,19 +250,16 @@ async function onTargetUpdate(c, jobId) {
 
   try {
 
-  // Handle finished target results 
-  await Promise.each(Object.keys(c.body && c.body.result || {}), async type => {
-    await Promise.each(Object.keys(c.body.result[type]), async key => {
-      if (!TARGET_JOBS[jobId].result) {
-        TARGET_JOBS[jobId].result = {type, key, _id: c.body.result[type][key]._id};
+    // Handle finished target results 
+    await Promise.each(Object.keys(c.body && c.body.result || {}), async type => {
+      await Promise.each(Object.keys(c.body.result[type]), async key => {
+        console.log('putting _id', c.body.result[type][key]._id);
+        TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
         await handleScrapedResult(jobId)
-      }
+      })
     })
-  })
 
-  // Provide select update messages to FL
-  let details;
-  await Promise.each(Object.values(c && c.body && c.body.updates || {}), async val => {
+    // Provide select update messages to FL
     let details;
     switch(val.status) {
       case 'started':
@@ -216,7 +299,7 @@ async function onTargetUpdate(c, jobId) {
     console.log('on target update', err);
   }
 
-  
+
 }
 
 async function watchTargetJobs() {
@@ -248,7 +331,8 @@ async function initialize() {
   await watchTargetJobs();
   await checkTime();
   await watchTrellisFLBusinesses();
-  setInterval(checkTime, checkInterval)
+  setInterval(checkTime, checkInterval);
+  //await spawnAssessment(BID, 2000001, 5000001, 1000001, 1000001, 1000002);
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -390,7 +474,7 @@ async function handlePendingDoc(item, bid, tp) {
 
       //link the file into the documents list
       info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents`);
-      data = { _id, _rev: 0}
+      data = { _id, _rev: 0 }
       await CONNECTION.post({
         path: `${TP_PATH}/${tp}/shared/trellisfw/documents`,
         data,
@@ -430,7 +514,7 @@ async function handleApprovedDoc(item, bid, tp) {
     await axios({
       method: 'put',
       url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
-      data: {_id: found.result._id},
+      data: { _id: found.result._id },
       headers: {
         'content-type': 'application/json',
         'Authorization': `Bearer ${TRELLIS_TOKEN}`
@@ -438,7 +522,7 @@ async function handleApprovedDoc(item, bid, tp) {
     })
     delete TARGET_PDFS[TARGET_JOBS[found.jobId].trellisId];
     delete TARGET_JOBS[found.jobId];
-  } catch(err) {
+  } catch (err) {
     error('Error moving document result into trading-partner indexed docs')
     error(err)
   }
@@ -497,41 +581,12 @@ async function handleScrapedResult(jobId) {
   let flDoc;
 
   try {
-  let request = {
-    method: 'get',
-    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
-    headers: {
-      Authorization: `Bearer ${TRELLIS_TOKEN}`,
-    },
-  }
-  await Promise.delay(2000).then(async () => {
-    try {
-      result = await axios(request).then(r => r.data);
-    } catch(err) {
-      await Promise.delay(2000).then(async () => {
-        result = await axios(request).then(r => r.data);
-      })
-    }
-  })
-
-  flDoc = await CONNECTION.get({
-    path: `${job.mirrorId}`
-  }).then(r => r.data)
-
-  // Link to the original food-logiq document
-  let resp = await axios({
-    method: 'put',
-    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-    headers: {
-      Authorization: `Bearer ${TRELLIS_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    data: {
-      services: {
-        'fl-sync': {
-          document: {_id: job.mirrorId}
-        }
-      }
+    let request = {
+      method: 'get',
+      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+      headers: {
+        Authorization: `Bearer ${TRELLIS_TOKEN}`,
+      },
     }
   })
   let {status, message} = await validatePending(result, flDoc, job.result.type);
@@ -546,38 +601,60 @@ async function handleScrapedResult(jobId) {
         type: "change_request",
       }
     })
-  } else {
-    //reject to FL
-    await axios({
-      method: 'put',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/approvalStatus/rejected`,
-      headers: {Authorization: FL_TOKEN},
-      data: { status: "Rejected" }
-    })
 
-    //Post message regarding error
-    await axios({
-      method: 'post',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
-      headers: {Authorization: FL_TOKEN},
+    flDoc = await CONNECTION.get({
+      path: `${job.mirrorId}`
+    }).then(r => r.data)
+
+    // Link to the original food-logiq document
+    let resp = await axios({
+      method: 'put',
+      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+      headers: {
+        Authorization: `Bearer ${TRELLIS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
       data: {
-        details: `${message} Please correct and resubmit.`,
-        type: "change_request",
+        services: {
+          'fl-sync': {
+            document: { _id: job.mirrorId }
+          }
+        }
       }
     })
+    let valid = await validatePending(result, flDoc, job.result.type);
 
-    await axios({
-      method: 'put',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/submitCorrectiveActions`,
-      headers: {Authorization: FL_TOKEN},
-      data: {}
-    })
+    } else {
+      //reject to FL
+      await axios({
+        method: 'put',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/approvalStatus/rejected`,
+        headers: { Authorization: FL_TOKEN },
+        data: { status: "Rejected" }
+      })
 
-  }
+      //Post message regarding error
+      await axios({
+        method: 'post',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
+        headers: { Authorization: FL_TOKEN },
+        data: {
+          details: `${message} Please correct and resubmit.`,
+          type: "change_request",
+        }
+      })
 
-  info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
-  } catch(err) {
-     console.log(err);
+      await axios({
+        method: 'put',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/submitCorrectiveActions`,
+        headers: { Authorization: FL_TOKEN },
+        data: {}
+      })
+    }
+
+    info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+  } catch (err) {
+    console.log(err);
   }
 
 }
@@ -758,6 +835,81 @@ async function watchTrellisFLBusinesses() {
   });
 }//watchTrellisFLBusinesses
 
+/** ====================== ASSESSMENTS ===================================== {
+ * updates the content of a spawned assessment
+ * @param path spawned assessment url 
+ * @param data complete content of the assessment
+ */
+async function updateAssessment(path, data) {
+  await axios({
+    method: "put",
+    url: path,
+    headers: { 'Authorization': FL_TOKEN },
+    data: data
+  }).then((result) => {
+    info("--> assessment created. ", result);
+  }).catch((error) => {
+    error("--> Error when updating the assessment.");
+    //console.log("--> Error when updating the assessment. ", error);
+  });
+}//updateAssessment
+
+/**
+ * spawns and updates assessments automating the spawning process
+ * @param bid business_id
+ * @param general general liability insurance
+ * @param aggregate general aggregate
+ * @param auto auto liability
+ * @param umbrella coverage
+ * @param employer liability
+ * @param worker compensation
+ */
+async function spawnAssessment(bid, general, aggregate, auto, umbrella, employer, worker) {
+  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${bid}/spawnedassessment`;
+  let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
+  let _assessment_template = _.cloneDeep(assessment_template);
+  _assessment_template["initiatedByBusiness"]["_id"] = bid;
+  _assessment_template["performedOnBusiness"]["_id"] = bid;
+
+  //spawning the assessment with some (not all) values 
+  await axios({
+    method: "post",
+    url: PATH_SPAWN_ASSESSMENT,
+    headers: { 'Authorization': FL_TOKEN },
+    data: _assessment_template
+  }).then(async (result) => {
+    //setting the assessment if to be modified
+    let SPAWNED_ASSESSMENT_ID = result.data._id;
+    let ASSESSMENT_BODY = result.data;
+    let answers_template = [];
+
+    //populating answers in the COI assessment
+    answer_content["answers"][0]["answerNumeric"] = general;
+    answer_content["answers"][1]["answerNumeric"] = aggregate;
+    answer_content["answers"][2]["answerNumeric"] = auto;
+    answer_content["answers"][3]["answerNumeric"] = umbrella;
+    answer_content["answers"][4]["answerNumeric"] = employer;
+    answer_content["answers"][5]["answerNumeric"] = worker;
+
+    //including the answers in the answer array
+    answers_template.push(answer_content);
+    //attaching the answers into the assessment template body
+    ASSESSMENT_BODY["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["answerRows"] = answers_template;
+    // updating percentage completed
+    ASSESSMENT_BODY["state"] = "In Progress";
+    ASSESSMENT_BODY["questionInteractionCounts"]["answered"] = 1;
+    ASSESSMENT_BODY["questionInteractionCounts"]["percentageCompleted"] = 100;
+    // creating the path for a specific assessment (update/put)
+    PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
+    //updating assessment
+    await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
+  }).catch((error) => {
+    error("--> Error when spawning an assessment.");
+    //console.log("--> Error when spawning an assessment.", error);
+  });
+}//spawnAssessment
+// ======================  ASSESSMENTS ============================== }
+
 function setConnection(conn) {
   CONNECTION = conn;
 }
@@ -783,7 +935,7 @@ async function mockFL({ url }) {
 
   let string = `{{Host}}${path}`
 
-//  return { data: sampleDocs[string] };
+  //  return { data: sampleDocs[string] };
 }
 
 initialize()
