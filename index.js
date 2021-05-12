@@ -260,6 +260,8 @@ async function onTargetUpdate(c, jobId) {
     })
 
     // Provide select update messages to FL
+  await Promise.each(Object.values(c && c.body && c.body.updates || {}), async val => {
+
     let details;
     switch(val.status) {
       case 'started':
@@ -581,14 +583,44 @@ async function handleScrapedResult(jobId) {
   let flDoc;
 
   try {
-    let request = {
-      method: 'get',
-      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
-      headers: {
-        Authorization: `Bearer ${TRELLIS_TOKEN}`,
-      },
+  let request = {
+    method: 'get',
+    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+    headers: {
+      Authorization: `Bearer ${TRELLIS_TOKEN}`,
+    },
+  }
+  await Promise.delay(2000).then(async () => {
+    try {
+      result = await axios(request).then(r => r.data);
+    } catch(err) {
+      await Promise.delay(2000).then(async () => {
+        result = await axios(request).then(r => r.data);
+      })
     }
   })
+
+  flDoc = await CONNECTION.get({
+    path: `${job.mirrorId}`
+  }).then(r => r.data)
+
+  // Link to the original food-logiq document
+  let resp = await axios({
+    method: 'put',
+    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+    headers: {
+      Authorization: `Bearer ${TRELLIS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    data: {
+      services: {
+        'fl-sync': {
+          document: {_id: job.mirrorId}
+        }
+      }
+    }
+  })
+
   let {status, message} = await validatePending(result, flDoc, job.result.type);
 
   if (status) {
@@ -601,58 +633,35 @@ async function handleScrapedResult(jobId) {
         type: "change_request",
       }
     })
-
-    flDoc = await CONNECTION.get({
-      path: `${job.mirrorId}`
-    }).then(r => r.data)
-
-    // Link to the original food-logiq document
-    let resp = await axios({
+  } else {
+    //reject to FL
+    await axios({
       method: 'put',
-      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-      headers: {
-        Authorization: `Bearer ${TRELLIS_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
+      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/approvalStatus/rejected`,
+      headers: { Authorization: FL_TOKEN },
+      data: { status: "Rejected" }
+    })
+
+    //Post message regarding error
+    await axios({
+      method: 'post',
+      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
+      headers: { Authorization: FL_TOKEN },
       data: {
-        services: {
-          'fl-sync': {
-            document: { _id: job.mirrorId }
-          }
-        }
+        details: `${message} Please correct and resubmit.`,
+        type: "change_request",
       }
     })
-    let valid = await validatePending(result, flDoc, job.result.type);
 
-    } else {
-      //reject to FL
-      await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/approvalStatus/rejected`,
-        headers: { Authorization: FL_TOKEN },
-        data: { status: "Rejected" }
-      })
+    await axios({
+      method: 'put',
+      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/submitCorrectiveActions`,
+      headers: { Authorization: FL_TOKEN },
+      data: {}
+    })
+  }
 
-      //Post message regarding error
-      await axios({
-        method: 'post',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
-        headers: { Authorization: FL_TOKEN },
-        data: {
-          details: `${message} Please correct and resubmit.`,
-          type: "change_request",
-        }
-      })
-
-      await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/submitCorrectiveActions`,
-        headers: { Authorization: FL_TOKEN },
-        data: {}
-      })
-    }
-
-    info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+  info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
   } catch (err) {
     console.log(err);
   }
