@@ -257,8 +257,10 @@ async function onTargetUpdate(c, jobId) {
     // Handle finished target results 
     await Promise.each(Object.keys(c.body && c.body.result || {}), async type => {
       await Promise.each(Object.keys(c.body.result[type]), async key => {
-        TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
-        await handleScrapedResult(jobId)
+        if (!TARGET_JOBS[jobId].result) {
+          TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
+          await handleScrapedResult(jobId)
+        }
       })
     })
 
@@ -406,10 +408,51 @@ async function getResourcesByMember(member) {
   await fetchAndSync({
     from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment?performedOnBusinessIds=${bid}&versionUpdatedAt=${date}..`,
     to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
+    forEach: async function handleAssess(item) {
+      await handleAssessment(item, bid, tp);
+    }
   })
   return;
   } catch(err) {
     console.log(err);
+  }
+}
+
+async function approveDoc(job, tp) {
+  let j = TARGET_JOBS[job.jobId];
+  let assessmentsApproved = !_.some(Object.values(j.assessments || {}), (o) => !o)
+  try {
+    if (assessmentsApproved && j.approved) {
+      info(`EVERYTHING APPROVED. ALL A GO`);
+      //ensure parent exists
+      await CONNECTION.put({
+        path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${job.result.type}`,
+        data: {},
+        tree
+      })
+      await axios({
+        method: 'put',
+        url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${job.result.type}/${job.result.key}`,
+        data: { _id: job.result._id },
+        headers: {
+          'content-type': 'application/json',
+          'Authorization': `Bearer ${TRELLIS_TOKEN}`
+        },
+      })
+      delete TARGET_PDFS[TARGET_JOBS[job.jobId].trellisId];
+      delete TARGET_JOBS[job.jobId];
+    }
+  } catch (err) {
+    error('Error moving document result into trading-partner indexed docs')
+    error(err)
+  }
+}
+
+async function handleAssessment(item, bid, tp) {
+  let found = _.find(Object.values(TARGET_JOBS, ['assessments', item._id]))
+  if (item.state === 'approved') {
+    TARGET_JOBS[found.jobId].assessments[item._id] = true;
+    await approveDoc(found, tp);
   }
 }
 
@@ -504,6 +547,8 @@ async function handlePendingDoc(item, bid, tp, bname) {
   }
 }
 
+
+
 // Move approved docs into final location
 //TODO No need to rescrape if accepted? Lookup and link in the already-scraped 
 // result
@@ -517,31 +562,12 @@ async function handleApprovedDoc(item, bid, tp) {
   if (!found) console.log('not found222');
   if (!found.result) return;
 
+  TARGET_JOBS[found.jobId].approved = true;
+
   //2. 
   info(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
-  console.log('FOUND RESULT', found.result);
-  try {
-    //ensure parent exists
-    await CONNECTION.put({
-      path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
-      data: {},
-      tree
-    })
-    await axios({
-      method: 'put',
-      url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
-      data: { _id: found.result._id },
-      headers: {
-        'content-type': 'application/json',
-        'Authorization': `Bearer ${TRELLIS_TOKEN}`
-      },
-    })
-    delete TARGET_PDFS[TARGET_JOBS[found.jobId].trellisId];
-    delete TARGET_JOBS[found.jobId];
-  } catch (err) {
-    error('Error moving document result into trading-partner indexed docs')
-    error(err)
-  }
+
+  await approveDoc(found, tp);
 }
 
 // Validate documents that have not yet be approved
@@ -650,6 +676,10 @@ async function handleScrapedResult(jobId) {
 
       let {bid, bname} = job;
       let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 1000001, 1000002);
+      TARGET_JOBS[jobId].assessments ={
+        [assess.data._id]: false
+      }
+      console.log(TARGET_JOBS[jobId]);
       info(`Spawning assessment for business id [${bid}]`);
     } else {
       //reject to FL
@@ -887,10 +917,11 @@ async function updateAssessment(path, data) {
     headers: { 'Authorization': FL_TOKEN },
     data: data
   }).then((result) => {
-    info("--> assessment created. ", result);
-  }).catch((error) => {
+    info("--> assessment created. ", result.data._id);
+    return result;
+  }).catch((err) => {
     error("--> Error when updating the assessment.");
-    //console.log("--> Error when updating the assessment. ", error);
+    error(err);
   });
 }//updateAssessment
 
@@ -913,7 +944,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, e
   console.log(JSON.stringify(_assessment_template, null, 2))
 
   //spawning the assessment with some (not all) values 
-  await axios({
+  return axios({
     method: "post",
     url: PATH_SPAWN_ASSESSMENT,
     headers: { 'Authorization': FL_TOKEN },
@@ -943,7 +974,8 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, e
     // creating the path for a specific assessment (update/put)
     PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
     //updating assessment
-    await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
+    let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
+    return response || result
   }).catch((err) => {
     error("--> Error when spawning an assessment.");
     error(err);
