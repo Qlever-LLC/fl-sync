@@ -45,6 +45,12 @@ const CO_NAME = config.CO_NAME;
 const COMMUNITY_ID = config.COMMUNITY_ID;
 const COMMUNITY_NAME = config.COMMUNITY_NAME;
 
+const AssessmentType = Object.freeze(
+  { "SupplierAudit": "supplier_audit", },
+  { "SupplierQuestionnaire": "supplier_questionnaire" },
+  { "InternalAudit": "internal_audit" },
+);
+
 // TODO: need to polish this code
 // left here for reference
 let assessment_template = {
@@ -63,8 +69,8 @@ let assessment_template = {
     }
   },
   "initiatedByBusiness": {
-    "_id": "605249563a720a000e4154ad",
-    "name": "Centricity Test"
+    "_id": CO_ID,
+    "name": CO_NAME
   },
   "performedOnBusiness": {
     "_id": "605249563a720a000e4154ad",
@@ -72,7 +78,7 @@ let assessment_template = {
   },
 
   "name": "Insurance Requirements",
-  "type": "supplier_questionnaire"
+  "type": AssessmentType.SupplierAudit
 };
 
 // TODO: need to polish this code
@@ -257,44 +263,44 @@ async function onTargetUpdate(c, jobId) {
     })
 
     // Provide select update messages to FL
-  await Promise.each(Object.values(c && c.body && c.body.updates || {}), async val => {
+    await Promise.each(Object.values(c && c.body && c.body.updates || {}), async val => {
 
-    let details;
-    switch(val.status) {
-      case 'started':
-        details = 'PDF data extraction started...';
-        break;
-      case 'error':
-        details = val.information
-        break;
-      case 'identified':
-        details = `PDF successfully identified as document type: ${val.type}`
-        break;
-      case 'success':
-        if (/^Runner/.test(val.meta))details = 'Trellis automation complete.';
-        break;
-      default:
-        break;
-    }
-    if (details) {
-      info(`Posting new update to FL docId ${job.flId}: ${details}`);
-      await axios({
-        method: 'post',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
-        headers: {Authorization: FL_TOKEN},
-        data: {
-          details,
-          type: "change_request",
-        }
-      })
-    }
-    // Use success and failure as signals of a completed job
-    if (val.status === 'success' || val.status === 'failure') {
-//      delete TARGET_PDFS[TARGET_JOBS[jobId].trellisId];
-//      delete TARGET_JOBS[jobId];
-    }
-  })
-  } catch(err) {
+      let details;
+      switch (val.status) {
+        case 'started':
+          details = 'PDF data extraction started...';
+          break;
+        case 'error':
+          details = val.information
+          break;
+        case 'identified':
+          details = `PDF successfully identified as document type: ${val.type}`
+          break;
+        case 'success':
+          if (/^Runner/.test(val.meta)) details = 'Trellis automation complete.';
+          break;
+        default:
+          break;
+      }
+      if (details) {
+        info(`Posting new update to FL docId ${job.flId}: ${details}`);
+        await axios({
+          method: 'post',
+          url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
+          headers: { Authorization: FL_TOKEN },
+          data: {
+            details,
+            type: "change_request",
+          }
+        })
+      }
+      // Use success and failure as signals of a completed job
+      if (val.status === 'success' || val.status === 'failure') {
+        //      delete TARGET_PDFS[TARGET_JOBS[jobId].trellisId];
+        //      delete TARGET_JOBS[jobId];
+      }
+    })
+  } catch (err) {
     console.log('on target update', err);
   }
 
@@ -331,7 +337,6 @@ async function initialize() {
   await checkTime();
   await watchTrellisFLBusinesses();
   setInterval(checkTime, checkInterval);
-  //await spawnAssessment(BID, 2000001, 5000001, 1000001, 1000001, 1000002);
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -344,7 +349,7 @@ async function handleFlProduct(item, bid, tp) {
   return
 }
 
-async function handleFlDocument(item, bid, tp) {
+async function handleFlDocument(item, bid, tp, bname) {
   info(`Handling fl document ${item._id}`)
   let status = item.shareSource && item.shareSource.approvalInfo.status;
   switch (status) {
@@ -355,7 +360,7 @@ async function handleFlDocument(item, bid, tp) {
       info(`Doc [${item._id}] rejected. Awaiting supplier action`);
       break;
     case 'awaiting-review':
-      await handlePendingDoc(item, bid, tp)
+      await handlePendingDoc(item, bid, tp, bname)
       break;
     default:
       break;
@@ -364,6 +369,7 @@ async function handleFlDocument(item, bid, tp) {
 
 async function getResourcesByMember(member) {
   let bid = member.business._id;
+  let bname = member.business.name;
   let tp = await businessToTp(member);
 
   if (!tp) error(`No trading partner found for business ${bid}`)
@@ -384,7 +390,7 @@ async function getResourcesByMember(member) {
             await handleFlLocation(item, bid, tp);
             break;
           case 'documents':
-            await handleFlDocument(item, bid, tp);
+            await handleFlDocument(item, bid, tp, bname);
             break;
           case 'products':
             await handleFlProduct(item, bid, tp);
@@ -396,20 +402,19 @@ async function getResourcesByMember(member) {
     })
   })
   // Now get assessments (slightly different syntax)
+  try {
   await fetchAndSync({
-    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/assessments`,
+    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment?performedOnBusinessIds=${bid}&versionUpdatedAt=${date}..`,
     to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
-//    forEach: async (item) => {
-//      console.log(item);
-      
-//    }
   })
-}
   return;
+  } catch(err) {
+    console.log(err);
+  }
 }
 
 // Handle docs pending approval
-async function handlePendingDoc(item, bid, tp) {
+async function handlePendingDoc(item, bid, tp, bname) {
   info(`Handling pending document [${item._id}]`);
   try {
     // retrieve the attachments and unzip
@@ -480,6 +485,7 @@ async function handlePendingDoc(item, bid, tp) {
         pdfId: _id,
         mirrorId,
         bid,
+        bname,
       }
 
       //link the file into the documents list
@@ -543,10 +549,10 @@ async function validatePending(trellisDoc, flDoc, type) {
   info(`Validating pending doc [${trellisDoc._id}]`);
   let message;
   let status;
-  switch(type) {
+  switch (type) {
     case 'cois':
       //TODO: current fix to timezone stuff:
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
+      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
 
       if (flExp.isSame(trellisExp)) {
@@ -573,7 +579,7 @@ async function validatePending(trellisDoc, flDoc, type) {
 
   })
 
-  return {message, status}
+  return { message, status }
 }
 
 async function businessToTp(member) {
@@ -591,88 +597,89 @@ async function handleScrapedResult(jobId) {
   let flDoc;
 
   try {
-  let request = {
-    method: 'get',
-    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
-    headers: {
-      Authorization: `Bearer ${TRELLIS_TOKEN}`,
-    },
-  }
-  await Promise.delay(2000).then(async () => {
-    try {
-      result = await axios(request).then(r => r.data);
-    } catch(err) {
-      await Promise.delay(2000).then(async () => {
-        result = await axios(request).then(r => r.data);
-      })
+    let request = {
+      method: 'get',
+      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+      headers: {
+        Authorization: `Bearer ${TRELLIS_TOKEN}`,
+      },
     }
-  })
+    await Promise.delay(2000).then(async () => {
+      try {
+        result = await axios(request).then(r => r.data);
+      } catch (err) {
+        await Promise.delay(2000).then(async () => {
+          result = await axios(request).then(r => r.data);
+        })
+      }
+    })
 
-  flDoc = await CONNECTION.get({
-    path: `${job.mirrorId}`
-  }).then(r => r.data)
+    flDoc = await CONNECTION.get({
+      path: `${job.mirrorId}`
+    }).then(r => r.data)
 
-  // Link to the original food-logiq document
-  let resp = await axios({
-    method: 'put',
-    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-    headers: {
-      Authorization: `Bearer ${TRELLIS_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    data: {
-      services: {
-        'fl-sync': {
-          document: {_id: job.mirrorId}
+    // Link to the original food-logiq document
+    let resp = await axios({
+      method: 'put',
+      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+      headers: {
+        Authorization: `Bearer ${TRELLIS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      data: {
+        services: {
+          'fl-sync': {
+            document: { _id: job.mirrorId }
+          }
         }
       }
+    })
+
+    let { status, message } = await validatePending(result, flDoc, job.result.type);
+
+    if (status) {
+      await axios({
+        method: 'post',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
+        headers: { Authorization: FL_TOKEN },
+        data: {
+          details: 'Document passed validation. Ready for approval.',
+          type: "change_request",
+        }
+      })
+
+      let {bid, bname} = job;
+      let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 1000001, 1000002);
+      info(`Spawning assessment for business id [${bid}]`);
+    } else {
+      //reject to FL
+      await axios({
+        method: 'put',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/approvalStatus/rejected`,
+        headers: { Authorization: FL_TOKEN },
+        data: { status: "Rejected" }
+      })
+
+      //Post message regarding error
+      await axios({
+        method: 'post',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
+        headers: { Authorization: FL_TOKEN },
+        data: {
+          details: `${message} Please correct and resubmit.`,
+          type: "change_request",
+        }
+      })
+
+      await axios({
+        method: 'put',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/submitCorrectiveActions`,
+        headers: { Authorization: FL_TOKEN },
+        data: {}
+      })
     }
-  })
 
-  //Determine assessments that apply
-  let assess = await spawnAssessment(job.bid, 2000001, 5000001, 1000001, 1000001, 1000002);
-
-  let {status, message} = await validatePending(result, flDoc, job.result.type);
-
-  if (status) {
-    await axios({
-      method: 'post',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
-      headers: {Authorization: FL_TOKEN},
-      data: {
-        details: 'Document passed validation. Ready for approval.',
-        type: "change_request",
-      }
-    })
-  } else {
-    //reject to FL
-    await axios({
-      method: 'put',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/approvalStatus/rejected`,
-      headers: { Authorization: FL_TOKEN },
-      data: { status: "Rejected" }
-    })
-
-    //Post message regarding error
-    await axios({
-      method: 'post',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
-      headers: { Authorization: FL_TOKEN },
-      data: {
-        details: `${message} Please correct and resubmit.`,
-        type: "change_request",
-      }
-    })
-
-    await axios({
-      method: 'put',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/submitCorrectiveActions`,
-      headers: { Authorization: FL_TOKEN },
-      data: {}
-    })
-  }
-
-  info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+    info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
   } catch (err) {
     console.log(err);
   }
@@ -683,10 +690,10 @@ async function fetchAssessmentTemplates() {
   await fetchAndSync({
     from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/assessmenttemplate`,
     to: `${SERVICE_PATH}/assessment-templates`,
-//    forEach: async (item) => {
-//      console.log(item);
-      
-//    }
+    //    forEach: async (item) => {
+    //      console.log(item);
+
+    //    }
   })
 }
 
@@ -829,7 +836,6 @@ async function addTP2Trellis(item, key) {
           data = await assignData(data, result.data);
         }).catch((error) => {
           info("--> error when retrieving business ", error);
-          console.log("--> Error: when retrieving business. ", error);
         });
       } else {//if
         data = await assignData(data, item);
@@ -898,12 +904,12 @@ async function updateAssessment(path, data) {
  * @param employer liability
  * @param worker compensation
  */
-async function spawnAssessment(bid, general, aggregate, auto, umbrella, employer, worker) {
-  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${bid}/spawnedassessment`;
+async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, employer, worker) {
+  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/spawnedassessment`;
   let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
   let _assessment_template = _.cloneDeep(assessment_template);
-  _assessment_template["initiatedByBusiness"]["_id"] = bid;
   _assessment_template["performedOnBusiness"]["_id"] = bid;
+  _assessment_template["performedOnBusiness"]["name"] = bname;
   console.log(JSON.stringify(_assessment_template, null, 2))
 
   //spawning the assessment with some (not all) values 
@@ -941,7 +947,6 @@ async function spawnAssessment(bid, general, aggregate, auto, umbrella, employer
   }).catch((err) => {
     error("--> Error when spawning an assessment.");
     error(err);
-    //console.log("--> Error when spawning an assessment.", error);
   });
 }//spawnAssessment
 // ======================  ASSESSMENTS ============================== }
