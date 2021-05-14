@@ -226,15 +226,13 @@ async function getLookup(item, key) {
 
     if (!flId) info(`No FL id found to associate to this particular job`);
     if (!flId) return false;
+
     TARGET_JOBS[key] = {
       jobId: key,
-      flId,
       trellisId,
-      tp: TARGET_PDFS[trellisId].tp,
-      mirrorId: TARGET_PDFS[trellisId].mirrorId
-    }
+    };
+    Object.assign(TARGET_JOBS[key], TARGET_PDFS[trellisId])
 
-    let docId = TARGET_JOBS[key].flId;
   } catch (err) {
     error(`Error associating new target job to FL documents`)
     error(err);
@@ -253,7 +251,6 @@ async function onTargetUpdate(c, jobId) {
     // Handle finished target results 
     await Promise.each(Object.keys(c.body && c.body.result || {}), async type => {
       await Promise.each(Object.keys(c.body.result[type]), async key => {
-        console.log('putting _id', c.body.result[type][key]._id);
         TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
         await handleScrapedResult(jobId)
       })
@@ -398,6 +395,16 @@ async function getResourcesByMember(member) {
       }
     })
   })
+  // Now get assessments (slightly different syntax)
+  await fetchAndSync({
+    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/assessments`,
+    to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
+//    forEach: async (item) => {
+//      console.log(item);
+      
+//    }
+  })
+}
   return;
 }
 
@@ -471,7 +478,8 @@ async function handlePendingDoc(item, bid, tp) {
         tp,
         flId: item._id,
         pdfId: _id,
-        mirrorId
+        mirrorId,
+        bid,
       }
 
       //link the file into the documents list
@@ -620,10 +628,9 @@ async function handleScrapedResult(jobId) {
       }
     }
   })
-  let bid = BUSINESSES[job.tp].sap_id;
-    console.log(bid);
 
-  //let assess = await spawnAssessment(BID, 2000001, 5000001, 1000001, 1000001, 1000002);
+  //Determine assessments that apply
+  let assess = await spawnAssessment(job.bid, 2000001, 5000001, 1000001, 1000001, 1000002);
 
   let {status, message} = await validatePending(result, flDoc, job.result.type);
 
@@ -897,6 +904,7 @@ async function spawnAssessment(bid, general, aggregate, auto, umbrella, employer
   let _assessment_template = _.cloneDeep(assessment_template);
   _assessment_template["initiatedByBusiness"]["_id"] = bid;
   _assessment_template["performedOnBusiness"]["_id"] = bid;
+  console.log(JSON.stringify(_assessment_template, null, 2))
 
   //spawning the assessment with some (not all) values 
   await axios({
@@ -930,8 +938,9 @@ async function spawnAssessment(bid, general, aggregate, auto, umbrella, employer
     PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
     //updating assessment
     await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
-  }).catch((error) => {
+  }).catch((err) => {
     error("--> Error when spawning an assessment.");
+    error(err);
     //console.log("--> Error when spawning an assessment.", error);
   });
 }//spawnAssessment
