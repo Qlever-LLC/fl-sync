@@ -296,11 +296,6 @@ async function onTargetUpdate(c, jobId) {
           }
         })
       }
-      // Use success and failure as signals of a completed job
-      if (val.status === 'success' || val.status === 'failure') {
-        //      delete TARGET_PDFS[TARGET_JOBS[jobId].trellisId];
-        //      delete TARGET_JOBS[jobId];
-      }
     })
   } catch (err) {
     console.log('on target update', err);
@@ -406,7 +401,7 @@ async function getResourcesByMember(member) {
   // Now get assessments (slightly different syntax)
   try {
   await fetchAndSync({
-    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment?performedOnBusinessIds=${bid}&versionUpdatedAt=${date}..`,
+    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment?performedOnBusinessIds=${bid}&lastUpdateAt=${date}..`,
     to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
     forEach: async function handleAssess(item) {
       await handleAssessment(item, bid, tp);
@@ -418,41 +413,33 @@ async function getResourcesByMember(member) {
   }
 }
 
-async function approveDoc(job, tp) {
-  let j = TARGET_JOBS[job.jobId];
-  let assessmentsApproved = !_.some(Object.values(j.assessments || {}), (o) => !o)
-  try {
-    if (assessmentsApproved && j.approved) {
-      info(`EVERYTHING APPROVED. ALL A GO`);
-      //ensure parent exists
-      await CONNECTION.put({
-        path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${job.result.type}`,
-        data: {},
-        tree
-      })
-      await axios({
-        method: 'put',
-        url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${job.result.type}/${job.result.key}`,
-        data: { _id: job.result._id },
-        headers: {
-          'content-type': 'application/json',
-          'Authorization': `Bearer ${TRELLIS_TOKEN}`
-        },
-      })
-      delete TARGET_PDFS[TARGET_JOBS[job.jobId].trellisId];
-      delete TARGET_JOBS[job.jobId];
+async function approveFLDoc(docId) {
+  info(`Approving associated FL Doc ${docId}`);
+  await axios({
+    method: 'put',
+    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/approvalStatus/approved`,
+    headers: { Authorization: FL_TOKEN },
+    data: {
+      status: "Approved"
     }
-  } catch (err) {
-    error('Error moving document result into trading-partner indexed docs')
-    error(err)
-  }
+  })
 }
 
 async function handleAssessment(item, bid, tp) {
-  let found = _.find(Object.values(TARGET_JOBS, ['assessments', item._id]))
-  if (item.state === 'approved') {
-    TARGET_JOBS[found.jobId].assessments[item._id] = true;
-    await approveDoc(found, tp);
+  info(`Handling assessment [${item._id}]`)
+  if (item.state === 'Approved') {
+    let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
+    await Promise.each(found, async (job) => {
+      TARGET_JOBS[job.jobId].assessments[item._id] = true;
+      await approveFLDoc(job.flId);
+    })
+  } else if (item.state === 'Rejected') {
+    let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
+    await Promise.each(found, async (job) => {
+      TARGET_JOBS[job.jobId].assessments[item._id] = false;
+      let message =  `An associated Food Logiq supplier Assessment has been rejected.`
+      await rejectFLDoc(job.flId, message);
+    })
   }
 }
 
@@ -567,28 +554,55 @@ async function handleApprovedDoc(item, bid, tp) {
   //2. 
   info(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
 
-  await approveDoc(found, tp);
+  try {
+    info(`EVERYTHING APPROVED. ALL A GO`);
+    //ensure parent exists
+    await CONNECTION.put({
+      path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
+      data: {},
+      tree
+    })
+    await axios({
+      method: 'put',
+      url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
+      data: { _id: found.result._id },
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${TRELLIS_TOKEN}`
+      },
+    })
+    info(`Removing ${TARGET_JOBS[found.jobId].trellisId} from fl-sync PDF index`);
+    info(`Removing ${found.jobId} from fl-sync Jobs index`);
+    delete TARGET_PDFS[TARGET_JOBS[found.jobId].trellisId];
+    delete TARGET_JOBS[found.jobId];
+  } catch (err) {
+    error('Error moving document result into trading-partner indexed docs')
+    error(err)
+  }
 }
 
 // Validate documents that have not yet be approved
 async function validatePending(trellisDoc, flDoc, type) {
   info(`Validating pending doc [${trellisDoc._id}]`);
   let message;
-  let status;
+  let status = true;
   switch (type) {
     case 'cois':
       //TODO: current fix to timezone stuff:
       let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
+      let now = moment();
 
-      if (flExp.isSame(trellisExp)) {
-        status = true;
-      } else {
+      if (!flExp.isSame(trellisExp)) {
         message = 'Expiration date does not match PDF document.';
         status = false;
+        info(`Food logiq expiration [${flExp}] Trellis expiration [${trellisExp}]`)
       }
-
-      if (!status) info(`Food logiq expiration [${flExp}] Trellis expiration [${trellisExp}]`)
+      if (flExp <= now) {
+        message = 'Document is already expired.';
+        status = false;
+        info(`Document is already expired: ${trellisExp}]`)
+      }
       break;
     default:
       break;
@@ -676,43 +690,49 @@ async function handleScrapedResult(jobId) {
 
       let {bid, bname} = job;
       let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 1000001, 1000002);
-      TARGET_JOBS[jobId].assessments ={
+      TARGET_JOBS[jobId].assessments = {
         [assess.data._id]: false
       }
-      console.log(TARGET_JOBS[jobId]);
       info(`Spawning assessment for business id [${bid}]`);
     } else {
-      //reject to FL
-      await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/approvalStatus/rejected`,
-        headers: { Authorization: FL_TOKEN },
-        data: { status: "Rejected" }
-      })
-
-      //Post message regarding error
-      await axios({
-        method: 'post',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
-        headers: { Authorization: FL_TOKEN },
-        data: {
-          details: `${message} Please correct and resubmit.`,
-          type: "change_request",
-        }
-      })
-
-      await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/submitCorrectiveActions`,
-        headers: { Authorization: FL_TOKEN },
-        data: {}
-      })
+      await rejectFLDoc(job.flId, message)
     }
 
     info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
   } catch (err) {
     console.log(err);
   }
+
+}
+
+async function rejectFLDoc(docId, message) {
+  info(`Rejecting FL document [${docId}]. ${message}`);
+  //reject to FL
+  await axios({
+    method: 'put',
+    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/approvalStatus/rejected`,
+    headers: { Authorization: FL_TOKEN },
+    data: { status: "Rejected" }
+  })
+
+  //Post message regarding error
+  await axios({
+    method: 'post',
+    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/capa`,
+    headers: { Authorization: FL_TOKEN },
+    data: {
+      details: `${message} Please correct and resubmit.`,
+      type: "change_request",
+    }
+  })
+
+  await axios({
+    method: 'put',
+    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/submitCorrectiveActions`,
+    headers: { Authorization: FL_TOKEN },
+    data: {}
+  })
+
 
 }
 
@@ -788,7 +808,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 
           // Check for changes to the resources
           let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
-          if (!equals) info('Document difference detected. Syncing...');
+          if (!equals) info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
           if (!equals) {
             sync = true;
           }
@@ -941,7 +961,6 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, e
   let _assessment_template = _.cloneDeep(assessment_template);
   _assessment_template["performedOnBusiness"]["_id"] = bid;
   _assessment_template["performedOnBusiness"]["name"] = bname;
-  console.log(JSON.stringify(_assessment_template, null, 2))
 
   //spawning the assessment with some (not all) values 
   return axios({
@@ -974,6 +993,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, e
     // creating the path for a specific assessment (update/put)
     PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
     //updating assessment
+    ASSESSMENT_BODY["state"] = "Submitted";
     let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
     return response || result
   }).catch((err) => {
