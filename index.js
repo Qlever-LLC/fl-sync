@@ -814,7 +814,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
           }
         } catch (err) {
           if (err.status === 404) {
-            error(`Corresponding resource is not already on trellis. Syncing...`);
+            info(`Corresponding resource is not already on trellis. Syncing...`);
             sync = true;
           } else {
             error(`An error occurred during fetchAndSync`);
