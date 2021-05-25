@@ -515,6 +515,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
       // Create a lookup in order to track target updates
       info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
       TARGET_PDFS[_id] = {
+        name: item.name,
         tp,
         flId: item._id,
         pdfId: _id,
@@ -594,7 +595,8 @@ async function validatePending(trellisDoc, flDoc, type) {
   switch (type) {
     case 'cois':
       //TODO: current fix to timezone stuff:
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
+      //let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
+      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
       let now = moment();
 
@@ -695,6 +697,16 @@ async function handleScrapedResult(jobId) {
 
       let {bid, bname} = job;
       let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 3000001, 1000001, 1000002);
+
+      let linkResponse = await linkAssessmentToDocument(SF_FL_BID, {
+        "_id": assess.data._id,
+        "type": "assessment"
+      }, {
+        "_id": job.flId,
+        "name": job.name,
+        "type": "document"
+      })
+
       TARGET_JOBS[jobId].assessments = {
         [assess.data._id]: false
       }
@@ -936,13 +948,6 @@ async function watchTrellisFLBusinesses() {
  * @param data complete content of the assessment
  */
 async function updateAssessment(path, data) {
-  console.log(JSON.stringify({
-    method: "put",
-    url: path,
-    headers: { 'Authorization': FL_TOKEN },
-    data: data
-  }, null, 2))
-
   await axios({
     method: "put",
     url: path,
@@ -957,6 +962,31 @@ async function updateAssessment(path, data) {
   });
 }//updateAssessment
 
+/**
+ * creates the links between assessments and documents 
+ * @param bid business_id
+ * @param assessment info 
+ * @param document info 
+ */
+async function linkAssessmentToDocument(bid, assessment, doc) {
+  let PATH_LINK_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/links/assessment/${assessment._id}`;
+  trace(`Creating FL Link from assessment [${assessment._id}] to document [${doc._id}]`)
+
+  return axios({
+    method: "post",
+    url: PATH_LINK_ASSESSMENT,
+    headers: { "Authorization": FL_TOKEN },
+    data: [{
+      "businessId": bid,
+      "from": assessment,
+      "linkType": "SOURCES",
+      "linkTypeDisplay": "Sources",
+      "to": doc,
+    }]
+  }).catch(err => {
+    error(err);
+  })
+}// linkAssessmentToDocument
 /**
  * spawns and updates assessments automating the spawning process
  * @param bid business_id
