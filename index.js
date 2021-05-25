@@ -37,7 +37,6 @@ const TL_UTP = config.TL_UTP;
 const TL_FL_BS = config.TL_FL_BS;
 
 // ======================  ASSESSMENTS ============================== {
-const BID = config.ASSESSMENT_BID;
 const ASSESSMENT_TEMPLATE_ID = config.ASSESSMENT_TEMPLATE_ID;
 const ASSESSMENT_TEMPLATE_NAME = config.ASSESSMENT_TEMPLATE_NAME;
 const CO_ID = config.CO_ID;
@@ -87,37 +86,43 @@ let answer_content = {
   "_id": "6091a3bed4e9d21beb000001",
   "answers": [
     {
-      "column": "6086fa35f8960fafbf000003",
+      "column": "606cc7eff8014707de000012",
       "answerText": null,
       "answerBool": null,
       "answerNumeric": 2000000
     },
     {
-      "column": "6086fa63f8960f9ab3000004",
+      "column": "606cc83bf8014788eb000013",
       "answerText": null,
       "answerBool": null,
       "answerNumeric": 5000000
     },
     {
-      "column": "6086fa9af8960f29c3000005",
+      "column": "606cc860f801475f03000014",
       "answerText": null,
       "answerBool": null,
       "answerNumeric": 1000000
     },
     {
-      "column": "6086facdf8960fcb85000006",
+      "column": "6091a7361b70862ee2000001",
+      "answerText": null,
+      "answerBool": null,
+      "answerNumeric": 3000000
+    },
+    {
+      "column": "606cc887f80147f255000015",
       "answerText": null,
       "answerBool": null,
       "answerNumeric": 1000000
     },
     {
-      "column": "6086fadcf8960fac16000007",
+      "column": "606f661d2914d0eaff000001",
       "answerText": null,
       "answerBool": null,
       "answerNumeric": 1000000
     },
     {
-      "column": "6086fb0cf8960f5046000008",
+      "column": "606f664b2914d09a5f000002",
       "answerText": null,
       "answerBool": true,
       "answerNumeric": null
@@ -589,7 +594,7 @@ async function validatePending(trellisDoc, flDoc, type) {
   switch (type) {
     case 'cois':
       //TODO: current fix to timezone stuff:
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
+      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
       let now = moment();
 
@@ -689,7 +694,7 @@ async function handleScrapedResult(jobId) {
       })
 
       let {bid, bname} = job;
-      let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 1000001, 1000002);
+      let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 3000001, 1000001, 1000002);
       TARGET_JOBS[jobId].assessments = {
         [assess.data._id]: false
       }
@@ -931,6 +936,13 @@ async function watchTrellisFLBusinesses() {
  * @param data complete content of the assessment
  */
 async function updateAssessment(path, data) {
+  console.log(JSON.stringify({
+    method: "put",
+    url: path,
+    headers: { 'Authorization': FL_TOKEN },
+    data: data
+  }, null, 2))
+
   await axios({
     method: "put",
     url: path,
@@ -955,7 +967,7 @@ async function updateAssessment(path, data) {
  * @param employer liability
  * @param worker compensation
  */
-async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, employer, worker) {
+async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker) {
   let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/spawnedassessment`;
   let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
   let _assessment_template = _.cloneDeep(assessment_template);
@@ -963,7 +975,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, e
   _assessment_template["performedOnBusiness"]["name"] = bname;
 
   //spawning the assessment with some (not all) values 
-  return axios({
+    return axios({
     method: "post",
     url: PATH_SPAWN_ASSESSMENT,
     headers: { 'Authorization': FL_TOKEN },
@@ -978,9 +990,10 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, umbrella, e
     answer_content["answers"][0]["answerNumeric"] = general;
     answer_content["answers"][1]["answerNumeric"] = aggregate;
     answer_content["answers"][2]["answerNumeric"] = auto;
-    answer_content["answers"][3]["answerNumeric"] = umbrella;
-    answer_content["answers"][4]["answerNumeric"] = employer;
-    answer_content["answers"][5]["answerNumeric"] = worker;
+    answer_content["answers"][3]["answerNumeric"] = product;
+    answer_content["answers"][4]["answerNumeric"] = umbrella;
+    answer_content["answers"][5]["answerNumeric"] = employer;
+    answer_content["answers"][6]["answerNumeric"] = worker;
 
     //including the answers in the answer array
     answers_template.push(answer_content);
