@@ -43,6 +43,8 @@ const CO_ID = config.CO_ID;
 const CO_NAME = config.CO_NAME;
 const COMMUNITY_ID = config.COMMUNITY_ID;
 const COMMUNITY_NAME = config.COMMUNITY_NAME;
+let ASSESSMENT_TEMPLATES = {};
+let COI_ASSESSMENT_TEMPLATE_ID = null;
 
 const AssessmentType = Object.freeze(
   { "SupplierAudit": "supplier_audit", },
@@ -405,15 +407,15 @@ async function getResourcesByMember(member) {
   })
   // Now get assessments (slightly different syntax)
   try {
-  await fetchAndSync({
-    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment?performedOnBusinessIds=${bid}&lastUpdateAt=${date}..`,
-    to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
-    forEach: async function handleAssess(item) {
-      await handleAssessment(item, bid, tp);
-    }
-  })
-  return;
-  } catch(err) {
+    await fetchAndSync({
+      from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment?performedOnBusinessIds=${bid}&lastUpdateAt=${date}..`,
+      to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
+      forEach: async function handleAssess(item) {
+        await handleAssessment(item, bid, tp);
+      }
+    })
+    return;
+  } catch (err) {
     console.log(err);
   }
 }
@@ -442,7 +444,7 @@ async function handleAssessment(item, bid, tp) {
     let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
     await Promise.each(found, async (job) => {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
-      let message =  `An associated Food Logiq supplier Assessment has been rejected.`
+      let message = `An associated Food Logiq supplier Assessment has been rejected.`
       await rejectFLDoc(job.flId, message);
     })
   }
@@ -695,7 +697,7 @@ async function handleScrapedResult(jobId) {
         }
       })
 
-      let {bid, bname} = job;
+      let { bid, bname } = job;
       let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 3000001, 1000001, 1000002);
 
       let linkResponse = await linkAssessmentToDocument(SF_FL_BID, {
@@ -763,6 +765,41 @@ async function fetchAssessmentTemplates() {
     //    }
   })
 }
+
+/**
+ * fetches assessment templates from trellis
+ * looks for COI "Certificate of Insurance (COI) Requirements" in particular
+ */
+async function fetchCOIAssessmentTemplateFromTrellis() {
+  try {
+    let _templates = [];
+    let coi_template = await CONNECTION.get({
+      path: `${SERVICE_PATH}/assessment-templates`,
+    }).then(async (r) => {
+      for (const key in r.data) {
+        if (key[0] !== '_') {
+          _templates.push(key);
+        }
+      }//for
+      await Promise.map(_templates, async function (template) {
+        await CONNECTION.get({
+          path: `${SERVICE_PATH}/assessment-templates/${template}`,
+        }).then((result) => {
+
+          if (typeof result.data["food-logiq-mirror"]._id !== 'undefined') {
+            ASSESSMENT_TEMPLATES[result.data["food-logiq-mirror"]._id] = result.data["food-logiq-mirror"];
+            if (result.data["food-logiq-mirror"].name === "Certificate of Insurance (COI) Requirements") {
+              COI_ASSESSMENT_TEMPLATE_ID = result.data["food-logiq-mirror"]._id;
+            }//if #2
+          }// if #1
+
+        });
+      });
+    });
+  } catch (error) {
+    error("Error when fetching COI template from trellis.");
+  }
+}//fetchCOIAssessmentTemplateFromTrellis
 
 // The main routine to check for food logiq updates
 async function pollFl() {
@@ -987,115 +1024,155 @@ async function linkAssessmentToDocument(bid, assessment, doc) {
     error(err);
   })
 }// linkAssessmentToDocument
+
 /**
- * spawns and updates assessments automating the spawning process
- * @param bid business_id
- * @param general general liability insurance
- * @param aggregate general aggregate
- * @param auto auto liability
- * @param umbrella coverage
- * @param employer liability
- * @param worker compensation
+ * builds array of answers from "Certificate of Insurance (COI) Requirements" assessment template
  */
-async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker) {
-  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/spawnedassessment`;
-  let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
-  let _assessment_template = _.cloneDeep(assessment_template);
-  _assessment_template["performedOnBusiness"]["_id"] = bid;
-  _assessment_template["performedOnBusiness"]["name"] = bname;
+async function buildAnswerArrayFromAssessmentTemplate() {
+  let answers = [];
+  let _answer_content = _.cloneDeep(answer_content);
+  if (COI_ASSESSMENT_TEMPLATE_ID !== null) {
+    let coi_template = ASSESSMENT_TEMPLATES[COI_ASSESSMENT_TEMPLATE_ID];
+    let columns = coi_template["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["columns"];
+    console.log("--> before if");
+    if (typeof columns !== 'undefined') {
+      columns.forEach((col) => {
+        let answer_template = {
+          "column": col._id,
+          "answerText": null,
+          "answerBool": null,
+          "answerNumeric": 2000000
+        };
+        switch (col.type) {
+          case "numeric":
+            answer_template["answerNumeric"] = col["acceptanceValueNumericPrimary"];
+            break;
+          case "bool":
+            answer_template["answerBool"] = true;
+            answer_template["answerNumeric"] = col["acceptanceValueNumericPrimary"];
+            break;
+          default:
+            error("type not defined for COI Assessment.");
+            break;
+        }
+        answers.push(answer_template);
+      });
+    }//if
 
-  //spawning the assessment with some (not all) values 
+    if (answers.length > 0)
+      _answer_content["answers"] = answers;
+    return _answer_content;
+  }//buildAnswerArrayFromAssessmentTemplate
+
+  /**
+   * spawns and updates assessments automating the spawning process
+   * @param bid business_id
+   * @param general general liability insurance
+   * @param aggregate general aggregate
+   * @param auto auto liability
+   * @param umbrella coverage
+   * @param employer liability
+   * @param worker compensation
+   */
+  async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker) {
+    let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/spawnedassessment`;
+    let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
+    let _assessment_template = _.cloneDeep(assessment_template);
+    _assessment_template["performedOnBusiness"]["_id"] = bid;
+    _assessment_template["performedOnBusiness"]["name"] = bname;
+
+    //spawning the assessment with some (not all) values 
     return axios({
-    method: "post",
-    url: PATH_SPAWN_ASSESSMENT,
-    headers: { 'Authorization': FL_TOKEN },
-    data: _assessment_template
-  }).then(async (result) => {
-    //setting the assessment if to be modified
-    let SPAWNED_ASSESSMENT_ID = result.data._id;
-    let ASSESSMENT_BODY = result.data;
-    let answers_template = [];
+      method: "post",
+      url: PATH_SPAWN_ASSESSMENT,
+      headers: { 'Authorization': FL_TOKEN },
+      data: _assessment_template
+    }).then(async (result) => {
+      //setting the assessment if to be modified
+      let SPAWNED_ASSESSMENT_ID = result.data._id;
+      let ASSESSMENT_BODY = result.data;
+      let answers_template = [];
 
-    //populating answers in the COI assessment
-    answer_content["answers"][0]["answerNumeric"] = general;
-    answer_content["answers"][1]["answerNumeric"] = aggregate;
-    answer_content["answers"][2]["answerNumeric"] = auto;
-    answer_content["answers"][3]["answerNumeric"] = product;
-    answer_content["answers"][4]["answerNumeric"] = umbrella;
-    answer_content["answers"][5]["answerNumeric"] = employer;
-    answer_content["answers"][6]["answerNumeric"] = worker;
+      //populating answers in the COI assessment
+      answer_content["answers"][0]["answerNumeric"] = general;
+      answer_content["answers"][1]["answerNumeric"] = aggregate;
+      answer_content["answers"][2]["answerNumeric"] = auto;
+      answer_content["answers"][3]["answerNumeric"] = product;
+      answer_content["answers"][4]["answerNumeric"] = umbrella;
+      answer_content["answers"][5]["answerNumeric"] = employer;
+      answer_content["answers"][6]["answerNumeric"] = worker;
 
-    //including the answers in the answer array
-    answers_template.push(answer_content);
-    //attaching the answers into the assessment template body
-    ASSESSMENT_BODY["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["answerRows"] = answers_template;
-    // updating percentage completed
-    ASSESSMENT_BODY["state"] = "In Progress";
-    ASSESSMENT_BODY["questionInteractionCounts"]["answered"] = 1;
-    ASSESSMENT_BODY["questionInteractionCounts"]["percentageCompleted"] = 100;
-    // creating the path for a specific assessment (update/put)
-    PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
-    //updating assessment
-    ASSESSMENT_BODY["state"] = "Submitted";
-    let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
-    return response || result
-  }).catch((err) => {
-    error("--> Error when spawning an assessment.");
-    error(err);
-  });
-}//spawnAssessment
-// ======================  ASSESSMENTS ============================== }
+      //including the answers in the answer array
+      answers_template.push(answer_content);
+      //attaching the answers into the assessment template body
+      ASSESSMENT_BODY["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["answerRows"] = answers_template;
+      // updating percentage completed
+      ASSESSMENT_BODY["state"] = "In Progress";
+      ASSESSMENT_BODY["questionInteractionCounts"]["answered"] = 1;
+      ASSESSMENT_BODY["questionInteractionCounts"]["percentageCompleted"] = 100;
+      // creating the path for a specific assessment (update/put)
+      PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
+      //updating assessment
+      ASSESSMENT_BODY["state"] = "Submitted";
+      let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
+      return response || result
+    }).catch((err) => {
+      error("--> Error when spawning an assessment.");
+      error(err);
+    });
+  }//spawnAssessment
+  // ======================  ASSESSMENTS ============================== }
 
-function setConnection(conn) {
-  CONNECTION = conn;
-}
-
-function setTree(t) {
-  tree = t;
-}
-
-function setPath(newPath) {
-  SERVICE_PATH = newPath;
-}
-
-async function mockFL({ url }) {
-  //1. Strip query parameters
-  let u = urlLib.parse(url);
-  let path = u.pathname.replace(/\/businesses\/\S*?\//, '/businesses/{{BusinessID}}/')
-  path = path.replace(/\/communities\/\S*?\//, '/communities/{{CommunityID}}/');
-  path = path.replace(/\/documents\/\S*?\//, '/documents/{{DocumentID}}/');
-
-  if (u.search) path += u.search;
-  path = path.replace(/sourceBusiness=\S*?\&/, 'sourceBusiness={{SupplierID}}&')
-  path = path.replace(/versionUpdated=\S*?$/, 'versionUpdated={{Date}}')
-
-  let string = `{{Host}}${path}`
-
-  //  return { data: sampleDocs[string] };
-}
-
-initialize()
-
-async function testMock() {
-  let url = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/abc123/attachments`
-  let res = mockFL({ url });
-}
-
-module.exports = (args) => {
-  if (args && args.initialize === false) {
-  } else {
-    initialize();
+  function setConnection(conn) {
+    CONNECTION = conn;
   }
-  return {
-    pollFl,
-    initialize,
-    testing: {
-      mirror,
-      setPath,
-      setConnection,
-      setTree,
-      SERVICE_PATH,
-      tree,
+
+  function setTree(t) {
+    tree = t;
+  }
+
+  function setPath(newPath) {
+    SERVICE_PATH = newPath;
+  }
+
+  async function mockFL({ url }) {
+    //1. Strip query parameters
+    let u = urlLib.parse(url);
+    let path = u.pathname.replace(/\/businesses\/\S*?\//, '/businesses/{{BusinessID}}/')
+    path = path.replace(/\/communities\/\S*?\//, '/communities/{{CommunityID}}/');
+    path = path.replace(/\/documents\/\S*?\//, '/documents/{{DocumentID}}/');
+
+    if (u.search) path += u.search;
+    path = path.replace(/sourceBusiness=\S*?\&/, 'sourceBusiness={{SupplierID}}&')
+    path = path.replace(/versionUpdated=\S*?$/, 'versionUpdated={{Date}}')
+
+    let string = `{{Host}}${path}`
+
+    //  return { data: sampleDocs[string] };
+  }
+
+  initialize()
+
+  async function testMock() {
+    let url = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/abc123/attachments`
+    let res = mockFL({ url });
+  }
+
+  module.exports = (args) => {
+    if (args && args.initialize === false) {
+    } else {
+      initialize();
+    }
+    return {
+      pollFl,
+      initialize,
+      testing: {
+        mirror,
+        setPath,
+        setConnection,
+        setTree,
+        SERVICE_PATH,
+        tree,
+      }
     }
   }
-}
