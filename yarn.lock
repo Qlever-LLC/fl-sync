@@ -30,7 +30,7 @@
     reconnecting-websocket "^4.4.0"
     ws "^7.2.3"
 
-"@oada/list-lib@^2.1.5":
+"@oada/list-lib@^2.1.6":
   version "2.1.6"
   resolved "https://registry.yarnpkg.com/@oada/list-lib/-/list-lib-2.1.6.tgz#2f7ca54edc32029d6602201b203e53f4dd773444"
   integrity sha512-RLKoTf9Cj/LI7IJrdg8V8Q5fiMirLb4phSaaXXC1bYS2HxgdkGeJC5WktAKhag1HlmhyTDVR/L2tqWtnFlsP5w==
@@ -1707,8 +1707,9 @@ write-file-atomic@^3.0.0:
     typedarray-to-buffer "^3.1.5"
 
 ws@^7.2.3:
-  version "7.4.2"
-  resolved "https://registry.yarnpkg.com/ws/-/ws-7.4.2.tgz#782100048e54eb36fe9843363ab1c68672b261dd"
+  version "7.4.6"
+  resolved "https://registry.yarnpkg.com/ws/-/ws-7.4.6.tgz#5654ca8ecdeee47c33a9a4bf6d28e2be2980377c"
+  integrity sha512-YmhHDO4MzaDLB+M9ym/mDA5z0naX8j7SIlT8f8z+I0VtzsRbekxEutHSme7NPS2qE8StCYQNUnfWdXta/Yu85A==
 
 xdg-basedir@^4.0.0:
   version "4.0.0"
