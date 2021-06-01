@@ -1057,122 +1057,122 @@ async function buildAnswerArrayFromAssessmentTemplate() {
         }
         answers.push(answer_template);
       });
-    }//if
+    }//if #2
+  }//if #1
+  if (answers.length > 0)
+    _answer_content["answers"] = answers;
+  return _answer_content;
+}//buildAnswerArrayFromAssessmentTemplate
 
-    if (answers.length > 0)
-      _answer_content["answers"] = answers;
-    return _answer_content;
-  }//buildAnswerArrayFromAssessmentTemplate
+/**
+ * spawns and updates assessments automating the spawning process
+ * @param bid business_id
+ * @param general general liability insurance
+ * @param aggregate general aggregate
+ * @param auto auto liability
+ * @param umbrella coverage
+ * @param employer liability
+ * @param worker compensation
+ */
+async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker) {
+  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/spawnedassessment`;
+  let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
+  let _assessment_template = _.cloneDeep(assessment_template);
+  _assessment_template["performedOnBusiness"]["_id"] = bid;
+  _assessment_template["performedOnBusiness"]["name"] = bname;
 
-  /**
-   * spawns and updates assessments automating the spawning process
-   * @param bid business_id
-   * @param general general liability insurance
-   * @param aggregate general aggregate
-   * @param auto auto liability
-   * @param umbrella coverage
-   * @param employer liability
-   * @param worker compensation
-   */
-  async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker) {
-    let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/spawnedassessment`;
-    let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
-    let _assessment_template = _.cloneDeep(assessment_template);
-    _assessment_template["performedOnBusiness"]["_id"] = bid;
-    _assessment_template["performedOnBusiness"]["name"] = bname;
+  //spawning the assessment with some (not all) values 
+  return axios({
+    method: "post",
+    url: PATH_SPAWN_ASSESSMENT,
+    headers: { 'Authorization': FL_TOKEN },
+    data: _assessment_template
+  }).then(async (result) => {
+    //setting the assessment if to be modified
+    let SPAWNED_ASSESSMENT_ID = result.data._id;
+    let ASSESSMENT_BODY = result.data;
+    let answers_template = [];
 
-    //spawning the assessment with some (not all) values 
-    return axios({
-      method: "post",
-      url: PATH_SPAWN_ASSESSMENT,
-      headers: { 'Authorization': FL_TOKEN },
-      data: _assessment_template
-    }).then(async (result) => {
-      //setting the assessment if to be modified
-      let SPAWNED_ASSESSMENT_ID = result.data._id;
-      let ASSESSMENT_BODY = result.data;
-      let answers_template = [];
+    //populating answers in the COI assessment
+    answer_content["answers"][0]["answerNumeric"] = general;
+    answer_content["answers"][1]["answerNumeric"] = aggregate;
+    answer_content["answers"][2]["answerNumeric"] = auto;
+    answer_content["answers"][3]["answerNumeric"] = product;
+    answer_content["answers"][4]["answerNumeric"] = umbrella;
+    answer_content["answers"][5]["answerNumeric"] = employer;
+    answer_content["answers"][6]["answerNumeric"] = worker;
 
-      //populating answers in the COI assessment
-      answer_content["answers"][0]["answerNumeric"] = general;
-      answer_content["answers"][1]["answerNumeric"] = aggregate;
-      answer_content["answers"][2]["answerNumeric"] = auto;
-      answer_content["answers"][3]["answerNumeric"] = product;
-      answer_content["answers"][4]["answerNumeric"] = umbrella;
-      answer_content["answers"][5]["answerNumeric"] = employer;
-      answer_content["answers"][6]["answerNumeric"] = worker;
+    //including the answers in the answer array
+    answers_template.push(answer_content);
+    //attaching the answers into the assessment template body
+    ASSESSMENT_BODY["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["answerRows"] = answers_template;
+    // updating percentage completed
+    ASSESSMENT_BODY["state"] = "In Progress";
+    ASSESSMENT_BODY["questionInteractionCounts"]["answered"] = 1;
+    ASSESSMENT_BODY["questionInteractionCounts"]["percentageCompleted"] = 100;
+    // creating the path for a specific assessment (update/put)
+    PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
+    //updating assessment
+    ASSESSMENT_BODY["state"] = "Submitted";
+    let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
+    return response || result
+  }).catch((err) => {
+    error("--> Error when spawning an assessment.");
+    error(err);
+  });
+}//spawnAssessment
+// ======================  ASSESSMENTS ============================== }
 
-      //including the answers in the answer array
-      answers_template.push(answer_content);
-      //attaching the answers into the assessment template body
-      ASSESSMENT_BODY["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["answerRows"] = answers_template;
-      // updating percentage completed
-      ASSESSMENT_BODY["state"] = "In Progress";
-      ASSESSMENT_BODY["questionInteractionCounts"]["answered"] = 1;
-      ASSESSMENT_BODY["questionInteractionCounts"]["percentageCompleted"] = 100;
-      // creating the path for a specific assessment (update/put)
-      PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
-      //updating assessment
-      ASSESSMENT_BODY["state"] = "Submitted";
-      let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
-      return response || result
-    }).catch((err) => {
-      error("--> Error when spawning an assessment.");
-      error(err);
-    });
-  }//spawnAssessment
-  // ======================  ASSESSMENTS ============================== }
+function setConnection(conn) {
+  CONNECTION = conn;
+}
 
-  function setConnection(conn) {
-    CONNECTION = conn;
+function setTree(t) {
+  tree = t;
+}
+
+function setPath(newPath) {
+  SERVICE_PATH = newPath;
+}
+
+async function mockFL({ url }) {
+  //1. Strip query parameters
+  let u = urlLib.parse(url);
+  let path = u.pathname.replace(/\/businesses\/\S*?\//, '/businesses/{{BusinessID}}/')
+  path = path.replace(/\/communities\/\S*?\//, '/communities/{{CommunityID}}/');
+  path = path.replace(/\/documents\/\S*?\//, '/documents/{{DocumentID}}/');
+
+  if (u.search) path += u.search;
+  path = path.replace(/sourceBusiness=\S*?\&/, 'sourceBusiness={{SupplierID}}&')
+  path = path.replace(/versionUpdated=\S*?$/, 'versionUpdated={{Date}}')
+
+  let string = `{{Host}}${path}`
+
+  //  return { data: sampleDocs[string] };
+}
+
+initialize()
+
+async function testMock() {
+  let url = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/abc123/attachments`
+  let res = mockFL({ url });
+}
+
+module.exports = (args) => {
+  if (args && args.initialize === false) {
+  } else {
+    initialize();
   }
-
-  function setTree(t) {
-    tree = t;
-  }
-
-  function setPath(newPath) {
-    SERVICE_PATH = newPath;
-  }
-
-  async function mockFL({ url }) {
-    //1. Strip query parameters
-    let u = urlLib.parse(url);
-    let path = u.pathname.replace(/\/businesses\/\S*?\//, '/businesses/{{BusinessID}}/')
-    path = path.replace(/\/communities\/\S*?\//, '/communities/{{CommunityID}}/');
-    path = path.replace(/\/documents\/\S*?\//, '/documents/{{DocumentID}}/');
-
-    if (u.search) path += u.search;
-    path = path.replace(/sourceBusiness=\S*?\&/, 'sourceBusiness={{SupplierID}}&')
-    path = path.replace(/versionUpdated=\S*?$/, 'versionUpdated={{Date}}')
-
-    let string = `{{Host}}${path}`
-
-    //  return { data: sampleDocs[string] };
-  }
-
-  initialize()
-
-  async function testMock() {
-    let url = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/abc123/attachments`
-    let res = mockFL({ url });
-  }
-
-  module.exports = (args) => {
-    if (args && args.initialize === false) {
-    } else {
-      initialize();
+  return {
+    pollFl,
+    initialize,
+    testing: {
+      mirror,
+      setPath,
+      setConnection,
+      setTree,
+      SERVICE_PATH,
+      tree,
     }
-    return {
-      pollFl,
-      initialize,
-      testing: {
-        mirror,
-        setPath,
-        setConnection,
-        setTree,
-        SERVICE_PATH,
-        tree,
-      }
-    }
   }
+}
