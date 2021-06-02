@@ -45,6 +45,8 @@ const COMMUNITY_ID = config.COMMUNITY_ID;
 const COMMUNITY_NAME = config.COMMUNITY_NAME;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
+let AUTO_APPROVE_ASSESSMENTS = true;
+//let AUTO_APPROVE_ASSESSMENTS = false;
 
 const AssessmentType = Object.freeze(
   { "SupplierAudit": "supplier_audit", },
@@ -307,8 +309,18 @@ async function onTargetUpdate(c, jobId) {
   } catch (err) {
     console.log('on target update', err);
   }
+}
 
-
+async function watchFlSyncConfig() {
+  await CONNECTION.watch({
+    path: `/bookmarks/services/fl-sync`,
+    watchCallback: (change) => {
+      if (change.body['autoapprove-assessments']) {
+        console.log('APPROVE', change.body['autoapprove-assessments']);
+        AUTO_APPROVE_ASSESSMENTS = change.body['autoapprove-assessments'];
+      }
+    }
+  })
 }
 
 async function watchTargetJobs() {
@@ -338,6 +350,7 @@ async function initialize() {
   }
   setConnection(conn);
   await watchTargetJobs();
+  await watchFlSyncConfig();
   await checkTime();
   await watchTrellisFLBusinesses();
   setInterval(checkTime, checkInterval);
@@ -447,6 +460,17 @@ async function handleAssessment(item, bid, tp) {
       let message = `An associated Food Logiq supplier Assessment has been rejected.`
       await rejectFLDoc(job.flId, message);
     })
+  } else {
+    if (AUTO_APPROVE_ASSESSMENTS) {
+      info(`Auto-approving assessment [${item._id}]`);
+      item.state = 'Approved';
+      await axios({
+        method: 'put',
+        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment/${item._id}/approvespawnedassessment`,
+        headers: { Authorization: FL_TOKEN },
+        data: item
+      })
+    }
   }
 }
 
