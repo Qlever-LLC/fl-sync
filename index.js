@@ -35,8 +35,11 @@ let tree = require('./tree.js');
 const TL_TP = config.TL_TP;
 const TL_UTP = config.TL_UTP;
 const TL_FL_BS = config.TL_FL_BS;
+const TL_FL_DEMO_CLEANUP = "/bookmarks/services/fl-sync";
 
 // ======================  ASSESSMENTS ============================== {
+const ASSESSMENT_BID = config.ASSESSMENT_BID;
+let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${ASSESSMENT_BID}/documents`;
 const ASSESSMENT_TEMPLATE_ID = config.ASSESSMENT_TEMPLATE_ID;
 const ASSESSMENT_TEMPLATE_NAME = config.ASSESSMENT_TEMPLATE_NAME;
 const CO_ID = config.CO_ID;
@@ -183,6 +186,11 @@ async function checkTime() {
   //Get last poll date
   try {
     let response = await CONNECTION.get({ path: `${SERVICE_PATH}` })
+
+    demoCleanup = response.data.cleanup || false;
+    if (demoCleanup) {
+      await cleanUpFLDocuments();
+    }
 
     manualPoll = response.data.manualPoll || process.env.MANUAL_POLL;
 
@@ -621,8 +629,8 @@ async function validatePending(trellisDoc, flDoc, type) {
   switch (type) {
     case 'cois':
       //TODO: current fix to timezone stuff:
-      //let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
+      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
+      //let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
       let now = moment();
 
@@ -722,7 +730,7 @@ async function handleScrapedResult(jobId) {
       })
 
       let { bid, bname } = job;
-      let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 3000001, 1000001, 1000002);
+      let assess = await spawnAssessment(bid, bname, 2000000, 5000000, 1000000, 3000000, 1000000, 1000000);
 
       let linkResponse = await linkAssessmentToDocument(SF_FL_BID, {
         "_id": assess.data._id,
@@ -1003,6 +1011,63 @@ async function watchTrellisFLBusinesses() {
   });
 }//watchTrellisFLBusinesses
 
+
+/**
+ * deletes the Centricity Test Account documents from FL
+ * @param path url 
+ */
+async function cleanUpFLDocuments() {
+  info("--> demo cleanup in process ... ");
+  try {
+    await CONNECTION.put({
+      path: SERVICE_PATH,
+      tree: tree,
+      data: { cleanup: false }
+    }).then((update_result) => {
+      info("--> cleanup updated.");
+    }).catch((error) => {
+      info("--> error when updating cleanup flag ", error);
+    });
+
+    await axios({
+      method: "get",
+      url: PATH_DOCUMENTS,
+      headers: { Authorization: FL_TOKEN }
+    }).then(async (result) => {
+      //info("--> retrieving documents ", result.data.pageItems);
+      await Promise.map(result.data.pageItems, async function (document) {
+        let _path = PATH_DOCUMENTS + `/${document._id}`
+        return await axios({
+          method: "delete",
+          url: _path,
+          headers: { Authorization: FL_TOKEN }
+        }).then(async (del_result) => {
+          info("--> document deleted.");
+        });
+      });
+    }).catch((e) => {
+      error("--> Error when retrieving documents. ", e);
+      return [];
+    });
+  } catch (e) {
+    error("--> Error when demo cleanup ", e);
+  }
+}//cleanUpFLDocuments
+
+/**
+ * watches for changes in the fl-sync/cleanup
+ */
+async function watchTrellisFLDemoCleanup() {
+  info(`Started ListWatch on Trellis FL Cleanup ...`)
+  const watch = new ListWatch({
+    path: TL_FL_DEMO_CLEANUP,
+    name: `tl-fl-demo-cleanup`,
+    conn: CONNECTION,
+    resume: true,
+    onChangeItem: cleanUpFLDocuments
+  });
+}//watchTrellisFLBusinesses
+
 /** ====================== ASSESSMENTS ===================================== {
  * updates the content of a spawned assessment
  * @param path spawned assessment url 
@@ -1058,7 +1123,7 @@ async function buildAnswerArrayFromAssessmentTemplate() {
   if (COI_ASSESSMENT_TEMPLATE_ID !== null) {
     let coi_template = ASSESSMENT_TEMPLATES[COI_ASSESSMENT_TEMPLATE_ID];
     let columns = coi_template["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["columns"];
-    console.log("--> before if");
+
     if (typeof columns !== 'undefined') {
       columns.forEach((col) => {
         let answer_template = {
@@ -1094,6 +1159,7 @@ async function buildAnswerArrayFromAssessmentTemplate() {
  * @param general general liability insurance
  * @param aggregate general aggregate
  * @param auto auto liability
+ * @param product product liability
  * @param umbrella coverage
  * @param employer liability
  * @param worker compensation
@@ -1139,7 +1205,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
     //updating assessment
     ASSESSMENT_BODY["state"] = "Submitted";
     let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
-    return response || result
+    return response || result;
   }).catch((err) => {
     error("--> Error when spawning an assessment.");
     error(err);
@@ -1175,7 +1241,7 @@ async function mockFL({ url }) {
   //  return { data: sampleDocs[string] };
 }
 
-initialize()
+initialize();
 
 async function testMock() {
   let url = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/abc123/attachments`
