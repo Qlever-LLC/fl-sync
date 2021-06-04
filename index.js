@@ -45,7 +45,7 @@ const COMMUNITY_ID = config.COMMUNITY_ID;
 const COMMUNITY_NAME = config.COMMUNITY_NAME;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
-let AUTO_APPROVE_ASSESSMENTS = false;
+let AUTO_APPROVE_ASSESSMENTS;
 let FL_WS;
 
 const AssessmentType = Object.freeze(
@@ -316,13 +316,13 @@ async function watchFlSyncConfig() {
     path: `/bookmarks/services/fl-sync/autoapprove-assessments`,
   }).then(r => r.data)
   console.log('setting', response);
-  let AUTO_APPROVE_ASSESSMENTS = response;
+  setAutoApprove(response);
   await CONNECTION.watch({
     path: `/bookmarks/services/fl-sync`,
     watchCallback: (change) => {
       if (change.body['autoapprove-assessments']) {
         info(`autoapproval of assessments value is [${change.body['autoapprove-assessments']}]`);
-        AUTO_APPROVE_ASSESSMENTS = change.body['autoapprove-assessments'];
+        setAutoApprove(change.body['autoapprove-assessments']);
       }
     }
   })
@@ -1188,6 +1188,11 @@ function setTree(t) {
 
 function setPath(newPath) {
   SERVICE_PATH = newPath;
+}
+
+function setAutoApprove(value) {
+  info(`Setting Autoapprove to ${value}`)
+  AUTO_APPROVE_ASSESSMENTS = value;
 }
 
 async function mockFL({ url }) {
