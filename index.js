@@ -37,6 +37,8 @@ const TL_UTP = config.TL_UTP;
 const TL_FL_BS = config.TL_FL_BS;
 
 // ======================  ASSESSMENTS ============================== {
+const ASSESSMENT_BID = config.ASSESSMENT_BID;
+let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${ASSESSMENT_BID}/documents`;
 const ASSESSMENT_TEMPLATE_ID = config.ASSESSMENT_TEMPLATE_ID;
 const ASSESSMENT_TEMPLATE_NAME = config.ASSESSMENT_TEMPLATE_NAME;
 const CO_ID = config.CO_ID;
@@ -184,6 +186,11 @@ async function checkTime() {
   try {
     let response = await CONNECTION.get({ path: `${SERVICE_PATH}` })
 
+    let demoCleanup = response.data.cleanup || false;
+    if (demoCleanup) {
+      await cleanUpFLDocuments();
+    }
+    
     manualPoll = response.data.manualPoll || process.env.MANUAL_POLL;
 
     let freshPoll = process.env.FRESH_POLL;
@@ -651,8 +658,8 @@ async function validatePending(trellisDoc, flDoc, type) {
   switch (type) {
     case 'cois':
       //TODO: current fix to timezone stuff:
-      //let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
+      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
+      //let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
       let now = moment();
 
@@ -753,7 +760,7 @@ async function handleScrapedResult(jobId) {
       })
 
       let { bid, bname } = job;
-      let assess = await spawnAssessment(bid, bname, 2000001, 5000001, 1000001, 3000001, 1000001, 1000002);
+      let assess = await spawnAssessment(bid, bname, 2000000, 5000000, 1000000, 3000000, 1000000, 1000000);
 
       let linkResponse = await linkAssessmentToDocument(SF_FL_BID, {
         "_id": assess.data._id,
@@ -1033,6 +1040,47 @@ async function watchTrellisFLBusinesses() {
     onAddItem: addTP2Trellis
   });
 }//watchTrellisFLBusinesses
+
+/**
+ * deletes the Centricity Test Account documents from FL
+ * @param path url 
+ */
+async function cleanUpFLDocuments() {
+  info("--> demo cleanup in process ... ");
+  try {
+    await CONNECTION.put({
+      path: SERVICE_PATH,
+      tree: tree,
+      data: { cleanup: false }
+    }).then((update_result) => {
+      info("--> cleanup updated.");
+    }).catch((error) => {
+      info("--> error when updating cleanup flag ", error);
+    });
+
+    await axios({
+      method: "get",
+      url: PATH_DOCUMENTS,
+      headers: { Authorization: FL_TOKEN }
+    }).then(async (result) => {
+      await Promise.map(result.data.pageItems, async function (document) {
+        let _path = PATH_DOCUMENTS + `/${document._id}`
+        return await axios({
+          method: "delete",
+          url: _path,
+          headers: { Authorization: FL_TOKEN }
+        }).then(async (del_result) => {
+          info("--> document deleted.");
+        });
+      });
+    }).catch((e) => {
+      error("--> Error when retrieving documents. ", e);
+      return [];
+    });
+  } catch (e) {
+    error("--> Error when demo cleanup ", e);
+  }
+}//cleanUpFLDocuments
 
 /** ====================== ASSESSMENTS ===================================== {
  * updates the content of a spawned assessment
