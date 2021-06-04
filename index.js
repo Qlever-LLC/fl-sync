@@ -48,6 +48,7 @@ const COMMUNITY_NAME = config.COMMUNITY_NAME;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
 let AUTO_APPROVE_ASSESSMENTS = false;
+let FL_WS;
 
 const AssessmentType = Object.freeze(
   { "SupplierAudit": "supplier_audit", },
@@ -318,6 +319,11 @@ async function onTargetUpdate(c, jobId) {
 }
 
 async function watchFlSyncConfig() {
+  let response = await CONNECTION.get({
+    path: `/bookmarks/services/fl-sync/autoapprove-assessments`,
+  }).then(r => r.data)
+  console.log('setting', response);
+  let AUTO_APPROVE_ASSESSMENTS = response;
   await CONNECTION.watch({
     path: `/bookmarks/services/fl-sync`,
     watchCallback: (change) => {
@@ -328,6 +334,9 @@ async function watchFlSyncConfig() {
     }
   })
 }
+
+//async function createFlWebsocket() {
+//}
 
 async function watchTargetJobs() {
   info(`Started ListWatch on jobs of the target service...`)
@@ -357,6 +366,7 @@ async function initialize() {
   setConnection(conn);
   await watchTargetJobs();
   await watchFlSyncConfig();
+//  await createFlWebsocket();
   await checkTime();
   await watchTrellisFLBusinesses();
   setInterval(checkTime, checkInterval);
@@ -451,6 +461,19 @@ async function approveFLDoc(docId) {
   })
 }
 
+function checkAssessment(assessment) {
+  info(`Checking assessment ${assessment._id}`);
+  return assessment.sections.map(section => {
+    section.subsections.map(subsection => {
+      subsection.questions.map(question => {
+        question.productEvaluationOptions.columns.map(column => {
+          return column.statisticsCommon.percentWithinTolerance < 100
+        })
+      })
+    })
+  }).flat(5).some(i => i)
+}
+
 async function handleAssessment(item, bid, tp) {
   info(`Handling assessment [${item._id}]`)
   if (item.state === 'Approved') {
@@ -467,17 +490,23 @@ async function handleAssessment(item, bid, tp) {
       await rejectFLDoc(job.flId, message);
     })
   } else {
+    info(`Autoapproval of assessments: [${AUTO_APPROVE_ASSESSMENTS}]`)
     if (AUTO_APPROVE_ASSESSMENTS) {
-      info(`Auto-approving assessment [${item._id}]`);
-      item.state = 'Approved';
-      await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment/${item._id}/approvespawnedassessment`,
-        headers: { Authorization: FL_TOKEN },
-        data: item
-      })
-    } else {
-      info(`Auto-approval of assessments currently disabled`);
+      try {
+        let failed = checkAssessment(item);
+        if (!failed) {
+          info(`Auto-approving assessment [${item._id}]`);
+          item.state = 'Approved';
+          await axios({
+            method: 'put',
+            url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment/${item._id}/approvespawnedassessment`,
+            headers: { Authorization: FL_TOKEN },
+            data: item
+          })
+        } else info(`Assessment [${item._id}] cannot be auto-approved`)
+      } catch(err) {
+        error(err)
+      }
     }
   }
 }
@@ -710,7 +739,8 @@ async function handleScrapedResult(jobId) {
       data: {
         services: {
           'fl-sync': {
-            document: { _id: job.mirrorId }
+            document: { _id: job.mirrorId },
+            flId: job.flId
           }
         }
       }
