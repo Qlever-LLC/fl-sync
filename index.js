@@ -327,7 +327,7 @@ async function watchFlSyncConfig() {
   await CONNECTION.watch({
     path: `/bookmarks/services/fl-sync`,
     watchCallback: (change) => {
-      if (change.body['autoapprove-assessments']) {
+      if (_.has(change.body, 'autoapprove-assessments')) {
         info(`autoapproval of assessments value is [${change.body['autoapprove-assessments']}]`);
         setAutoApprove(change.body['autoapprove-assessments']);
       }
@@ -467,6 +467,7 @@ function checkAssessment(assessment) {
     section.subsections.map(subsection => {
       subsection.questions.map(question => {
         question.productEvaluationOptions.columns.map(column => {
+          if (column.statisticsCommon === null) return false;
           return column.statisticsCommon.percentWithinTolerance < 100
         })
       })
@@ -728,24 +729,6 @@ async function handleScrapedResult(jobId) {
       path: `${job.mirrorId}`
     }).then(r => r.data)
 
-    // Link to the original food-logiq document
-    let resp = await axios({
-      method: 'put',
-      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-      headers: {
-        Authorization: `Bearer ${TRELLIS_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      data: {
-        services: {
-          'fl-sync': {
-            document: { _id: job.mirrorId },
-            flId: job.flId
-          }
-        }
-      }
-    })
-
     let { status, message } = await validatePending(result, flDoc, job.result.type);
 
     if (status) {
@@ -774,6 +757,26 @@ async function handleScrapedResult(jobId) {
       TARGET_JOBS[jobId].assessments = {
         [assess.data._id]: false
       }
+
+      // Link to the original food-logiq document
+      let resp = await axios({
+        method: 'put',
+        url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+        headers: {
+          Authorization: `Bearer ${TRELLIS_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        data: {
+          services: {
+            'fl-sync': {
+              document: { _id: job.mirrorId },
+              assessment: assess.data._id,
+              flId: job.flId
+            }
+          }
+        }
+      })
+
       info(`Spawning assessment for business id [${bid}]`);
     } else {
       await rejectFLDoc(job.flId, message)
