@@ -1,5 +1,5 @@
 services:
-  target-helper:
+  fl-sync:
     extends:
-      file: ./services/target-helper/docker-compose.yml
-      service: target-helper
+      file: ./services/fl-sync/docker-compose.yml
+      service: fl-sync

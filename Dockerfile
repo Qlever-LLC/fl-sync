@@ -1,5 +1,5 @@
 ARG NODE_VER=16-alpine
-ARG SERVICE=Qlever-LLC/target-helper
+ARG SERVICE=Qlever-LLC/fl-sync
 
 FROM node:$NODE_VER AS install
 ARG SERVICE
