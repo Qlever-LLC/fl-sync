@@ -1,4 +1,4 @@
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+//process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 //if (LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
 const axios = require('axios');
 const debug = require('debug');
