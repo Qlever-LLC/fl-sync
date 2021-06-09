@@ -1,13 +1,14 @@
 services:
   fl-sync:
+    image: ghcr.io/qlever-llc/fl-sync
     build:
       context: .
     restart: unless-stopped
-    volumes:
-      - .:/code/fl-sync
     environment:
-      - NODE_TLS_REJECT_UNAUTHORIZED
-      - NODE_ENV=${NODE_ENV:-development}
-      - DEBUG=${DEBUG:-"fl-sync:*"}
-      - domain=${DOMAIN}
-      - token=${TOKEN}
+      NODE_TLS_REJECT_UNAUTHORIZED:
+      NODE_ENV: ${NODE_ENV:-development}
+      DEBUG: ${DEBUG:-fl-sync:info,*warn*,*error*}
+      # Connect to host if DOMAIN not set.
+      # You should really not rely on this though. Set DOMAIN.
+      DOMAIN: ${DOMAIN:-host.docker.internal}
+      TOKEN:
