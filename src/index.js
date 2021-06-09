@@ -319,11 +319,11 @@ async function onTargetUpdate(c, jobId) {
 }
 
 async function watchFlSyncConfig() {
-  let response = await CONNECTION.get({
+  let data = await CONNECTION.get({
     path: `/bookmarks/services/fl-sync/autoapprove-assessments`,
   }).then(r => r.data)
-  console.log('setting', response);
-  setAutoApprove(response);
+  let value = data['autoapprove-assessments']
+  setAutoApprove(value);
   await CONNECTION.watch({
     path: `/bookmarks/services/fl-sync`,
     watchCallback: (change) => {
@@ -729,6 +729,15 @@ async function handleScrapedResult(jobId) {
       path: `${job.mirrorId}`
     }).then(r => r.data)
 
+    let data = {
+      services: {
+        'fl-sync': {
+          document: { _id: job.mirrorId },
+          flId: job.flId
+        }
+      }
+    }
+
     let { status, message } = await validatePending(result, flDoc, job.result.type);
 
     if (status) {
@@ -754,28 +763,11 @@ async function handleScrapedResult(jobId) {
         "type": "document"
       })
 
+      data.services['fl-sync'].assessment = assess.data._id;
+
       TARGET_JOBS[jobId].assessments = {
         [assess.data._id]: false
       }
-
-      // Link to the original food-logiq document
-      let resp = await axios({
-        method: 'put',
-        url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-        headers: {
-          Authorization: `Bearer ${TRELLIS_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        data: {
-          services: {
-            'fl-sync': {
-              document: { _id: job.mirrorId },
-              assessment: assess.data._id,
-              flId: job.flId
-            }
-          }
-        }
-      })
 
       info(`Spawning assessment for business id [${bid}]`);
     } else {
@@ -786,6 +778,17 @@ async function handleScrapedResult(jobId) {
   } catch (err) {
     console.log(err);
   }
+
+  // Link to the original food-logiq document
+  let resp = await axios({
+    method: 'put',
+    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+    headers: {
+      Authorization: `Bearer ${TRELLIS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    data
+  })
 
 }
 
