@@ -104,6 +104,7 @@ __metadata:
     "@oada/types": ^1.5.1
     "@tsconfig/node16": ^1.0.1
     "@types/convict": ^6.0.2
+    "@types/convict-format-with-validator": ^6
     "@types/node": ^14.17.0
     "@yarnpkg/pnpify": ^3.0.0-rc.6
     adm-zip: ^0.5.3
@@ -112,6 +113,7 @@ __metadata:
     chai: ^4.3.4
     chai-as-promised: ^7.1.1
     convict: ^6.1.0
+    convict-format-with-validator: ^6.0.1
     debug: ^4.3.1
     dotenv: ^10.0.0
     esm: ^3.2.25
@@ -193,7 +195,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/convict@npm:^6.0.2":
+"@types/convict-format-with-validator@npm:^6":
+  version: 6.0.2
+  resolution: "@types/convict-format-with-validator@npm:6.0.2"
+  dependencies:
+    "@types/convict": "*"
+  checksum: 7092c0263b72d9faf20e7389be438ff6118206bec632f0233ebb44954032b1616f46f37a7f4ce3dd610972dbebd27993ab36732c5b713e4d7a23ea812213a976
+  languageName: node
+  linkType: hard
+
+"@types/convict@npm:*, @types/convict@npm:^6.0.2":
   version: 6.0.2
   resolution: "@types/convict@npm:6.0.2"
   dependencies:
@@ -1095,6 +1106,15 @@ __metadata:
   version: 0.1.0
   resolution: "convert-string@npm:0.1.0"
   checksum: fc81c1178aba68f92fc83b36f751984ce394b4bfe314985e657e99ad7f01f46a38d0f72c1ab2b2a33bc7e398b7014d5b44bdfda70bdb78d94988863fec146f91
+  languageName: node
+  linkType: hard
+
+"convict-format-with-validator@npm:^6.0.1":
+  version: 6.0.1
+  resolution: "convict-format-with-validator@npm:6.0.1"
+  dependencies:
+    validator: ^11.1.0
+  checksum: ea7633457e453cd68330d592adf34d1f5213fdac85ea106c368e4ba343458815229805f71965380181a5321911c806c9e079848cec60145c6468ebec4d85e7b7
   languageName: node
   linkType: hard
 
@@ -4140,6 +4160,13 @@ typescript@^4.3.2:
   bin:
     uuid: dist/bin/uuid
   checksum: aed2bcef341f95635f308fea8831fb9038b18c485fe7e71feb89d2e05602dfecad0cb6f2246fae096d4da425cca6e8a71056f28abd97ad98cf770a2018853248
+  languageName: node
+  linkType: hard
+
+"validator@npm:^11.1.0":
+  version: 11.1.0
+  resolution: "validator@npm:11.1.0"
+  checksum: 4de5f942d61ee8d8f2c14c669557ee3885719695a7baff6d0aca036610ad1640ea78a51c7eb7cdef3f1645c6572366c3b792d027d55cff651565c34d613a1355
   languageName: node
   linkType: hard
 
