@@ -55,6 +55,7 @@ const config = convict({
   },
   foodlogiq: {
     domain: {
+      doc: 'food logiq api domain or base url',
       default: `https://sandbox-api.foodlogiq.com`,
     },
     'assessment-template': {
@@ -92,7 +93,6 @@ const config = convict({
       format: Array,
       default: ['-----'],
       env: 'FL_TOKEN',
-      arg: 'token',
     }
   }
 });
