@@ -18,8 +18,8 @@ const pointer = require('json-pointer');
 const uuid = require('uuid');
 const sha256 = require('sha256');
 const oada = require('@oada/client');
-let config = require('./config.default.js');
-const { FL_TOKEN, FL_DOMAIN, DOMAIN, TRELLIS_TOKEN } = config;
+let config = require('./config').default;
+const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
@@ -34,7 +34,7 @@ const FL_MIRROR = "food-logiq-mirror";
 //let tree = require(SHARED_PATH+'/tree').mirrorTree;
 let tree = require('./tree.js');
 const TL_TP = config.get('trellis.endpoints.tps');
-const TL_UTP = config.get('trellis.endpints.utps');
+const TL_UTP = config.get('trellis.endpoints.utps');
 const TL_FL_BS = config.get('trellis.endpoints.fl-bus');
 
 // ======================  ASSESSMENTS ============================== {
