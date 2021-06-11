@@ -352,6 +352,7 @@ async function watchTargetJobs() {
 }
 
 async function initialize() {
+  try {
   info('Initializing fl-poll service');
   TOKEN = await getToken();
   // Connect to oada
@@ -371,6 +372,9 @@ async function initialize() {
   await checkTime();
   await watchTrellisFLBusinesses();
   setInterval(checkTime, checkInterval);
+  } catch(err) {
+    error(err);
+  }
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -957,7 +961,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
       headers: { 'Authorization': FL_TOKEN },
     }
     if (pageIndex) request.params = { pageIndex };
-    response = await axios(request);
+    let response = await axios(request);
 
 
     // Manually check for changes; Only update the resource if it has changed!
