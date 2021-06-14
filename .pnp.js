@@ -42,6 +42,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@oada/types", "npm:1.5.1"],
             ["@tsconfig/node16", "npm:1.0.1"],
             ["@types/convict", "npm:6.0.2"],
+            ["@types/convict-format-with-validator", "npm:6.0.2"],
             ["@types/node", "npm:14.17.3"],
             ["@yarnpkg/pnpify", "virtual:4628339561d6adbc682cf1e65ab65f036b0a59a02618565cbd225af104c5fb3f1b1c7c73f76b670a99fccaa9040a99614ea7dec0537919b0832cf463e8a4194b#npm:3.0.0-rc.6"],
             ["adm-zip", "npm:0.5.5"],
@@ -50,6 +51,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["chai", "npm:4.3.4"],
             ["chai-as-promised", "virtual:4628339561d6adbc682cf1e65ab65f036b0a59a02618565cbd225af104c5fb3f1b1c7c73f76b670a99fccaa9040a99614ea7dec0537919b0832cf463e8a4194b#npm:7.1.1"],
             ["convict", "npm:6.1.0"],
+            ["convict-format-with-validator", "npm:6.0.1"],
             ["debug", "virtual:52523d9f65bf0b3cbb0ffa89fd48146e5ae0ea4b9e30eb7c3e8275f0e1d30cd6d1f10867e692d92a509db76858d9804ad1395e36628ca6780b3b48d991419824#npm:4.3.2"],
             ["dotenv", "npm:10.0.0"],
             ["esm", "npm:3.2.25"],
@@ -183,6 +185,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@oada/types", "npm:1.5.1"],
             ["@tsconfig/node16", "npm:1.0.1"],
             ["@types/convict", "npm:6.0.2"],
+            ["@types/convict-format-with-validator", "npm:6.0.2"],
             ["@types/node", "npm:14.17.3"],
             ["@yarnpkg/pnpify", "virtual:4628339561d6adbc682cf1e65ab65f036b0a59a02618565cbd225af104c5fb3f1b1c7c73f76b670a99fccaa9040a99614ea7dec0537919b0832cf463e8a4194b#npm:3.0.0-rc.6"],
             ["adm-zip", "npm:0.5.5"],
@@ -191,6 +194,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["chai", "npm:4.3.4"],
             ["chai-as-promised", "virtual:4628339561d6adbc682cf1e65ab65f036b0a59a02618565cbd225af104c5fb3f1b1c7c73f76b670a99fccaa9040a99614ea7dec0537919b0832cf463e8a4194b#npm:7.1.1"],
             ["convict", "npm:6.1.0"],
+            ["convict-format-with-validator", "npm:6.0.1"],
             ["debug", "virtual:52523d9f65bf0b3cbb0ffa89fd48146e5ae0ea4b9e30eb7c3e8275f0e1d30cd6d1f10867e692d92a509db76858d9804ad1395e36628ca6780b3b48d991419824#npm:4.3.2"],
             ["dotenv", "npm:10.0.0"],
             ["esm", "npm:3.2.25"],
@@ -286,6 +290,16 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [
             ["@types/convict", "npm:6.0.2"],
             ["@types/node", "npm:15.12.2"]
+          ],
+          "linkType": "HARD",
+        }]
+      ]],
+      ["@types/convict-format-with-validator", [
+        ["npm:6.0.2", {
+          "packageLocation": "./.yarn/cache/@types-convict-format-with-validator-npm-6.0.2-2ce51f60fc-7092c0263b.zip/node_modules/@types/convict-format-with-validator/",
+          "packageDependencies": [
+            ["@types/convict-format-with-validator", "npm:6.0.2"],
+            ["@types/convict", "npm:6.0.2"]
           ],
           "linkType": "HARD",
         }]
@@ -1338,6 +1352,16 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["convict", "npm:6.1.0"],
             ["lodash.clonedeep", "npm:4.5.0"],
             ["yargs-parser", "npm:18.1.3"]
+          ],
+          "linkType": "HARD",
+        }]
+      ]],
+      ["convict-format-with-validator", [
+        ["npm:6.0.1", {
+          "packageLocation": "./.yarn/cache/convict-format-with-validator-npm-6.0.1-0fc56bf232-ea7633457e.zip/node_modules/convict-format-with-validator/",
+          "packageDependencies": [
+            ["convict-format-with-validator", "npm:6.0.1"],
+            ["validator", "npm:11.1.0"]
           ],
           "linkType": "HARD",
         }]
@@ -4781,6 +4805,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/uuid-npm-8.3.2-eca0baba53-aed2bcef34.zip/node_modules/uuid/",
           "packageDependencies": [
             ["uuid", "npm:8.3.2"]
+          ],
+          "linkType": "HARD",
+        }]
+      ]],
+      ["validator", [
+        ["npm:11.1.0", {
+          "packageLocation": "./.yarn/cache/validator-npm-11.1.0-0771ac2c47-4de5f942d6.zip/node_modules/validator/",
+          "packageDependencies": [
+            ["validator", "npm:11.1.0"]
           ],
           "linkType": "HARD",
         }]

@@ -1,6 +1,6 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.js",
   "scripts": {
@@ -24,6 +24,7 @@
     "axios": "^0.21.1",
     "bluebird": "^3.7.2",
     "convict": "^6.1.0",
+    "convict-format-with-validator": "^6.0.1",
     "debug": "^4.3.1",
     "dotenv": "^10.0.0",
     "esm": "^3.2.25",
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@tsconfig/node16": "^1.0.1",
     "@types/convict": "^6.0.2",
+    "@types/convict-format-with-validator": "^6",
     "@types/node": "^14.17.0",
     "@yarnpkg/pnpify": "^3.0.0-rc.6",
     "bluebird": "^3.7.2",

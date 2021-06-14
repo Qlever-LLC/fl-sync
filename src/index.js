@@ -18,10 +18,11 @@ const pointer = require('json-pointer');
 const uuid = require('uuid');
 const sha256 = require('sha256');
 const oada = require('@oada/client');
-let config = require('./config.default.js');
-const { FL_TOKEN, FL_DOMAIN, DOMAIN, TRELLIS_TOKEN } = config;
-const SF_FL_CID = config.sf_buyer.community_id;
-const SF_FL_BID = config.sf_buyer.business_id;
+let config = require('./config').default;
+const DOMAIN = config.get('trellis.domain');
+const TRELLIS_TOKEN = config.get('trellis.token');
+const FL_DOMAIN = config.get('foodlogiq.domain');
+const FL_TOKEN = config.get('foodlogiq.token');
 const jszip = require('jszip');
 const oadalist = require('@oada/list-lib');
 //const sampleDocs = require('./sampleDocs.js');
@@ -32,19 +33,19 @@ let TradingPartners = {};
 const FL_MIRROR = "food-logiq-mirror";
 //let tree = require(SHARED_PATH+'/tree').mirrorTree;
 let tree = require('./tree.js');
-const TL_TP = config.TL_TP;
-const TL_UTP = config.TL_UTP;
-const TL_FL_BS = config.TL_FL_BS;
+const TL_TP = config.get('trellis.endpoints.tps');
+const TL_UTP = config.get('trellis.endpoints.utps');
+const TL_FL_BS = config.get('trellis.endpoints.fl-bus');
 
 // ======================  ASSESSMENTS ============================== {
 const ASSESSMENT_BID = config.ASSESSMENT_BID;
-let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${ASSESSMENT_BID}/documents`;
-const ASSESSMENT_TEMPLATE_ID = config.ASSESSMENT_TEMPLATE_ID;
-const ASSESSMENT_TEMPLATE_NAME = config.ASSESSMENT_TEMPLATE_NAME;
-const CO_ID = config.CO_ID;
-const CO_NAME = config.CO_NAME;
-const COMMUNITY_ID = config.COMMUNITY_ID;
-const COMMUNITY_NAME = config.COMMUNITY_NAME;
+const ASSESSMENT_TEMPLATE_ID = config.get('foodlogiq.assessment-template.id');
+const ASSESSMENT_TEMPLATE_NAME = config.get('foodlogiq.assessment-template.name');
+const CO_ID = config.get('foodlogiq.community.owner.id');
+const CO_NAME = config.get('foodlogiq.community.owner.name');
+const COMMUNITY_ID = config.get('foodlogiq.community.id');
+const COMMUNITY_NAME = config.get('foodlogiq.community.name');
+let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
 let AUTO_APPROVE_ASSESSMENTS;
@@ -304,7 +305,7 @@ async function onTargetUpdate(c, jobId) {
         info(`Posting new update to FL docId ${job.flId}: ${details}`);
         await axios({
           method: 'post',
-          url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
+          url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${job.flId}/capa`,
           headers: { Authorization: FL_TOKEN },
           data: {
             details,
@@ -351,6 +352,7 @@ async function watchTargetJobs() {
 }
 
 async function initialize() {
+  try {
   info('Initializing fl-poll service');
   TOKEN = await getToken();
   // Connect to oada
@@ -370,6 +372,9 @@ async function initialize() {
   await checkTime();
   await watchTrellisFLBusinesses();
   setInterval(checkTime, checkInterval);
+  } catch(err) {
+    error(err);
+  }
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -415,7 +420,7 @@ async function getResourcesByMember(member) {
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
     info(`Retrieving Food Logiq ${type} for supplier ${member._id} with date ${date}`)
     await fetchAndSync({
-      from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/${type}?sourceCommunities=${SF_FL_CID}&sourceBusiness=${bid}&versionUpdated=${date}..`,
+      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&sourceBusiness=${bid}&versionUpdated=${date}..`,
       to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
       forEach: async function handleItems(item) {
         switch (type) {
@@ -437,7 +442,7 @@ async function getResourcesByMember(member) {
   // Now get assessments (slightly different syntax)
   try {
     await fetchAndSync({
-      from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment?performedOnBusinessIds=${bid}&lastUpdateAt=${date}..`,
+      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?performedOnBusinessIds=${bid}&lastUpdateAt=${date}..`,
       to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
       forEach: async function handleAssess(item) {
         await handleAssessment(item, bid, tp);
@@ -453,7 +458,7 @@ async function approveFLDoc(docId) {
   info(`Approving associated FL Doc ${docId}`);
   await axios({
     method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/approvalStatus/approved`,
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/approvalStatus/approved`,
     headers: { Authorization: FL_TOKEN },
     data: {
       status: "Approved"
@@ -511,7 +516,7 @@ async function handleAssessment(item, bid, tp) {
           item.state = 'Approved';
           await axios({
             method: 'put',
-            url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/spawnedassessment/${item._id}/approvespawnedassessment`,
+            url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${item._id}/approvespawnedassessment`,
             headers: { Authorization: FL_TOKEN },
             data: item
           })
@@ -530,7 +535,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
     // retrieve the attachments and unzip
     let file = await axios({
       method: 'get',
-      url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${item._id}/attachments`,
+      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
       headers: { Authorization: FL_TOKEN },
       responseType: 'arrayBuffer',
       responseEncoding: 'binary'
@@ -754,7 +759,7 @@ async function handleScrapedResult(jobId) {
     if (status) {
       await axios({
         method: 'post',
-        url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${job.flId}/capa`,
+        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${job.flId}/capa`,
         headers: { Authorization: FL_TOKEN },
         data: {
           details: 'Document passed validation. Ready for approval.',
@@ -775,7 +780,7 @@ async function handleScrapedResult(jobId) {
       let { bid, bname } = job;
       let assess = await spawnAssessment(bid, bname, 2000000, 5000000, 1000000, 3000000, 1000000, 1000000);
 
-      let linkResponse = await linkAssessmentToDocument(SF_FL_BID, {
+      let linkResponse = await linkAssessmentToDocument(CO_ID, {
         "_id": assess.data._id,
         "type": "assessment"
       }, {
@@ -814,20 +819,20 @@ async function handleScrapedResult(jobId) {
     }
 
     info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+
+    // Link to the original food-logiq document
+    let resp = await axios({
+      method: 'put',
+      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+      headers: {
+        Authorization: `Bearer ${TRELLIS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      data
+    })
   } catch (err) {
     console.log(err);
   }
-
-  // Link to the original food-logiq document
-  let resp = await axios({
-    method: 'put',
-    url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-    headers: {
-      Authorization: `Bearer ${TRELLIS_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    data
-  })
 
 }
 
@@ -836,7 +841,7 @@ async function rejectFLDoc(docId, message) {
   //reject to FL
   await axios({
     method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/approvalStatus/rejected`,
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/approvalStatus/rejected`,
     headers: { Authorization: FL_TOKEN },
     data: { status: "Rejected" }
   })
@@ -844,7 +849,7 @@ async function rejectFLDoc(docId, message) {
   //Post message regarding error
   await axios({
     method: 'post',
-    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/capa`,
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/capa`,
     headers: { Authorization: FL_TOKEN },
     data: {
       details: `${message} Please correct and resubmit.`,
@@ -854,7 +859,7 @@ async function rejectFLDoc(docId, message) {
 
   await axios({
     method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/${docId}/submitCorrectiveActions`,
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/submitCorrectiveActions`,
     headers: { Authorization: FL_TOKEN },
     data: {}
   })
@@ -864,7 +869,7 @@ async function rejectFLDoc(docId, message) {
 
 async function fetchAssessmentTemplates() {
   await fetchAndSync({
-    from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/assessmenttemplate`,
+    from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/assessmenttemplate`,
     to: `${SERVICE_PATH}/assessment-templates`,
     //    forEach: async (item) => {
     //      console.log(item);
@@ -933,7 +938,7 @@ async function pollFl() {
       // Sync list of suppliers
       info(`Fetching FL community members...`)
       await fetchAndSync({
-        from: `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/communities/${SF_FL_CID}/memberships`,
+        from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
         to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
         forEach: async (item) => {
           await getResourcesByMember(item);
@@ -956,7 +961,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
       headers: { 'Authorization': FL_TOKEN },
     }
     if (pageIndex) request.params = { pageIndex };
-    response = await axios(request);
+    let response = await axios(request);
 
 
     // Manually check for changes; Only update the resource if it has changed!
@@ -1154,7 +1159,7 @@ async function updateAssessment(path, data) {
  * @param document info 
  */
 async function linkAssessmentToDocument(bid, assessment, doc) {
-  let PATH_LINK_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/links/assessment/${assessment._id}`;
+  let PATH_LINK_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${CO_ID}/links/assessment/${assessment._id}`;
   trace(`Creating FL Link from assessment [${assessment._id}] to document [${doc._id}]`)
 
   return axios({
@@ -1223,7 +1228,7 @@ async function buildAnswerArrayFromAssessmentTemplate() {
  * @param worker compensation
  */
 async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker) {
-  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${SF_FL_BID}/spawnedassessment`;
+  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${CO_ID}/spawnedassessment`;
   let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
   let _assessment_template = _.cloneDeep(assessment_template);
   _assessment_template["performedOnBusiness"]["_id"] = bid;
@@ -1307,7 +1312,7 @@ async function mockFL({ url }) {
 initialize()
 
 async function testMock() {
-  let url = `${FL_DOMAIN}/v2/businesses/${SF_FL_BID}/documents/abc123/attachments`
+  let url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/abc123/attachments`
   let res = mockFL({ url });
 }
 
