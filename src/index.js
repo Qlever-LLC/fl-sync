@@ -490,7 +490,7 @@ async function handleAssessment(item, bid, tp) {
 
       //Create an update message
       await CONNECTION.post({
-        path: `/resources/${job.jobId},
+        path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
           information: `Food Logiq Assessment has been approved`,                    
@@ -718,6 +718,40 @@ async function businessToTp(member) {
 
 };
 
+async function constructAssessment(job, result) {
+  let { bid, bname } = job;
+
+  let cgl = _.find(Object.values(result.policies, ['type', 'Commercial General Liability']))
+  let general = cgl.aggregate || 0;
+  let aggregate = cgl.aggregate || 0;
+  let product = cgl.products.compop_agg || 0;
+
+  let al = _.find(Object.values(result.policies, ['type', 'Automobile Liability']))
+  let auto = al.combined_single_limit || 0;
+
+  let ul = _.find(Object.values(result.policies, ['type', 'Umbrella Liability']))
+  let umbrella = ul.each_occurence1 || 0;
+
+  let wc = _.find(Object.values(result.policies, ['type', `Worker's Liability`]))
+  let worker = wc.el_each_accident || 0;
+
+  let el = _.find(Object.values(result.policies, ['type', `Employers' Liability`]))
+  let employer = el.el_each_accident || 0;
+
+  let assess = await spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker);
+
+  let linkResponse = await linkAssessmentToDocument(CO_ID, {
+    "_id": assess.data._id,
+    "type": "assessment"
+  }, {
+    "_id": job.flId,
+    "name": job.name,
+    "type": "document"
+  })
+
+  return assess;
+}
+
 async function handleScrapedResult(jobId) {
   let job = TARGET_JOBS[jobId];
   let result;
@@ -768,7 +802,7 @@ async function handleScrapedResult(jobId) {
       })
 
       await CONNECTION.post({
-        path: `/resources/${job.jobId},
+        path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
           information: `Trellis-extracted PDF data matches Food Logiq form data`,
@@ -777,17 +811,7 @@ async function handleScrapedResult(jobId) {
         console.log(err);
       })
 
-      let { bid, bname } = job;
-      let assess = await spawnAssessment(bid, bname, 2000000, 5000000, 1000000, 3000000, 1000000, 1000000);
-
-      let linkResponse = await linkAssessmentToDocument(CO_ID, {
-        "_id": assess.data._id,
-        "type": "assessment"
-      }, {
-        "_id": job.flId,
-        "name": job.name,
-        "type": "document"
-      })
+      let assess = await constructAssessment(job, result);
 
       data.services['fl-sync'].assessment = assess.data._id;
 
@@ -796,7 +820,7 @@ async function handleScrapedResult(jobId) {
       }
 
       await CONNECTION.post({
-        path: `/resources/${job.jobId},
+        path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
           information: `A Food Logiq Assessment has been created and associated with this document`,
@@ -810,7 +834,7 @@ async function handleScrapedResult(jobId) {
       await rejectFLDoc(job.flId, message)
 
       await CONNECTION.post({
-        path: `/resources/${job.jobId},
+        path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
           information: `Trellis-extracted PDF data does not match Food Logiq form data; Rejecting FL Document`,
