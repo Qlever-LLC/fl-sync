@@ -96,42 +96,35 @@ let answer_content = {
       "column": "606cc7eff8014707de000012",
       "answerText": null,
       "answerBool": null,
-      "answerNumeric": 2000000
     },
     {
       "column": "606cc83bf8014788eb000013",
       "answerText": null,
       "answerBool": null,
-      "answerNumeric": 5000000
     },
     {
       "column": "606cc860f801475f03000014",
       "answerText": null,
       "answerBool": null,
-      "answerNumeric": 1000000
     },
     {
       "column": "6091a7361b70862ee2000001",
       "answerText": null,
       "answerBool": null,
-      "answerNumeric": 3000000
     },
     {
       "column": "606cc887f80147f255000015",
       "answerText": null,
       "answerBool": null,
-      "answerNumeric": 1000000
     },
     {
       "column": "606f661d2914d0eaff000001",
       "answerText": null,
       "answerBool": null,
-      "answerNumeric": 1000000
     },
     {
       "column": "606f664b2914d09a5f000002",
       "answerText": null,
-      "answerBool": true,
       "answerNumeric": null
     }
   ]
@@ -321,7 +314,7 @@ async function onTargetUpdate(c, jobId) {
 
 async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
-    path: `/bookmarks/services/fl-sync/autoapprove-assessments`,
+    path: `/bookmarks/services/fl-sync`,
   }).then(r => r.data)
   let value = data['autoapprove-assessments']
   setAutoApprove(value);
@@ -469,10 +462,12 @@ async function approveFLDoc(docId) {
 function checkAssessment(assessment) {
   info(`Checking assessment ${assessment._id}`);
   return assessment.sections.map(section => {
-    section.subsections.map(subsection => {
-      subsection.questions.map(question => {
-        question.productEvaluationOptions.columns.map(column => {
-          if (column.statisticsCommon === null) return false;
+    return section.subsections.map(subsection => {
+      return subsection.questions.map(question => {
+        return question.productEvaluationOptions.columns.map(column => {
+          // Handle columns that aren't scored
+          if (column.acceptanceType === "none") return false;
+
           return column.statisticsCommon.percentWithinTolerance < 100
         })
       })
@@ -1171,6 +1166,7 @@ async function updateAssessment(path, data) {
     info("--> assessment created. ", result.data._id);
     return result;
   }).catch((err) => {
+    console.log(err);
     error("--> Error when updating the assessment.");
     error(err);
   });
@@ -1277,7 +1273,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
     answer_content["answers"][3]["answerNumeric"] = product;
     answer_content["answers"][4]["answerNumeric"] = umbrella;
     answer_content["answers"][5]["answerNumeric"] = employer;
-    answer_content["answers"][6]["answerNumeric"] = worker;
+    answer_content["answers"][6]["answerBool"] = worker;
 
     //including the answers in the answer array
     answers_template.push(answer_content);
@@ -1294,6 +1290,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
     let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
     return response || result
   }).catch((err) => {
+    console.log(err);
     error("--> Error when spawning an assessment.");
     error(err);
   });
@@ -1333,8 +1330,6 @@ async function mockFL({ url }) {
   //  return { data: sampleDocs[string] };
 }
 
-initialize()
-
 async function testMock() {
   let url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/abc123/attachments`
   let res = mockFL({ url });
@@ -1347,9 +1342,9 @@ module.exports = (args) => {
   }
   return {
     pollFl,
+    spawnAssessment,
     initialize,
     testing: {
-      mirror,
       setPath,
       setConnection,
       setTree,
