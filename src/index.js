@@ -721,21 +721,21 @@ async function businessToTp(member) {
 async function constructAssessment(job, result) {
   let { bid, bname } = job;
 
-  let cgl = _.find(Object.values(result.policies, ['type', 'Commercial General Liability']))
+  let cgl = _.find(Object.values(result.policies, ['type', 'Commercial General Liability'])) || {};
   let general = cgl.aggregate || 0;
   let aggregate = cgl.aggregate || 0;
-  let product = cgl.products.compop_agg || 0;
+  let product = cgl.products_-_compop_agg || 0;
 
-  let al = _.find(Object.values(result.policies, ['type', 'Automobile Liability']))
+  let al = _.find(Object.values(result.policies, ['type', 'Automobile Liability'])) || {};
   let auto = al.combined_single_limit || 0;
 
-  let ul = _.find(Object.values(result.policies, ['type', 'Umbrella Liability']))
+  let ul = _.find(Object.values(result.policies, ['type', 'Umbrella Liability'])) || {};
   let umbrella = ul.each_occurence1 || 0;
 
-  let wc = _.find(Object.values(result.policies, ['type', `Worker's Liability`]))
-  let worker = wc.el_each_accident || 0;
+  let wc = _.find(Object.values(result.policies, ['type', `Worker's Liability`])) || {};
+  let worker = wc ? true : false;
 
-  let el = _.find(Object.values(result.policies, ['type', `Employers' Liability`]))
+  let el = _.find(Object.values(result.policies, ['type', `Employers' Liability`])) || {};
   let employer = el.el_each_accident || 0;
 
   let assess = await spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker);
@@ -829,7 +829,7 @@ async function handleScrapedResult(jobId) {
         console.log(err);
       })
 
-      info(`Spawned assessment [${assess.data._id}] for business id [${bid}]`);
+      info(`Spawned assessment [${assess.data._id}] for business id [${job.bid}]`);
     } else {
       await rejectFLDoc(job.flId, message)
 
