@@ -732,7 +732,7 @@ async function constructAssessment(job, result) {
   let ul = _.find(Object.values(result.policies, ['type', 'Umbrella Liability'])) || {};
   let umbrella = ul.each_occurence1 || 0;
 
-  let wc = _.find(Object.values(result.policies, ['type', `Worker's Liability`])) || {};
+  let wc = _.find(Object.values(result.policies, ['type', `Worker's Liability`]));
   let worker = wc ? true : false;
 
   let el = _.find(Object.values(result.policies, ['type', `Employers' Liability`])) || {};
