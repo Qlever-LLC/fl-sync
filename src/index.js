@@ -482,7 +482,18 @@ async function handleAssessment(item, bid, tp) {
     await Promise.each(found, async (job) => {
       TARGET_JOBS[job.jobId].assessments[item._id] = true;
       await approveFLDoc(job.flId);
+
+      //Create an update message
+      await CONNECTION.post({
+        path: `/resources/${job.jobId},
+        data: {
+          time: moment().format('X'),
+          information: `Food Logiq Assessment has been approved`,                    
+        }
+      })
     })
+
+
   } else if (item.state === 'Rejected') {
     let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
     await Promise.each(found, async (job) => {
@@ -751,6 +762,16 @@ async function handleScrapedResult(jobId) {
         }
       })
 
+      await CONNECTION.post({
+        path: `/resources/${job.jobId},
+        data: {
+          time: moment().format('X'),
+          information: `Trellis-extracted PDF data matches Food Logiq form data`,
+        }
+      }).catch(err => {
+        console.log(err);
+      })
+
       let { bid, bname } = job;
       let assess = await spawnAssessment(bid, bname, 2000000, 5000000, 1000000, 3000000, 1000000, 1000000);
 
@@ -769,9 +790,27 @@ async function handleScrapedResult(jobId) {
         [assess.data._id]: false
       }
 
-      info(`Spawning assessment for business id [${bid}]`);
+      await CONNECTION.post({
+        path: `/resources/${job.jobId},
+        data: {
+          time: moment().format('X'),
+          information: `A Food Logiq Assessment has been created and associated with this document`,
+        }
+      }).catch(err => {
+        console.log(err);
+      })
+
+      info(`Spawned assessment [${assess.data._id}] for business id [${bid}]`);
     } else {
       await rejectFLDoc(job.flId, message)
+
+      await CONNECTION.post({
+        path: `/resources/${job.jobId},
+        data: {
+          time: moment().format('X'),
+          information: `Trellis-extracted PDF data does not match Food Logiq form data; Rejecting FL Document`,
+        }
+      })
     }
 
     info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
