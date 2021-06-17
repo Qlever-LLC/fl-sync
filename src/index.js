@@ -184,7 +184,7 @@ async function checkTime() {
     if (demoCleanup) {
       await cleanUpFLDocuments();
     }
-    
+
     manualPoll = response.data.manualPoll || process.env.MANUAL_POLL;
 
     let freshPoll = process.env.FRESH_POLL;
@@ -346,26 +346,25 @@ async function watchTargetJobs() {
 
 async function initialize() {
   try {
-  info('Initializing fl-poll service');
-  TOKEN = await getToken();
-  // Connect to oada
-  try {
-    var conn = await oada.connect({
-      domain: 'https://' + DOMAIN,
-      token: TOKEN,
-    })
+    info('Initializing fl-poll service');
+    TOKEN = await getToken();
+    // Connect to oada
+    try {
+      var conn = await oada.connect({
+        domain: 'https://' + DOMAIN,
+        token: TOKEN,
+      })
+    } catch (err) {
+      error(`Initializing Trellis connection failed`);
+      error(err)
+    }
+    setConnection(conn);
+    await watchTargetJobs();
+    await watchFlSyncConfig();
+    //  await createFlWebsocket();
+    await checkTime();
+    setInterval(checkTime, checkInterval);
   } catch (err) {
-    error(`Initializing Trellis connection failed`);
-    error(err)
-  }
-  setConnection(conn);
-  await watchTargetJobs();
-  await watchFlSyncConfig();
-//  await createFlWebsocket();
-  await checkTime();
-  await watchTrellisFLBusinesses();
-  setInterval(checkTime, checkInterval);
-  } catch(err) {
     error(err);
   }
 }
@@ -488,7 +487,7 @@ async function handleAssessment(item, bid, tp) {
         path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
-          information: `Food Logiq Assessment has been approved`,                    
+          information: `Food Logiq Assessment has been approved`,
         }
       })
     })
@@ -516,7 +515,7 @@ async function handleAssessment(item, bid, tp) {
             data: item
           })
         } else info(`Assessment [${item._id}] cannot be auto-approved`)
-      } catch(err) {
+      } catch (err) {
         error(err)
       }
     }
@@ -719,7 +718,7 @@ async function constructAssessment(job, result) {
   let cgl = _.find(Object.values(result.policies, ['type', 'Commercial General Liability'])) || {};
   let general = cgl.aggregate || 0;
   let aggregate = cgl.aggregate || 0;
-  let product = cgl.products_-_compop_agg || 0;
+  let product = cgl.products_ - _compop_agg || 0;
 
   let al = _.find(Object.values(result.policies, ['type', 'Automobile Liability'])) || {};
   let auto = al.combined_single_limit || 0;
@@ -1027,88 +1026,6 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
     throw err;
   }
 }
-
-/**
- * assigns item data (new business) into the trading partner template
- * @param {*} data 
- * @param {*} item 
- * @returns 
- */
-async function assignData(data, item) {
-  data.name = item[FL_MIRROR]["business"]["name"] ? item[FL_MIRROR]["business"]["name"] : "";
-  data.address = item[FL_MIRROR]["business"]["address"]["addressLineOne"] ? item[FL_MIRROR]["business"]["address"]["addressLineOne"] : "";
-  data.city = item[FL_MIRROR]["business"]["address"]["city"] ? item[FL_MIRROR]["business"]["address"]["city"] : "";
-  data.email = item[FL_MIRROR]["business"]["email"] ? item[FL_MIRROR]["business"]["email"] : "";
-  data.phone = item[FL_MIRROR]["business"]["phone"] ? item[FL_MIRROR]["business"]["phone"] : "";
-  data.foodlogiq = item[FL_MIRROR] ? item[FL_MIRROR] : "";
-  return data;
-}//assignData
-
-/**
- * adds a trading-partner to the trellisfw when
- * a new business is found under services/fl-sync/businesses
- * @param {*} item 
- * @param {*} key 
- */
-async function addTP2Trellis(item, key) {
-  let _path_tp_id = TL_TP_PATH + key;
-  try {
-    if (typeof TradingPartners[key] === 'undefined') {//adds the business as trading partner
-      let data = _.cloneDeep(trellisTPTemplate);
-
-      if (typeof item["masterid"] === 'undefined' || item["masterid"] === "") {
-        _path_tp_id = TL_TP_UNIDENTIFIED_PATH + key;
-      } else {
-        data.sapid = item["masterid"];
-        data.masterid = item["masterid"];
-      }//if
-
-      if (typeof item[FL_MIRROR] === 'undefined') {
-        let _path = item["_id"];
-        await CONNECTION.get({
-          path: _path
-        }).then(async (result) => {
-          data = await assignData(data, result.data);
-        }).catch((error) => {
-          info("--> error when retrieving business ", error);
-        });
-      } else {//if
-        data = await assignData(data, item);
-      }//if
-
-      await CONNECTION.put({
-        path: _path_tp_id,
-        tree: trellisfw_tp_tree,
-        data: data
-      }).then((result) => {
-        info("--> business mirrored. ", result);
-        console.log("--> business mirrored. Path: ", _path_tp_id);
-      }).catch((error) => {
-        info("--> error when mirroring ", error);
-      });
-      TradingPartners[key] = data;
-    } else {
-      console.log("--> do nothing.");
-    }//if
-  } catch (error) {
-    info("--> error ", error);
-    throw error;
-  }
-}//addTP2Trellis
-
-/**
- * watches for changes in the fl-sync/businesses
- */
-async function watchTrellisFLBusinesses() {
-  info(`Started ListWatch on Trellis FL Businesses ...`)
-  const watch = new ListWatch({
-    path: TL_FL_BS,
-    name: `trellis-fl-businesses-trellis-tp-mirror`,
-    conn: CONNECTION,
-    resume: true,
-    onAddItem: addTP2Trellis
-  });
-}//watchTrellisFLBusinesses
 
 /**
  * deletes the Centricity Test Account documents from FL
