@@ -1252,6 +1252,8 @@ async function testMock() {
   let res = mockFL({ url });
 }
 
+initialize();
+
 module.exports = (args) => {
   if (args && args.initialize === false) {
   } else {
