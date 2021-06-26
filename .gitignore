@@ -25,3 +25,6 @@ act/
 .pnp.*
 # ignore sdk stuff
 .vim
+
+# 
+runlocal.bash

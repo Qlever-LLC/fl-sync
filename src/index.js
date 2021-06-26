@@ -1,15 +1,10 @@
-//process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-//if (LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
+if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
 const axios = require('axios');
 const debug = require('debug');
 const trace = debug('fl-sync:trace');
 const info = debug('fl-sync:info');
 const warn = debug('fl-sync:warn');
 const error = debug('fl-sync:error');
-
-//const SHARED_PATH = LOCAL ? '../shared' : '/code/fl-shared';
-//let config = require(SHARED_PATH+'/config');
-
 let Promise = require('bluebird');
 const moment = require('moment');
 const urlLib = require('url');
@@ -45,6 +40,7 @@ const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const COMMUNITY_NAME = config.get('foodlogiq.community.name');
+const LOCAL = process.env.LOCAL;
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
@@ -155,8 +151,8 @@ let TL_TP_UNIDENTIFIED_PATH = TL_UTP;
 //const DOMAIN = config.get('fl-shared:domain') || 'https://localhost'
 let TOKEN;
 let CURRENTLY_POLLING = false;
-let checkInterval = 10 * 1000; //check oada every 1 minute
-let INTERVAL_MS = 20 * 1000; //1 min in ms
+let checkInterval = 10 * 1000; //check OADA to determine if its time to poll
+let INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
 let lastPoll;
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
@@ -174,59 +170,71 @@ async function getToken() {
 
 async function checkTime() {
   info('Checking OADA to determine whether to poll.');
-  let manualPoll;
+  if (CURRENTLY_POLLING) {
+    info('Currently polling already. Skipping this poll loop');
+  } else {
+    CURRENTLY_POLLING = true;
+    
+    let manualPoll;
 
   //Get last poll date
-  try {
-    let response = await CONNECTION.get({ path: `${SERVICE_PATH}` })
-
-    let demoCleanup = response.data.cleanup || false;
-    if (demoCleanup) {
-      await cleanUpFLDocuments();
-    }
-
-    manualPoll = response.data.manualPoll || process.env.MANUAL_POLL;
-
-    let freshPoll = process.env.FRESH_POLL;
-
-    info(`/lastPoll endpoint found; last update was: ${response.data.lastPoll}`);
-    if (!freshPoll && response.data.lastPoll) lastPoll = moment(response.data.lastPoll).utc();
-  } catch (err) {
-    if (err.status === 404) {
-      info(`/lastPoll does not exist. Omitting versionUpdate param for a fresh poll.`);
-    } else throw err;
-  }
-
-  let current = moment().utc();
-  let nextUpdate = (lastPoll ? lastPoll.clone() : current.clone()).add(INTERVAL_MS)
-  info(`currentTime is ${current}, nextUpdate is ${nextUpdate}. ${!lastPoll ? 'lastPoll was undefined. Polling.' : current > nextUpdate ? 'Polling' : 'Not Polling'}`);
-  if (manualPoll) info(`Manual poll detected. Getting changes since last poll`);
-  if (!lastPoll || current > nextUpdate || manualPoll) {
-    //    if (lastPoll) lastPoll = lastPoll.format('ddd, DD MMM YYYY HH:mm:ss +0000');
-    current = current.format();
     try {
-      info('Polling FL...')
-      await pollFl();
+      let response = await CONNECTION.get({ path: `${SERVICE_PATH}` })
+
+      let demoCleanup = response.data.cleanup || false;
+      if (demoCleanup) {
+        await cleanUpFLDocuments();
+      }
+
+      manualPoll = response.data.manualPoll || process.env.MANUAL_POLL;
+
+      let freshPoll = process.env.FRESH_POLL;
+
+      info(`/lastPoll endpoint found; last update was: ${response.data.lastPoll}`);
+      if (!freshPoll && response.data.lastPoll) lastPoll = moment(response.data.lastPoll).utc();
     } catch (err) {
-      error(err);
-      throw err;
+      if (err.status === 404) {
+        info(`/lastPoll does not exist. Omitting versionUpdate param for a fresh poll.`);
+      } else {
+        CURRENTLY_POLLING = false;
+        throw err;
+      }
     }
-    // 3. Success. Now store update the last checked time.
-    info(`Storing new "lastPoll" value: ${current}. Next run will occur on or after this time.`);
 
-    if (manualPoll) info(`Resetting manualPoll to false`)
+    let current = moment().utc();
+    let nextUpdate = (lastPoll ? lastPoll.clone() : current.clone()).add(INTERVAL_MS)
+    info(`currentTime is ${current}, nextUpdate is ${nextUpdate}. ${!lastPoll ? 'lastPoll was undefined. Polling.' : current > nextUpdate ? 'Polling' : 'Not Polling'}`);
+    if (manualPoll) info(`Manual poll detected. Getting changes since last poll`);
+    if (!lastPoll || current > nextUpdate || manualPoll) {
+      //    if (lastPoll) lastPoll = lastPoll.format('ddd, DD MMM YYYY HH:mm:ss +0000');
+      current = current.format();
+      try {
+        info('Polling FL...')
+        await pollFl();
+      } catch (err) {
+        error(err);
+        CURRENTLY_POLLING = false;
+        throw err;
+      }
+      // 3. Success. Now store update the last checked time.
+      info(`Storing new "lastPoll" value: ${current}. Next run will occur on or after this time.`);
 
-    if (manualPoll) await CONNECTION.put({
-      path: SERVICE_PATH,
-      tree,
-      data: { manualPoll: false }
-    })
+      if (manualPoll) info(`Resetting manualPoll to false`)
 
-    return CONNECTION.put({
-      path: SERVICE_PATH,
-      tree,
-      data: { lastPoll: current }
-    })
+      if (manualPoll) await CONNECTION.put({
+        path: SERVICE_PATH,
+        tree,
+        data: { manualPoll: false }
+      })
+
+      CURRENTLY_POLLING = false;
+      return CONNECTION.put({
+        path: SERVICE_PATH,
+        tree,
+        data: { lastPoll: current }
+      })
+    }
+    CURRENTLY_POLLING = false;
   }
 }
 
@@ -259,7 +267,8 @@ async function onTargetUpdate(c, jobId) {
   info(`Recieved update for job [${jobId}]`);
   let job = TARGET_JOBS[jobId];
 
-  if (!(job && job.flId)) info(`No Food Logiq document associated to this job. Ignoring`)
+  if (!(job && job.flId)) info(`No Food Logiq document associated to job [${jobId}]. Ignoring`)
+  if (!(job && job.flId)) info(`${JSON.stringify(TARGET_JOBS, null, 2)}`)
   if (!(job && job.flId)) return;
 
   try {
@@ -308,7 +317,8 @@ async function onTargetUpdate(c, jobId) {
       }
     })
   } catch (err) {
-    console.log('on target update', err);
+    error(err);
+    throw err;
   }
 }
 
@@ -346,7 +356,7 @@ async function watchTargetJobs() {
 
 async function initialize() {
   try {
-    info('Initializing fl-poll service');
+    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS/1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
     try {
@@ -366,6 +376,7 @@ async function initialize() {
     setInterval(checkTime, checkInterval);
   } catch (err) {
     error(err);
+    throw err;
   }
 }
 
@@ -442,7 +453,7 @@ async function getResourcesByMember(member) {
     })
     return;
   } catch (err) {
-    console.log(err);
+    throw err;
   }
 }
 
@@ -517,6 +528,7 @@ async function handleAssessment(item, bid, tp) {
         } else info(`Assessment [${item._id}] cannot be auto-approved`)
       } catch (err) {
         error(err)
+        throw err;
       }
     }
   }
@@ -570,6 +582,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
       _id = _id.replace(/^\//, '');
 
+      // Create a link from the FL mirror to the trellis pdf
       await CONNECTION.put({
         path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
         data: {
@@ -599,12 +612,11 @@ async function handlePendingDoc(item, bid, tp, bname) {
       }
 
       //link the file into the documents list
-      info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents`);
       data = { _id, _rev: 0 }
+      info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents: ${JSON.stringify(data, null, 2)}`);
       await CONNECTION.post({
         path: `${TP_PATH}/${tp}/shared/trellisfw/documents`,
         data,
-        tree,
       })
     })
   } catch (err) {
@@ -624,9 +636,7 @@ async function handleApprovedDoc(item, bid, tp) {
   //1. Get reference of corresponding pending scraped pdf
   let found = _.find(Object.values(TARGET_JOBS, ['flId', item._id]))
 
-  if (!found) console.log('not found', item, TARGET_JOBS);
   if (!found) return;
-  if (!found) console.log('not found222');
   if (!found.result) return;
 
   TARGET_JOBS[found.jobId].approved = true;
@@ -669,8 +679,8 @@ async function validatePending(trellisDoc, flDoc, type) {
   switch (type) {
     case 'cois':
       //TODO: current fix to timezone stuff:
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(12, 'hours');
-      //let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(8, 'hours');
+      let offset = LOCAL ? 8 : 12;
+      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(offset, 'hours');
       let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
       let now = moment();
 
@@ -715,22 +725,23 @@ async function businessToTp(member) {
 async function constructAssessment(job, result) {
   let { bid, bname } = job;
 
-  let cgl = _.find(Object.values(result.policies, ['type', 'Commercial General Liability'])) || {};
-  let general = cgl.aggregate || 0;
-  let aggregate = cgl.aggregate || 0;
-  let product = cgl.products_ - _compop_agg || 0;
+  let policies = Object.values(result.policies);
+  let cgl = _.find(policies, ['type', 'Commercial General Liability']) || {};
+  let general = parseInt(cgl.each_occurrence || 0);
+  let aggregate = parseInt(cgl.general_aggregate || 0);
+  let product = parseInt(cgl["products_-_compop_agg"] || 0);
 
-  let al = _.find(Object.values(result.policies, ['type', 'Automobile Liability'])) || {};
-  let auto = al.combined_single_limit || 0;
+  let al = _.find(policies, ['type', 'Automobile Liability']) || {};
+  let auto = parseInt(al.combined_single_limit || 0);
 
-  let ul = _.find(Object.values(result.policies, ['type', 'Umbrella Liability'])) || {};
-  let umbrella = ul.each_occurence1 || 0;
+  let ul = _.find(policies, ['type', 'Umbrella Liability']) || {};
+  let umbrella = parseInt(ul.each_occurence1 || 0);
 
-  let wc = _.find(Object.values(result.policies, ['type', `Worker's Liability`]));
+  let wc = _.find(policies, ['type', `Worker's Compensation`]);
   let worker = wc ? true : false;
 
-  let el = _.find(Object.values(result.policies, ['type', `Employers' Liability`])) || {};
-  let employer = el.el_each_accident || 0;
+  let el = _.find(policies, ['type', `Employers' Liability`]) || {};
+  let employer = parseInt(el.el_each_accident || 0);
 
   let assess = await spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker);
 
@@ -802,7 +813,8 @@ async function handleScrapedResult(jobId) {
           information: `Trellis-extracted PDF data matches Food Logiq form data`,
         }
       }).catch(err => {
-        console.log(err);
+        error(err);
+        throw err;
       })
 
       let assess = await constructAssessment(job, result);
@@ -820,7 +832,8 @@ async function handleScrapedResult(jobId) {
           information: `A Food Logiq Assessment has been created and associated with this document`,
         }
       }).catch(err => {
-        console.log(err);
+        error(err);
+        throw(err);
       })
 
       info(`Spawned assessment [${assess.data._id}] for business id [${job.bid}]`);
@@ -849,7 +862,8 @@ async function handleScrapedResult(jobId) {
       data
     })
   } catch (err) {
-    console.log(err);
+    error(err);
+    throw err;
   }
 
 }
@@ -926,8 +940,10 @@ async function fetchCOIAssessmentTemplateFromTrellis() {
         });
       });
     });
-  } catch (error) {
+  } catch (err) {
     error("Error when fetching COI template from trellis.");
+    error(err);
+    throw err;
   }
 }//fetchCOIAssessmentTemplateFromTrellis
 
@@ -950,23 +966,16 @@ async function pollFl() {
     //Get assessment templates
     let templates = await fetchAssessmentTemplates();
 
-    if (!CURRENTLY_POLLING) {
-      CURRENTLY_POLLING = true;
-
-      // Sync list of suppliers
-      info(`Fetching FL community members...`)
-      await fetchAndSync({
-        from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
-        to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
-        forEach: async (item) => {
-          await getResourcesByMember(item);
-        }
-      })
-      CURRENTLY_POLLING = false;
-    }
+    // Sync list of suppliers
+    info(`Fetching FL community members...`)
+    await fetchAndSync({
+      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
+      to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
+      forEach: async (item) => {
+        await getResourcesByMember(item);
+      }
+    })
   } catch (err) {
-    CURRENTLY_POLLING = false;
-    error(err);
     throw err;
   }
 }
@@ -1001,7 +1010,6 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
             info(`Corresponding resource is not already on trellis. Syncing...`);
             sync = true;
           } else {
-            error(`An error occurred during fetchAndSync`);
             error(err);
             throw err
           }
@@ -1074,6 +1082,7 @@ async function cleanUpFLDocuments() {
  * @param data complete content of the assessment
  */
 async function updateAssessment(path, data) {
+  trace(`Updating assessment [${data._id}] after creation`);
   await axios({
     method: "put",
     url: path,
@@ -1083,7 +1092,6 @@ async function updateAssessment(path, data) {
     info("--> assessment created. ", result.data._id);
     return result;
   }).catch((err) => {
-    console.log(err);
     error("--> Error when updating the assessment.");
     error(err);
   });
@@ -1124,7 +1132,6 @@ async function buildAnswerArrayFromAssessmentTemplate() {
   if (COI_ASSESSMENT_TEMPLATE_ID !== null) {
     let coi_template = ASSESSMENT_TEMPLATES[COI_ASSESSMENT_TEMPLATE_ID];
     let columns = coi_template["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["columns"];
-    console.log("--> before if");
     if (typeof columns !== 'undefined') {
       columns.forEach((col) => {
         let answer_template = {
@@ -1165,6 +1172,7 @@ async function buildAnswerArrayFromAssessmentTemplate() {
  * @param worker compensation
  */
 async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker) {
+  console.log(bid, bname, general, aggregate, auto, product, umbrella, employer, worker)
   let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${CO_ID}/spawnedassessment`;
   let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
   let _assessment_template = _.cloneDeep(assessment_template);
@@ -1207,7 +1215,6 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
     let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
     return response || result
   }).catch((err) => {
-    console.log(err);
     error("--> Error when spawning an assessment.");
     error(err);
   });
@@ -1229,6 +1236,11 @@ function setPath(newPath) {
 function setAutoApprove(value) {
   info(`Setting Autoapprove to ${value}`)
   AUTO_APPROVE_ASSESSMENTS = value;
+}
+
+function setCurrentlyPolling(value) {
+  info(`Setting CURRENTLY_POLLING to ${value}`)
+  CURRENTLY_POLLING = value;
 }
 
 async function mockFL({ url }) {
