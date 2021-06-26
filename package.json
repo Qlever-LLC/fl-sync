@@ -1,6 +1,6 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.js",
   "scripts": {
@@ -17,7 +17,7 @@
     ]
   },
   "dependencies": {
-    "@oada/client": "^2.4.5",
+    "@oada/client": "^2.4.6",
     "@oada/list-lib": "^2.1.6",
     "@oada/types": "^1.5.1",
     "adm-zip": "^0.5.3",
