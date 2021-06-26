@@ -17,7 +17,7 @@
     ]
   },
   "dependencies": {
-    "@oada/client": "^2.3.1",
+    "@oada/client": "^2.4.5",
     "@oada/list-lib": "^2.1.6",
     "@oada/types": "^1.5.1",
     "adm-zip": "^0.5.3",
@@ -55,9 +55,5 @@
     "mocha": "^7.2.0",
     "prettier": "^2.3.0",
     "typescript": "^4.3.2"
-  },
-  "resolutions": {
-    "@qlever-llc/fl-sync": "portal:/home/sanoel/fl-sync",
-    "@oada/client": "portal:/home/sanoel/client"
   }
 }
