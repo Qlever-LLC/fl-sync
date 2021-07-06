@@ -26,7 +26,6 @@ const ListWatch = oadalist.ListWatch;
 let BUSINESSES = {};
 let TradingPartners = {};
 const FL_MIRROR = "food-logiq-mirror";
-//let tree = require(SHARED_PATH+'/tree').mirrorTree;
 let tree = require('./tree.js');
 const TL_TP = config.get('trellis.endpoints.tps');
 const TL_UTP = config.get('trellis.endpoints.utps');
@@ -326,8 +325,18 @@ async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `/bookmarks/services/fl-sync`,
   }).then(r => r.data)
+  .catch(async (err) => {
+    if (err.status === 404) {
+      await CONNECTION.put({
+        path: `/bookmarks/services/fl-sync`,
+        data: {},
+        tree
+      })
+    } else throw err;
+  })
   let value = data['autoapprove-assessments']
   setAutoApprove(value);
+  info('Watching bookmarks/services/fl-sync for changes to autoapprove');
   await CONNECTION.watch({
     path: `/bookmarks/services/fl-sync`,
     watchCallback: (change) => {
@@ -336,6 +345,8 @@ async function watchFlSyncConfig() {
         setAutoApprove(change.body['autoapprove-assessments']);
       }
     }
+  }).catch(err => {
+    error(err);
   })
 }
 
@@ -512,20 +523,18 @@ async function handleAssessment(item, bid, tp) {
       await rejectFLDoc(job.flId, message);
     })
   } else {
-    info(`Autoapproval of assessments: [${AUTO_APPROVE_ASSESSMENTS}]`)
+    info(`Autoapprove Assessments Configuration: [${AUTO_APPROVE_ASSESSMENTS}]`)
     if (AUTO_APPROVE_ASSESSMENTS) {
       try {
         let failed = checkAssessment(item);
-        if (!failed) {
-          info(`Auto-approving assessment [${item._id}]`);
-          item.state = 'Approved';
-          await axios({
-            method: 'put',
-            url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${item._id}/approvespawnedassessment`,
-            headers: { Authorization: FL_TOKEN },
-            data: item
-          })
-        } else info(`Assessment [${item._id}] cannot be auto-approved`)
+        item.state = failed ? 'Rejected' : 'Approved';
+        info(`Assessment Auto-${failed ? 'Rejected' : 'Approved'}. [${item._id}]`);
+        await axios({
+          method: 'put',
+          url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${item._id}/${failed ? 'reject' : 'approve'}spawnedassessment`,
+          headers: { Authorization: FL_TOKEN },
+          data: item
+        })
       } catch (err) {
         error(err)
         throw err;
@@ -645,7 +654,6 @@ async function handleApprovedDoc(item, bid, tp) {
   info(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
 
   try {
-    info(`EVERYTHING APPROVED. ALL A GO`);
     //ensure parent exists
     await CONNECTION.put({
       path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
