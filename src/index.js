@@ -150,9 +150,10 @@ let TL_TP_UNIDENTIFIED_PATH = TL_UTP;
 //const DOMAIN = config.get('fl-shared:domain') || 'https://localhost'
 let TOKEN;
 let CURRENTLY_POLLING = false;
-let checkInterval = 10 * 1000; //check OADA to determine if its time to poll
 let INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
+let checkInterval = INTERVAL_MS/2; //check OADA to determine if its time to poll
 let lastPoll;
+info(`Polling FL every ${INTERVAL_MS/1000}s. Checking OADA if its time to poll every ${checkInterval/1000}s.`);
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TP_PATH = `/bookmarks/trellisfw/trading-partners`;
