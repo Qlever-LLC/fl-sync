@@ -56,7 +56,9 @@ const config = convict({
   foodlogiq: {
     interval: {
       doc: 'polling interval',
-      default: 20
+      default: 20,
+      env: 'INTERVAL',
+      arg: 'interval',
     },
     domain: {
       doc: 'food logiq api domain or base url',
