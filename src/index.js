@@ -266,7 +266,7 @@ async function onTargetUpdate(c, jobId) {
   info(`Recieved update for job [${jobId}]`);
   let job = TARGET_JOBS[jobId];
 
-  if (!(job && job.flId)) info(`No Food Logiq document associated to job [${jobId}]. Ignoring`)
+  if (!(job && job.flId)) info(`No FoodLogiQ document associated to job [${jobId}]. Ignoring`)
   if (!(job && job.flId)) info(`${JSON.stringify(TARGET_JOBS, null, 2)}`)
   if (!(job && job.flId)) return;
 
@@ -432,7 +432,7 @@ async function getResourcesByMember(member) {
 
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
-    info(`Retrieving Food Logiq ${type} for supplier ${member._id} with date ${date}`)
+    info(`Retrieving FoodLogiQ ${type} for supplier ${member._id} with date ${date}`)
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&sourceBusiness=${bid}&versionUpdated=${date}..`,
       to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
@@ -509,7 +509,7 @@ async function handleAssessment(item, bid, tp) {
         path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
-          information: `Food Logiq Assessment has been approved`,
+          information: `FoodLogiQ Assessment has been approved`,
         }
       })
     })
@@ -519,7 +519,7 @@ async function handleAssessment(item, bid, tp) {
     let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
     await Promise.each(found, async (job) => {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
-      let message = `An associated Food Logiq supplier Assessment has been rejected.`
+      let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
       await rejectFLDoc(job.flId, message);
     })
   } else {
@@ -695,7 +695,7 @@ async function validatePending(trellisDoc, flDoc, type) {
       if (!flExp.isSame(trellisExp)) {
         message = 'Expiration date does not match PDF document.';
         status = false;
-        info(`Food logiq expiration [${flExp}] Trellis expiration [${trellisExp}]`)
+        info(`FoodLogiQ expiration [${flExp}] Trellis expiration [${trellisExp}]`)
       }
       if (flExp <= now) {
         message = 'Document is already expired.';
@@ -818,7 +818,7 @@ async function handleScrapedResult(jobId) {
         path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
-          information: `Trellis-extracted PDF data matches Food Logiq form data`,
+          information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
         }
       }).catch(err => {
         error(err);
@@ -837,7 +837,7 @@ async function handleScrapedResult(jobId) {
         path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
-          information: `A Food Logiq Assessment has been created and associated with this document`,
+          information: `A FoodLogiQ Assessment has been created and associated with this document`,
         }
       }).catch(err => {
         error(err);
@@ -852,7 +852,7 @@ async function handleScrapedResult(jobId) {
         path: `/resources/${job.jobId}`,
         data: {
           time: moment().format('X'),
-          information: `Trellis-extracted PDF data does not match Food Logiq form data; Rejecting FL Document`,
+          information: `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejecting FL Document`,
         }
       })
     }
