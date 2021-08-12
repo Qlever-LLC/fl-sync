@@ -51,6 +51,13 @@ const config = convict({
         default: "/bookmarks/services/fl-sync/businesses",
         doc: 'business mirror endpoint in trellis',
       }
+    },
+    justTps: {
+      doc: `Don't retrieve TP resources, just mirror only the TPs themselves.`,
+      format: Boolean,
+      default: true,
+      env: 'JUST_TPS',
+      arg: 'justTPs',
     }
   },
   foodlogiq: {
