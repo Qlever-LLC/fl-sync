@@ -78,6 +78,10 @@ module.exports = {
             '_rev': 0,
           }
         },
+        'process-queue': {
+          '_type': 'application/vnd.oada.trellisfw.1+json',
+          '_rev': 0,
+        },
         'businesses': {
           '_type': 'application/vnd.oada.trellisfw.1+json',
           '_rev': 0,
