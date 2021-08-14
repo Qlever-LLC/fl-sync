@@ -44,7 +44,7 @@ const SCALE = (process.env.SCALE);
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
-let CONCURRENCY = 25;
+let CONCURRENCY = 20;
 let AUTO_APPROVE_ASSESSMENTS;
 let FL_WS;
 let times = {};
@@ -260,7 +260,6 @@ async function getLookup(item, key) {
     info(`New target job [${key}]: Trellis pdf: [${trellisId}]`);
 
     if (!trellisId) return;
-    console.log(TARGET_PDFS[trellisId])
     let flId = TARGET_PDFS[trellisId] && TARGET_PDFS[trellisId].flId;
 
     if (!flId) info(`No FL id found to associate to job [${jobId}]`);
@@ -272,6 +271,10 @@ async function getLookup(item, key) {
       start: Date.now()
     };
     Object.assign(TARGET_JOBS[key], TARGET_PDFS[trellisId])
+    await CONNECTION.put({
+      path: `/bookmarks/services/fl-sync/process-queue/jobs/${key}`,
+      data: TARGET_JOBS[key]
+    })
 
   } catch (err) {
     error(`Error associating new target job to FL documents`)
@@ -292,6 +295,10 @@ async function onTargetUpdate(c, jobId) {
       await Promise.each(Object.keys(c.body.result[type]), async key => {
         if (!TARGET_JOBS[jobId].result) {
           TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
+          await CONNECTION.put({
+            path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
+            data: {result: { type, key, _id: c.body.result[type][key]._id } }
+          })
           await handleScrapedResult(jobId)
         }
       })
@@ -353,6 +360,11 @@ async function watchFlSyncConfig() {
         data: {},
         tree
       })
+      await CONNECTION.put({
+        path: `/bookmarks/services/fl-sync/process-queue`,
+        data: {},
+        tree
+      })
       return {};
     } else throw err;
   })
@@ -407,20 +419,12 @@ async function initialize() {
         domain: 'https://' + DOMAIN,
         token: TOKEN,
         concurrency: CONCURRENCY,
-        connection: 'ws'
-      })
-      var http_conn = await oada.connect({
-        domain: 'https://' + DOMAIN,
-        token: TOKEN,
-        concurrency: CONCURRENCY,
-        connection: 'http'
       })
     } catch (err) {
       error(`Initializing Trellis connection failed`);
       error(err)
     }
     setConnection(conn);
-    setHttpConn(http_conn);
     await watchTargetJobs();
     await watchFlSyncConfig();
     //  await createFlWebsocket();
@@ -708,6 +712,14 @@ async function handleAssessment(item, bid, tp) {
     let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
     await Promise.each(found, async (job) => {
       TARGET_JOBS[job.jobId].assessments[item._id] = true;
+      await CONNECTION.put({
+        path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
+        data: {
+          assessments: {
+            [item._id]: true
+          }
+        }
+      })
       await approveFLDoc(job.flId);
 
       //Create an update message
@@ -724,6 +736,14 @@ async function handleAssessment(item, bid, tp) {
     let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
     await Promise.each(found, async (job) => {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
+      await CONNECTION.put({
+        path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
+        data: {
+          assessments: {
+            [item._id]: false 
+          }
+        }
+      })
       let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
       // TODO: Only do this if it has a current status of 'awaiting-review'
       await rejectFLDoc(job.flId, message);
@@ -769,10 +789,10 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
     // create oada resources for each attachment
     await Promise.map(Object.keys(zip.files || {}), async (key) => {
-      let data = await zip.file(key).async("arraybuffer");
+      let zdata = await zip.file(key).async("arraybuffer");
       let response = await HTTP_CONN.post({
         path: `/resources`,
-        data,
+        data: zdata,
         headers: {
           'Content-Disposition': 'inline',
           'Content-Type': 'application/pdf',
@@ -830,7 +850,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
       // Create a lookup in order to track target updates
       info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
-      TARGET_PDFS[_id] = {
+      let data = {
         name: item.name,
         tp,
         flId: item._id,
@@ -839,6 +859,11 @@ async function handlePendingDoc(item, bid, tp, bname) {
         bid,
         bname,
       }
+      await CONNECTION.put({
+        path: `/bookmarks/services/fl-sync/process-queue/${_id}`,
+        data,
+      })
+      TARGET_PDFS[_id] = data;
 
       //link the file into the documents list
       data = { _id, _rev: 0 }
@@ -869,6 +894,10 @@ async function handleApprovedDoc(item, bid, tp) {
   if (!found.result) return;
 
   TARGET_JOBS[found.jobId].approved = true;
+  await CONNECTION.put({
+    path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
+    data: { approved: false }
+  })
 
   //2. 
   info(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
@@ -892,8 +921,17 @@ async function handleApprovedDoc(item, bid, tp) {
     info(`Removing ${TARGET_JOBS[found.jobId].trellisId} from fl-sync PDF index`);
     info(`Removing ${found.jobId} from fl-sync Jobs index`);
     //setTime('TargetJob', TARGET_JOBS[found.jobId].start - Date.now())
-    delete TARGET_PDFS[TARGET_JOBS[found.jobId].trellisId];
-    delete TARGET_JOBS[found.jobId];
+
+    let tid = TARGET_JOBS[found.jobId];
+
+    await CONNECTION.delete({
+      path: `/bookmarks/services/fl-sync/process-queue/pdfs/${tid.trellisId}`
+    })
+    delete TARGET_PDFS[tid.trellisId]
+    await CONNECTION.delete({
+      path: `/bookmarks/services/fl-sync/process-queue/jobs/${tid}`
+    })
+    delete TARGET_JOBS[tid]
   } catch (err) {
     error('Error moving document result into trading-partner indexed docs')
     error(err)
@@ -1044,6 +1082,14 @@ async function handleScrapedResult(jobId) {
       TARGET_JOBS[jobId].assessments = {
         [assess.data._id]: false
       }
+      await CONNECTION.put({
+          path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
+          data: { 
+            assessments: {
+              [assess.data._id]: false
+            }
+          }
+        })
 
       await CONNECTION.post({
         path: `/resources/${job.jobId}`,
@@ -1490,10 +1536,6 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
 
 function setConnection(conn) {
   CONNECTION = conn;
-}
-
-function setHttpConn(conn) {
-  HTTP_CONN = conn;
 }
 
 function setTree(t) {

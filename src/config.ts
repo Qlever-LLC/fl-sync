@@ -58,7 +58,14 @@ const config = convict({
       default: true,
       env: 'JUST_TPS',
       arg: 'justTPs',
-    }
+    },
+    concurrency: {
+      doc: 'OADA client concurrency',
+      format: Number,
+      default: 1,
+      env: 'CONCURRENCY',
+      arg: 'concurrency'
+    },
   },
   foodlogiq: {
     interval: {

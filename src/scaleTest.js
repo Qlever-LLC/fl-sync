@@ -488,6 +488,76 @@ async function countFlBusinessDocs(TPs) {
   })
 }
 
+async function checkResult() {
+  let successes = 0;
+  let fails = 0;
+  let data = JSON.parse(fs.readFileSync('scaleTestData.json'));
+  let vals = Object.values(data);
+
+  let bids = await con.get({
+    path: `/bookmarks/services/fl-sync/businesses`
+  }).then(r => r.data)
+
+  let keys = bids.filter(key => key.charAt(0) !== '_')
+
+  let TPsExpand = await con.get({
+    path: `/bookmarks/trellisfw/trading-partners/expand-index`
+  }).then(r => r.data)
+
+  await Promise.map(Object.keys(keys), async bid => {
+    let biddocs = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents`
+    }).then(r => r.data)
+    let docs = biddocs.filter(key => key.charAt(0) !== '_')
+
+    let tp;
+
+    let tpdocs = await con.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tp}/documents`
+    }).then(r => r.data)
+
+    let tpcois = await con.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tp}/cois`
+    }).then(r => r.data)
+
+    await Promise.map(Object.keys(docs), async docid => {
+
+    })
+  })
+
+  /*
+  let TPsExpand = await con.get({
+    path: `/bookmarks/trellisfw/trading-partners/expand-index`
+  }).then(r => r.data)
+  let tpeVals = Object.values(TPsExpand)
+
+
+  fails = {};
+
+  let success = 0;
+
+  await Promise.map(vals, async obj => {
+    //1. Make sure a business exists for that fl-sync business
+    let result;
+    await Promise.map(Object.keys(TPsExpand), key => {
+      if (TPsExpand[key].name === obj.name) {
+        result = TPsExpand;
+        if (TPs[key]) {
+          success++;
+        } else {
+          fails[obj.name] = obj;
+        }
+      }
+    })
+    if (!result) fails[obj.name] = obj;
+  })
+  */
+
+  console.log(vals.length, success, fails);
+
+}
+
+
 
 
 async function compareResult() {
@@ -564,6 +634,30 @@ async function getTPCount() {
   console.log('TP Count:', length);
 }
 
+async function findChange(rev) {
+  console.log('checking rev', rev);
+  let key = "1weDLVHdZUaZfN21fWnNknTGaMq";
+  let data = await con.get({
+    path: `/bookmarks/services/target/jobs/_meta/_changes/${rev}`,
+  }).then(r => r.data)
+  let found;
+  await Promise.map(data, async change => {
+    if (change.body && change.body[key]) {
+      found = change.body[key];
+      console.log('FOUND', found, rev)
+      return found;
+    }
+    if (change.type === 'delete') {
+        console.log(change);
+    }
+  })
+
+  if (!found) {
+    rev++;
+    await findChange(rev)
+  }
+}
+
 async function main() {
   con = await oada.connect({
     domain: 'https://'+DOMAIN,
@@ -577,11 +671,13 @@ async function main() {
   try {
 
   let start = Date.now()
+//  await findChange(493126);
 //  await deleteFlBizDocs();
- await deleteTargetJobs()
+// await deleteTargetJobs()
 
 //  let TP = await makeFakeContent();
 //  await compareResult();
+  await checkResult();
 //    await getTPListLibCount();
 
 
@@ -591,7 +687,7 @@ async function main() {
 //  await deleteTradingPartners();
 
   //Delete JUST the docs within the current businesses
-    await deleteBusinessDocs()
+//    await deleteBusinessDocs()
 
   //Run this when all testing is done to clean up FL
   //await deleteFlBusinesses();
