@@ -70,7 +70,7 @@ const config = convict({
   foodlogiq: {
     interval: {
       doc: 'polling interval',
-      default: 20,
+      default: 30,
       env: 'INTERVAL',
       arg: 'interval',
     },
@@ -110,7 +110,7 @@ const config = convict({
     },
     token: {
       doc: 'Food Logiq API token',
-      format: Array,
+      format: String,
       default: ['-----'],
       env: 'FL_TOKEN',
     }

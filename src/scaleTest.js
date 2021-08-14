@@ -557,6 +557,26 @@ async function checkResult() {
 
 }
 
+async function skipTPDocs() {
+ let TPs = await con.get({
+    path: `/bookmarks/trellisfw/trading-partners`
+  }).then(r => r.data)
+
+  let keys = Object.keys(TPs).filter(key => key.charAt(0) !== '_').filter(key => key !== 'expand-index')
+
+  await Promise.map(keys, async key => {
+    const rev = await con.get({
+      path: `/bookmarks/trellisfw/trading-partners/${key}/shared/trellisfw/documents/_rev`,
+    }).then(r => r.data)
+
+    console.log(`setting /bookmarks/trellisfw/trading-partners/${key}/shared/trellisfw/documents/_meta/oada-list-lib/target-helper-tp-docs to ${TPs[key]._rev}`)
+    await con.put({
+      path: `/bookmarks/trellisfw/trading-partners/${key}/shared/trellisfw/documents/_meta/oada-list-lib/target-helper-tp-docs`,
+      data: { rev }
+    })
+  })
+}
+
 
 
 
@@ -677,9 +697,10 @@ async function main() {
 
 //  let TP = await makeFakeContent();
 //  await compareResult();
-  await checkResult();
+//  await checkResult();
 //    await getTPListLibCount();
 
+    await skipTPDocs()
 
   //Reset the environment for testing business setup
 //  await deleteFlSync();
