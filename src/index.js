@@ -1,5 +1,6 @@
 if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
 const axios = require('axios');
+const ksuid = require('ksuid');
 const debug = require('debug');
 const trace = debug('fl-sync:trace');
 const info = debug('fl-sync:info');
@@ -170,7 +171,6 @@ let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TP_PATH = `/bookmarks/trellisfw/trading-partners`;
 let TPs;
 let CONNECTION;
-let HTTP_CONN;
 
 let TARGET_PDFS = {};// index of trellis pdf documents mapped to FL documents
 let TARGET_JOBS = {};// index of target jobs mapped to FL documents
@@ -379,13 +379,8 @@ async function watchFlSyncConfig() {
         if (_.has(change.body, 'autoapprove-assessments')) {
           setAutoApprove(change.body['autoapprove-assessments']);
         } else if (/\/businesses\/(.)+\/(.)+\/(.)+/.test(change.path)) {
-          await handleMirrorChange(change)
-        } else if (/\/businesses\/(.)+\/(.)+/.test(change.path)) {
-          let keys = Object.keys(change.body)
-          keys = keys.filter(key => _.has(change.body[key], '_id') && _.has(change.body[key], '_rev'))
-          await Promise.each(keys, async key => {
-            await handleMirrorChange(change, key)
-          })
+          if (change.body['food-logiq-mirror']) console.log('CHANGE', change);
+          if (change.body['food-logiq-mirror']) await handleMirrorChange(change)
         }
       } catch(err) {
         error('mirror watchCallback error')
@@ -465,13 +460,13 @@ async function handleFlDocument(item, bid, tp, bname) {
 }
 
 // Handle content mirrored into trellis via pollFl
-async function handleMirrorChange(change, key) {
+async function handleMirrorChange(change) {
   try {
     info('handleMirrorChange processing FL resource');
     let pieces = pointer.parse(change.path);
     let bid = pieces[1];
     let type = pieces[2];
-    key = key || pieces[3];
+    let key = pieces[3];
 
     // Fetch the associated business and 
     let data = await CONNECTION.get({
@@ -580,16 +575,18 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
 
     // Now, sync
     if (sync) {
-      let resp = await CONNECTION.post({
-        path: `/resources`,
-        data: { 'food-logiq-mirror': item }
-      })
+      let _id = (await ksuid.random()).string;
+
       await CONNECTION.put({
         path,
         data: { 
-          "_id": resp.headers['content-location'].replace(/^\//, ''),
+          "_id": `resources/${_id}`,
           "_rev": 0
         }
+      })
+      let resp = await CONNECTION.put({
+        path: `/resources/${_id}`,
+        data: { 'food-logiq-mirror': item }
       })
       info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
     }
@@ -608,6 +605,7 @@ async function getResources() {
 
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
+    info(`Fetching community ${type}`);
     await fetchCommunityResources({type, date})
   })
   // Now get assessments (slightly different syntax)
@@ -790,8 +788,9 @@ async function handlePendingDoc(item, bid, tp, bname) {
     // create oada resources for each attachment
     await Promise.map(Object.keys(zip.files || {}), async (key) => {
       let zdata = await zip.file(key).async("arraybuffer");
-      let response = await HTTP_CONN.post({
-        path: `/resources`,
+      let response = await axios({
+        method: 'post',
+        url: `https://${DOMAIN}/resources`,
         data: zdata,
         headers: {
           'Content-Disposition': 'inline',
@@ -799,18 +798,6 @@ async function handlePendingDoc(item, bid, tp, bname) {
           Authorization: 'Bearer ' + TRELLIS_TOKEN
         }
       })
-      /*
-      let response = await axios({
-        method: 'post',
-        url: `https://${DOMAIN}/resources`,
-        data,
-        headers: {
-          'Content-Disposition': 'inline',
-          'Content-Type': 'application/pdf',
-          Authorization: 'Bearer ' + TRELLIS_TOKEN
-        }
-      })
-      */
 
       let _id = response.headers['content-location'];
       await CONNECTION.put({
@@ -868,8 +855,8 @@ async function handlePendingDoc(item, bid, tp, bname) {
       //link the file into the documents list
       data = { _id, _rev: 0 }
       info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents: ${JSON.stringify(data, null, 2)}`);
-      await CONNECTION.post({
-        path: `${TP_PATH}/${tp}/shared/trellisfw/documents`,
+      await CONNECTION.put({
+        path: `${TP_PATH}/${tp}/shared/trellisfw/documents/${_id}`,
         data,
       })
     })
@@ -1258,7 +1245,6 @@ async function pollFl() {
               data: {}
             }).then(r => r.headers['content-location'].replace(/^\//, ''))
 
-        console.log('linking', _id, `/bookmarks/services/fl-sync/businesses/${i.business._id}/${type}`);
             await CONNECTION.put({
               path: `/bookmarks/services/fl-sync/businesses/${i.business._id}/${type}`,
               data: { _id, _rev: 0 }
@@ -1302,7 +1288,6 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 
           // Check for changes to the resources
           let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
-          if (equals) info(`Resource difference in FL item [${item._id}] not detecting. Not Syncing...`);
           if (!equals) info(`Resource difference in FL item [${item._id}] detected. Syncing...`);
           if (!equals) {
             sync = true;
