@@ -846,17 +846,18 @@ async function handlePendingDoc(item, bid, tp, bname) {
         bid,
         bname,
       }
+      let resId = _id.replace(/resources\//, '');
       await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue/${_id}`,
+        path: `/bookmarks/services/fl-sync/process-queue/pdfs/${resId}`,
         data,
       })
       TARGET_PDFS[_id] = data;
 
       //link the file into the documents list
       data = { _id, _rev: 0 }
-      info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents: ${JSON.stringify(data, null, 2)}`);
+      info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents/${_id}: ${JSON.stringify(data, null, 2)}`);
       await CONNECTION.put({
-        path: `${TP_PATH}/${tp}/shared/trellisfw/documents/${_id}`,
+        path: `${TP_PATH}/${tp}/shared/trellisfw/documents/${resId}`,
         data,
       })
     })
@@ -909,10 +910,11 @@ async function handleApprovedDoc(item, bid, tp) {
     info(`Removing ${found.jobId} from fl-sync Jobs index`);
     //setTime('TargetJob', TARGET_JOBS[found.jobId].start - Date.now())
 
-    let tid = TARGET_JOBS[found.jobId];
+    let tid = TARGET_JOBS[found.jobId]
+    let resId = tid.trellisId.replace(/resources\//, '');
 
     await CONNECTION.delete({
-      path: `/bookmarks/services/fl-sync/process-queue/pdfs/${tid.trellisId}`
+      path: `/bookmarks/services/fl-sync/process-queue/pdfs/${resId}`
     })
     delete TARGET_PDFS[tid.trellisId]
     await CONNECTION.delete({
