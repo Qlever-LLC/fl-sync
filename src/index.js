@@ -676,22 +676,17 @@ function checkCoIAssessment(assessment) {
           // Handle columns that aren't scored
  console.log('check', column, question.productEvaluationOptions.answerRows[0].answers[i])
           if (column.acceptanceType === "none") return false;
-
           if (column.statisticsCommon.percentWithinTolerance < 100 && column.name !== "Umbrella Coverage" && column.type === 'numeric') {
             let value = question.productEvaluationOptions.answerRows[0].answers[i].answerNumeric;
             let umbCov = question.productEvaluationOptions.answerRows[0].answers[umbrella].answerNumeric;
             let requirement = column.acceptanceValueNumericPrimary;
+console.log(value, umbCov, requirement);
             // if umbrella only pertains to specific insurance types
 //            if (types.indexOf(column.name) > -1) {}
-            if (value && umbCov && requirement) {
-              if (!(value + umbCov < requirement)) {
- console.log('this one', column, question.productEvaluationOptions.answerRows[0].answers[i])
-
-              }
+            if (value !== undefined && umbCov !== undefined && requirement !== undefined) {
               return (value + umbCov < requirement);
-            }
+            } else return true
           }
-
           return column.statisticsCommon.percentWithinTolerance < 100
         })
       })
@@ -702,8 +697,6 @@ function checkCoIAssessment(assessment) {
 
 function checkAssessment(assessment) {
   info(`Checking assessment ${assessment._id}`);
-console.log(assessment.assessmentTemplate, ASSESSMENT_TEMPLATE_ID)
-console.log(assessment.assessmentTemplate._id === ASSESSMENT_TEMPLATE_ID)
   if (assessment.assessmentTemplate._id === ASSESSMENT_TEMPLATE_ID) {
     return checkCoIAssessment(assessment);
   }
