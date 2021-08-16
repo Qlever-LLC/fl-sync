@@ -674,13 +674,11 @@ function checkCoIAssessment(assessment) {
         let umbrella = _.findIndex(question.productEvaluationOptions.columns, ['name', "Umbrella Coverage"])
         return question.productEvaluationOptions.columns.map((column, i) => {
           // Handle columns that aren't scored
- console.log('check', column, question.productEvaluationOptions.answerRows[0].answers[i])
           if (column.acceptanceType === "none") return false;
           if (column.statisticsCommon.percentWithinTolerance < 100 && column.name !== "Umbrella Coverage" && column.type === 'numeric') {
             let value = question.productEvaluationOptions.answerRows[0].answers[i].answerNumeric;
             let umbCov = question.productEvaluationOptions.answerRows[0].answers[umbrella].answerNumeric;
             let requirement = column.acceptanceValueNumericPrimary;
-console.log(value, umbCov, requirement);
             // if umbrella only pertains to specific insurance types
 //            if (types.indexOf(column.name) > -1) {}
             if (value !== undefined && umbCov !== undefined && requirement !== undefined) {
@@ -991,7 +989,7 @@ async function constructAssessment(job, result) {
   let auto = parseInt(al.combined_single_limit || 0);
 
   let ul = _.find(policies, ['type', 'Umbrella Liability']) || {};
-  let umbrella = parseInt(ul.each_occurence1 || 0);
+  let umbrella = parseInt(ul.each_occurrence1 || 0);
 
   let wc = _.find(policies, ['type', `Worker's Compensation`]);
   let worker = wc ? true : false;
@@ -1033,9 +1031,14 @@ async function handleScrapedResult(jobId) {
       await Promise.delay(2000)
       result = await axios(request)
       .then(r => r.data)
-      .catch(err => {
-        error(err);
-        throw err;
+      .catch(async err => {
+        await Promise.delay(2000)
+        result = await axios(request)
+        .then(r => r.data)
+        .catch(err => {
+          error(err);
+          throw err;
+        })
       })
     })
 
