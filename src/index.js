@@ -169,6 +169,7 @@ info(`Polling FL every ${INTERVAL_MS/1000}s. Checking OADA if its time to poll e
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TP_PATH = `/bookmarks/trellisfw/trading-partners`;
+let TP_MPATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
 let TPs;
 let CONNECTION;
 
@@ -459,6 +460,9 @@ async function handleFlDocument(item, bid, tp, bname) {
   }
 }
 
+//TODO: Get rid of the GET in this handler; it should go away if change feeds are more consistent under
+// correct fix of tree PUT
+
 // Handle content mirrored into trellis via pollFl
 async function handleMirrorChange(change) {
   try {
@@ -468,7 +472,6 @@ async function handleMirrorChange(change) {
     let type = pieces[2];
     let key = pieces[3];
 
-    // Fetch the associated business and 
     let data = await CONNECTION.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}/${type}/${key}`
     }).then(r => r.data)
@@ -480,7 +483,7 @@ async function handleMirrorChange(change) {
       error(`Business [${bid}] does not contain FL mirror data`)
       return;
     }
-    let bname = data['food-logiq-mirror'].shareSource.sourceBusiness.name;
+
     let bus = await CONNECTION.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}`
     }).then(r => r.data)
@@ -490,15 +493,22 @@ async function handleMirrorChange(change) {
     })
     if (!bus.masterid) error(`No trading partner found for business ${bid}.`)
     if (!bus.masterid) return;
-    let tp = BUSINESSES[bus.masterid];
-    let mid = bus['food-logiq-mirror']._id
+    let tp = bus.masterid;
+
+//    let tp = BUSINESSES[bus.masterid];
+//    let mid = bus['food-logiq-mirror']._id
     if (!tp) error(`No trading partner found for business ${bid}.`)
     if (!tp) return;
-    info(`Found trading partner [${tp}] for FL business ${bid}`)
+    info(`Found trading partner masterid [${tp}] for FL business ${bid}`)
 
     switch (type) {
       case 'documents':
         let handleDocStart = Date.now()
+        if (!pointer.has(data, '/food-logiq-mirror/shareSource/sourceBusiness/name')) {
+          error('change does not have bname')
+          return;
+        }
+        const bname = pointer.get(data, '/food-logiq-mirror/shareSource/sourceBusiness/name');
         await handleFlDocument(item, bid, tp, bname);
         //setTime('handleFlDoc', Date.now() - handleDocStart)
         break;
@@ -855,9 +865,9 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
       //link the file into the documents list
       data = { _id, _rev: 0 }
-      info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents/${_id}: ${JSON.stringify(data, null, 2)}`);
+      info(`Linking file to documents list at ${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}: ${JSON.stringify(data, null, 2)}`);
       await CONNECTION.put({
-        path: `${TP_PATH}/${tp}/shared/trellisfw/documents/${resId}`,
+        path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
         data,
       })
     })
@@ -888,18 +898,18 @@ async function handleApprovedDoc(item, bid, tp) {
   })
 
   //2. 
-  info(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
+  info(`Moving approved document to [${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
 
   try {
     //ensure parent exists
     await CONNECTION.put({
-      path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
+      path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
       data: {},
       tree
     })
     await axios({
       method: 'put',
-      url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
+      url: `https://${DOMAIN}${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
       data: { _id: found.result._id },
       headers: {
         'content-type': 'application/json',
@@ -1006,25 +1016,28 @@ async function constructAssessment(job, result) {
 
 async function handleScrapedResult(jobId) {
   let job = TARGET_JOBS[jobId];
-  let result;
   let flDoc;
 
   try {
     let request = {
       method: 'get',
-      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+      url: `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
       headers: {
         Authorization: `Bearer ${TRELLIS_TOKEN}`,
       },
     }
-    await Promise.delay(2000).then(async () => {
-      try {
-        result = await axios(request).then(r => r.data);
-      } catch (err) {
-        await Promise.delay(2000).then(async () => {
-          result = await axios(request).then(r => r.data);
-        })
-      }
+    let result;
+    await Promise.delay(2000)
+    result = await axios(request)
+    .then(r => r.data)
+    .catch(async () => {
+      await Promise.delay(2000)
+      result = await axios(request)
+      .then(r => r.data)
+      .catch(err => {
+        error(err);
+        throw err;
+      })
     })
 
     flDoc = await CONNECTION.get({
@@ -1104,17 +1117,17 @@ async function handleScrapedResult(jobId) {
       })
     }
 
-    info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+    info(`Job result stored at trading partner ${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
 
     // Link to the original food-logiq document
     let resp = await CONNECTION.put({
-      path: `${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+      path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
       data
     })
     /*
     let resp = await axios({
       method: 'put',
-      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+      url: `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
       headers: {
         Authorization: `Bearer ${TRELLIS_TOKEN}`,
         'Content-Type': 'application/json'
@@ -1207,6 +1220,7 @@ async function fetchCOIAssessmentTemplateFromTrellis() {
 // The main routine to check for food logiq updates
 async function pollFl() {
   try {
+/*
     let TPs = {};
     // Get known trading partners
     let resp = await CONNECTION.get({
@@ -1217,13 +1231,13 @@ async function pollFl() {
       if (err.status !== 404) throw err;
     })
 
-    //TODO: this whole bit goes away under the new system
     await Promise.map(Object.keys(TPs || {}), async (i) => {
       // 1. Get business id
       let item = TPs[i];
       if (!item.masterid) return;
       BUSINESSES[item.masterid] = i;
     })
+*/
 
     //Get assessment templates
     let templates = await fetchAssessmentTemplates();
@@ -1234,7 +1248,7 @@ async function pollFl() {
     
     let start = Date.now();
     await fetchAndSync({
-      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
+      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
       to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
       forEach: async (i) => {
         await Promise.each(['products', 'locations', 'documents'], async (type) => {
