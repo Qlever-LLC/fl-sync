@@ -380,7 +380,6 @@ async function watchFlSyncConfig() {
         if (_.has(change.body, 'autoapprove-assessments')) {
           setAutoApprove(change.body['autoapprove-assessments']);
         } else if (/\/businesses\/(.)+\/(.)+\/(.)+/.test(change.path)) {
-          if (change.body['food-logiq-mirror']) console.log('CHANGE', change);
           if (change.body['food-logiq-mirror']) await handleMirrorChange(change)
         }
       } catch(err) {
@@ -675,15 +674,20 @@ function checkCoIAssessment(assessment) {
         let umbrella = _.findIndex(question.productEvaluationOptions.columns, ['name', "Umbrella Coverage"])
         return question.productEvaluationOptions.columns.map((column, i) => {
           // Handle columns that aren't scored
+ console.log('check', column, question.productEvaluationOptions.answerRows[0].answers[i])
           if (column.acceptanceType === "none") return false;
 
-          if (column.statusticsCommon.percentWithinTolerance < 100 && column.name !== "Umbrella Coverage" && column.type === 'numeric') {
+          if (column.statisticsCommon.percentWithinTolerance < 100 && column.name !== "Umbrella Coverage" && column.type === 'numeric') {
             let value = question.productEvaluationOptions.answerRows[0].answers[i].answerNumeric;
             let umbCov = question.productEvaluationOptions.answerRows[0].answers[umbrella].answerNumeric;
             let requirement = column.acceptanceValueNumericPrimary;
             // if umbrella only pertains to specific insurance types
 //            if (types.indexOf(column.name) > -1) {}
             if (value && umbCov && requirement) {
+              if (!(value + umbCov < requirement)) {
+ console.log('this one', column, question.productEvaluationOptions.answerRows[0].answers[i])
+
+              }
               return (value + umbCov < requirement);
             }
           }
@@ -698,7 +702,9 @@ function checkCoIAssessment(assessment) {
 
 function checkAssessment(assessment) {
   info(`Checking assessment ${assessment._id}`);
-  if (assessment.assessmentTemplate === COI_ASSESSMENT_TEMPLATE_ID) {
+console.log(assessment.assessmentTemplate, ASSESSMENT_TEMPLATE_ID)
+console.log(assessment.assessmentTemplate._id === ASSESSMENT_TEMPLATE_ID)
+  if (assessment.assessmentTemplate._id === ASSESSMENT_TEMPLATE_ID) {
     return checkCoIAssessment(assessment);
   }
   return assessment.sections.map(section => {
@@ -771,7 +777,7 @@ async function handleAssessment(item, bid, tp) {
             headers: { Authorization: FL_TOKEN },
             data: item
           })
-        }
+        } else info(`Assessment ${item._id} failed checkAssessment`);
       } catch (err) {
         error(err)
         throw err;
