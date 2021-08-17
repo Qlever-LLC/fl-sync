@@ -1,4 +1,4 @@
-if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
+if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const axios = require('axios');
 const ksuid = require('ksuid');
 const debug = require('debug');
@@ -163,9 +163,9 @@ let TL_TP_UNIDENTIFIED_PATH = TL_UTP;
 let TOKEN;
 let CURRENTLY_POLLING = false;
 let INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
-let checkInterval = INTERVAL_MS/2; //check OADA to determine if its time to poll
+let checkInterval = INTERVAL_MS / 2; //check OADA to determine if its time to poll
 let lastPoll;
-info(`Polling FL every ${INTERVAL_MS/1000}s. Checking OADA if its time to poll every ${checkInterval/1000}s.`);
+info(`Polling FL every ${INTERVAL_MS / 1000}s. Checking OADA if its time to poll every ${checkInterval / 1000}s.`);
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TP_PATH = `/bookmarks/trellisfw/trading-partners`;
@@ -187,10 +187,10 @@ async function checkTime() {
   } else {
     info('Not already polling. Starting now...');
     setCurrentlyPolling(true);
-    
+
     let manualPoll;
 
-  //Get last poll date
+    //Get last poll date
     try {
       let response = await CONNECTION.get({ path: `${SERVICE_PATH}` })
 
@@ -298,7 +298,7 @@ async function onTargetUpdate(c, jobId) {
           TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
           await CONNECTION.put({
             path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
-            data: {result: { type, key, _id: c.body.result[type][key]._id } }
+            data: { result: { type, key, _id: c.body.result[type][key]._id } }
           })
           await handleScrapedResult(jobId)
         }
@@ -349,26 +349,26 @@ async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `/bookmarks/services/fl-sync`,
   }).then(r => r.data)
-  .catch(async (err) => {
-    if (err.status === 404) {
-      await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync`,
-        data: {},
-        tree
-      })
-      await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/businesses`,
-        data: {},
-        tree
-      })
-      await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue`,
-        data: {},
-        tree
-      })
-      return {};
-    } else throw err;
-  })
+    .catch(async (err) => {
+      if (err.status === 404) {
+        await CONNECTION.put({
+          path: `/bookmarks/services/fl-sync`,
+          data: {},
+          tree
+        })
+        await CONNECTION.put({
+          path: `/bookmarks/services/fl-sync/businesses`,
+          data: {},
+          tree
+        })
+        await CONNECTION.put({
+          path: `/bookmarks/services/fl-sync/process-queue`,
+          data: {},
+          tree
+        })
+        return {};
+      } else throw err;
+    })
   info('Watching bookmarks/services/fl-sync.');
   setAutoApprove(data['autoapprove-assessments']);
 
@@ -376,13 +376,13 @@ async function watchFlSyncConfig() {
     path: `/bookmarks/services/fl-sync`,
     tree,
     watchCallback: async (change) => {
-      try { 
+      try {
         if (_.has(change.body, 'autoapprove-assessments')) {
           setAutoApprove(change.body['autoapprove-assessments']);
         } else if (/\/businesses\/(.)+\/(.)+\/(.)+/.test(change.path)) {
           if (change.body['food-logiq-mirror']) await handleMirrorChange(change)
         }
-      } catch(err) {
+      } catch (err) {
         error('mirror watchCallback error')
         error(err)
       }
@@ -406,7 +406,8 @@ async function watchTargetJobs() {
 
 async function initialize() {
   try {
-    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS/1000} second interval`);
+    info(`Initializing fl-sync service. [v1.1.1]`);
+    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
     try {
@@ -474,11 +475,11 @@ async function handleMirrorChange(change) {
     let data = await CONNECTION.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}/${type}/${key}`
     }).then(r => r.data)
-    
+
     if (!data['food-logiq-mirror']) return;
     let item = data['food-logiq-mirror'];
 
-    if (!data['food-logiq-mirror']) { 
+    if (!data['food-logiq-mirror']) {
       error(`Business [${bid}] does not contain FL mirror data`)
       return;
     }
@@ -486,16 +487,16 @@ async function handleMirrorChange(change) {
     let bus = await CONNECTION.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}`
     }).then(r => r.data)
-    .catch(err => {
-      error(`TP masterid entry not found for business ${bid}`);
-      return;
-    })
+      .catch(err => {
+        error(`TP masterid entry not found for business ${bid}`);
+        return;
+      })
     if (!bus.masterid) error(`No trading partner found for business ${bid}.`)
     if (!bus.masterid) return;
     let tp = bus.masterid;
 
-//    let tp = BUSINESSES[bus.masterid];
-//    let mid = bus['food-logiq-mirror']._id
+    //    let tp = BUSINESSES[bus.masterid];
+    //    let mid = bus['food-logiq-mirror']._id
     if (!tp) error(`No trading partner found for business ${bid}.`)
     if (!tp) return;
     info(`Found trading partner masterid [${tp}] for FL business ${bid}`)
@@ -525,7 +526,7 @@ async function handleMirrorChange(change) {
       default:
         return;
     }
-  } catch(err) {
+  } catch (err) {
     error('Error handling mirror change', err);
     throw err;
   }
@@ -542,7 +543,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   }
   if (pageIndex) request.params = { pageIndex };
   let response = await axios(request);
-  if (pageIndex) console.log({pageIndex}, 'current item:', (pageIndex)*50, 'total items:', response.data.totalItemCount);
+  if (pageIndex) console.log({ pageIndex }, 'current item:', (pageIndex) * 50, 'total items:', response.data.totalItemCount);
 
   // Manually check for changes; Only update the resource if it has changed!
   await Promise.map(response.data.pageItems, async (item) => {
@@ -550,16 +551,16 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     let bid;
     if (type === 'assessments') {
       bid = _.has(item, 'performedOnBusiness._id') ? item.performedOnBusiness._id : undefined;
-//      if (_.has(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')) {
-//        bid = _.get(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')
-//        console.log('found an assessment bid');
-//      }
+      //      if (_.has(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')) {
+      //        bid = _.get(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')
+      //        console.log('found an assessment bid');
+      //      }
     } else {
       bid = _.has(item, 'shareSource.sourceBusiness._id') ? item.shareSource.sourceBusiness._id : undefined
-//      if (_.has(item, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
-//        bid = item.shareSource.shareSpecificAttributes.customCentricityTest;
-//        console.log('found a custom bid', bid);
-//      }
+      //      if (_.has(item, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
+      //        bid = item.shareSource.shareSpecificAttributes.customCentricityTest;
+      //        console.log('found a custom bid', bid);
+      //      }
     }
 
     if (!bid) {
@@ -588,7 +589,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
 
       await CONNECTION.put({
         path,
-        data: { 
+        data: {
           "_id": `resources/${_id}`,
           "_rev": 0
         }
@@ -602,8 +603,8 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   })
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
-    info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount*(pageIndex+1)}/${response.data.totalItemCount}`);
-    await fetchCommunityResources({ type, date, pageIndex: pageIndex+1 })
+    info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
+    await fetchCommunityResources({ type, date, pageIndex: pageIndex + 1 })
   }
   if (pageIndex === 1000) info('stopping at page 1000')
 }
@@ -615,10 +616,10 @@ async function getResources() {
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
     info(`Fetching community ${type}`);
-    await fetchCommunityResources({type, date})
+    await fetchCommunityResources({ type, date })
   })
   // Now get assessments (slightly different syntax)
-  await fetchCommunityResources({type: 'assessments', date})
+  await fetchCommunityResources({ type: 'assessments', date })
 }
 
 async function getResourcesByMember(member) {
@@ -632,11 +633,11 @@ async function getResourcesByMember(member) {
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&sourceBusinesses=${bid}&versionUpdated=${date}..`,
       //to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
       to: (i) => {
-//        if (_.has(i, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
-//          bid = i.shareSource.shareSpecificAttributes.customCentricityTest;
-//          console.log('found a custom bid', bid);
-//          return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
-//        }
+        //        if (_.has(i, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
+        //          bid = i.shareSource.shareSpecificAttributes.customCentricityTest;
+        //          console.log('found a custom bid', bid);
+        //          return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
+        //        }
         return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
       }
     })
@@ -680,7 +681,7 @@ function checkCoIAssessment(assessment) {
             let umbCov = question.productEvaluationOptions.answerRows[0].answers[umbrella].answerNumeric;
             let requirement = column.acceptanceValueNumericPrimary;
             // if umbrella only pertains to specific insurance types
-//            if (types.indexOf(column.name) > -1) {}
+            //            if (types.indexOf(column.name) > -1) {}
             if (value !== undefined && umbCov !== undefined && requirement !== undefined) {
               return (value + umbCov < requirement);
             } else return true
@@ -745,7 +746,7 @@ async function handleAssessment(item, bid, tp) {
         path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
         data: {
           assessments: {
-            [item._id]: false 
+            [item._id]: false
           }
         }
       })
@@ -890,8 +891,8 @@ async function handleApprovedDoc(item, bid, tp) {
 
   TARGET_JOBS[found.jobId].approved = true;
   await CONNECTION.put({
-    path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
-    data: { approved: false }
+    path: `/bookmarks/services/fl-sync/process-queue/jobs/${found.jobId}`,
+    data: { approved: true }
   })
 
   //2. 
@@ -1026,21 +1027,21 @@ async function handleScrapedResult(jobId) {
     let result;
     await Promise.delay(2000)
     result = await axios(request)
-    .then(r => r.data)
-    .catch(async () => {
-      await Promise.delay(2000)
-      result = await axios(request)
       .then(r => r.data)
-      .catch(async err => {
+      .catch(async () => {
         await Promise.delay(2000)
         result = await axios(request)
-        .then(r => r.data)
-        .catch(err => {
-          error(err);
-          throw err;
-        })
+          .then(r => r.data)
+          .catch(async err => {
+            await Promise.delay(2000)
+            result = await axios(request)
+              .then(r => r.data)
+              .catch(err => {
+                error(err);
+                throw err;
+              })
+          })
       })
-    })
 
     flDoc = await CONNECTION.get({
       path: `${job.mirrorId}`
@@ -1087,13 +1088,13 @@ async function handleScrapedResult(jobId) {
         [assess.data._id]: false
       }
       await CONNECTION.put({
-          path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
-          data: { 
-            assessments: {
-              [assess.data._id]: false
-            }
+        path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
+        data: {
+          assessments: {
+            [assess.data._id]: false
           }
-        })
+        }
+      })
 
       await CONNECTION.post({
         path: `/resources/${job.jobId}`,
@@ -1103,7 +1104,7 @@ async function handleScrapedResult(jobId) {
         }
       }).catch(err => {
         error(err);
-        throw(err);
+        throw (err);
       })
 
       info(`Spawned assessment [${assess.data._id}] for business id [${job.bid}]`);
@@ -1222,24 +1223,24 @@ async function fetchCOIAssessmentTemplateFromTrellis() {
 // The main routine to check for food logiq updates
 async function pollFl() {
   try {
-/*
-    let TPs = {};
-    // Get known trading partners
-    let resp = await CONNECTION.get({
-      path: `${TP_PATH}/expand-index`,
-    })
-    .then(r => TPs = r.data)
-    .catch(err => {
-      if (err.status !== 404) throw err;
-    })
-
-    await Promise.map(Object.keys(TPs || {}), async (i) => {
-      // 1. Get business id
-      let item = TPs[i];
-      if (!item.masterid) return;
-      BUSINESSES[item.masterid] = i;
-    })
-*/
+    /*
+        let TPs = {};
+        // Get known trading partners
+        let resp = await CONNECTION.get({
+          path: `${TP_PATH}/expand-index`,
+        })
+        .then(r => TPs = r.data)
+        .catch(err => {
+          if (err.status !== 404) throw err;
+        })
+    
+        await Promise.map(Object.keys(TPs || {}), async (i) => {
+          // 1. Get business id
+          let item = TPs[i];
+          if (!item.masterid) return;
+          BUSINESSES[item.masterid] = i;
+        })
+    */
 
     //Get assessment templates
     let templates = await fetchAssessmentTemplates();
@@ -1247,7 +1248,7 @@ async function pollFl() {
     // Sync list of suppliers
     let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
     info(`Fetching FL community members with date: [${date}]`)
-    
+
     let start = Date.now();
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
@@ -1327,7 +1328,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
           })
           await CONNECTION.put({
             path,
-            data: { 
+            data: {
               "_id": resp.headers['content-location'].replace(/^\//, ''),
               "_rev": 0
             }
@@ -1339,8 +1340,8 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 
     // Repeat for additional pages of FL results
     if (response.data.hasNextPage) {
-      info(`fetchAndSync Finished page ${pageIndex}. Item ${response.data.pageItemCount*(pageIndex+1)}/${response.data.totalItemCount}`);
-      await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach})
+      info(`fetchAndSync Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
+      await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach })
     }
     return;
   } catch (err) {
@@ -1513,7 +1514,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
     answer_content["answers"][4]["answerNumeric"] = umbrella;
     answer_content["answers"][5]["answerNumeric"] = employer;
     answer_content["answers"][6]["answerBool"] = worker;
-//    if (SCALE) answer_content["answers"][7]["answerText"] = customCentricityTest;
+    //    if (SCALE) answer_content["answers"][7]["answerText"] = customCentricityTest;
 
     //including the answers in the answer array
     answers_template.push(answer_content);
