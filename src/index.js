@@ -31,6 +31,7 @@ const TL_TP = config.get('trellis.endpoints.tps');
 const TL_UTP = config.get('trellis.endpoints.utps');
 const TL_FL_BS = config.get('trellis.endpoints.fl-bus');
 const JUST_TPS = config.get('trellis.justTps');
+const MAX_RETRIES = 10;
 
 // ======================  ASSESSMENTS ============================== {
 const ASSESSMENT_BID = config.ASSESSMENT_BID;
@@ -406,7 +407,7 @@ async function watchTargetJobs() {
 
 async function initialize() {
   try {
-    info(`Initializing fl-sync service. [v1.1.2]`);
+    info(`<<<<<<<<< Initializing fl-sync service. [v1.1.3] >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
@@ -1029,33 +1030,10 @@ async function handleScrapedResult(jobId) {
       },
     };
     let result = null;
-    // await Promise.delay(2000);
-    // result = await axios(request)
-    //   .then(r => r.data)
-    //   .catch(async () => {
-    //     await Promise.delay(2000)
-    //     result = await axios(request)
-    //       .then(r => r.data)
-    //       .catch(async err => {
-    //         await Promise.delay(2000)
-    //         result = await axios(request)
-    //           .then(r => r.data)
-    //           .catch(err => {
-    //             error(err);
-    //             throw err;
-    //           })
-    //       })
-    //   });
+    let retries = 0;
 
-    // FIXME: add number of retries
-    // if it is assumed that there will be (always) an object,
-    // then the algorithm can retry up to the point that finds the object
-    // or reaches an specific number of retries
-    // <<the previous version fails after three attempts>>
-    // another thing to check are the termination guarantees of this piece of code
-    // that depends on the first statement 
-    //(if there is a guarantee that the object will be there eventually)
-    while (result === null) {
+    // retrying ...
+    while (result === null && retries++ < MAX_RETRIES) {
       await Promise.delay(2000);
       result = await axios(request)
         .then(r => r.data)
@@ -1066,6 +1044,7 @@ async function handleScrapedResult(jobId) {
     }//while 
 
     info(`--> result ${result}`);
+    info(`--> retries ${retries}`);
 
     flDoc = await CONNECTION.get({
       path: `${job.mirrorId}`
