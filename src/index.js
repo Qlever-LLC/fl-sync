@@ -407,7 +407,7 @@ async function watchTargetJobs() {
 
 async function initialize() {
   try {
-    info(`<<<<<<<<< Initializing fl-sync service. [v1.1.3] >>>>>>>>>>`);
+    info(`<<<<<<<<< Initializing fl-sync service. [v1.1.4] >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
@@ -1018,7 +1018,7 @@ async function handleScrapedResult(jobId) {
   let flDoc;
 
   info(`--> job type [${job.result.type}]`);
-  info(`--> job type [${job.result.key}]`);
+  info(`--> job key [${job.result.key}]`);
   let url = `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`;
   info(`--> url [${url}]`);
   try {
@@ -1038,8 +1038,11 @@ async function handleScrapedResult(jobId) {
       result = await axios(request)
         .then(r => r.data)
         .catch(err => {
-          error(err);
-          throw err;
+          if (retries === MAX_RETRIES) {
+            error(err);
+            throw err;
+          }
+          return null;
         });
     }//while 
 
