@@ -1250,7 +1250,7 @@ async function pollFl() {
     */
 
     //Get assessment templates
-    let templates = await fetchAssessmentTemplates();
+//    let templates = await fetchAssessmentTemplates();
 
     // Sync list of suppliers
     let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
@@ -1427,7 +1427,7 @@ async function updateAssessment(path, data) {
  * @param document info 
  */
 async function linkAssessmentToDocument(bid, assessment, doc) {
-  let PATH_LINK_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${CO_ID}/links/assessment/${assessment._id}`;
+  let PATH_LINK_ASSESSMENT = `${FL_DOMAIN}/v2/businesses/${CO_ID}/links/assessment/${assessment._id}`;
   trace(`Creating FL Link from assessment [${assessment._id}] to document [${doc._id}]`)
 
   return axios({
@@ -1495,7 +1495,7 @@ async function buildAnswerArrayFromAssessmentTemplate() {
  * @param worker compensation
  */
 async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker, customCentricityTest) {
-  let PATH_SPAWN_ASSESSMENT = `https://sandbox-api.foodlogiq.com/v2/businesses/${CO_ID}/spawnedassessment`;
+  let PATH_SPAWN_ASSESSMENT = `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment`;
   let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
   let _assessment_template = _.cloneDeep(assessment_template);
   _assessment_template["performedOnBusiness"]["_id"] = bid;
