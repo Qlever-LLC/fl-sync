@@ -77,34 +77,41 @@ const config = convict({
     domain: {
       doc: 'food logiq api domain or base url',
       default: `https://sandbox-api.foodlogiq.com`,
+      env: 'FL_DOMAIN'
     },
     'assessment-template': {
       id: {
         doc: 'template _id in food logiq',
         default: "606cc945c8f60c000e53947f",
+        env: 'FL_COI_ASSESSMENT'
       },
       name: {
         default: "Certificate of Insurance (COI) Requirements",
         doc: 'template name in food logiq',
+        env: 'FL_COI_ASSESSMENT_NAME'
       },
     },
     community: {
       id: {
         doc: 'community _id in food logiq to be synced',
         default: "5fff03e0458562000f4586e9",
+        env: 'FL_COMMUNITY'
       },
       name: {
         doc: 'name of community in food logiq to be synced',
         default: "Smithfield Foods",
+        env: 'FL_COMMUNITY_NAME'
       },
       owner: {
         id: {
           doc: 'community owner business _id',
           default: "5acf7c2cfd7fa00001ce518d",
+          env: 'FL_OWNER'
         },
         name: {
           doc: 'community owner name',
           default: "Smithfield Foods",
+          env: 'FL_OWNER_NAME'
         }
       }
     },
