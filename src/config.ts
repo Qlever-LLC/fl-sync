@@ -118,7 +118,7 @@ const config = convict({
     token: {
       doc: 'Food Logiq API token',
       format: String,
-      default: ['-----'],
+      default: '-----',
       env: 'FL_TOKEN',
     }
   }
