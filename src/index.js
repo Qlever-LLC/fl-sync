@@ -1,4 +1,4 @@
-if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED="0";
+if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const axios = require('axios');
 const ksuid = require('ksuid');
 const debug = require('debug');
@@ -31,6 +31,7 @@ const TL_TP = config.get('trellis.endpoints.tps');
 const TL_UTP = config.get('trellis.endpoints.utps');
 const TL_FL_BS = config.get('trellis.endpoints.fl-bus');
 const JUST_TPS = config.get('trellis.justTps');
+const MAX_RETRIES = 10;
 
 // ======================  ASSESSMENTS ============================== {
 const ASSESSMENT_BID = config.ASSESSMENT_BID;
@@ -163,12 +164,13 @@ let TL_TP_UNIDENTIFIED_PATH = TL_UTP;
 let TOKEN;
 let CURRENTLY_POLLING = false;
 let INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
-let checkInterval = INTERVAL_MS/2; //check OADA to determine if its time to poll
+let checkInterval = INTERVAL_MS / 2; //check OADA to determine if its time to poll
 let lastPoll;
-info(`Polling FL every ${INTERVAL_MS/1000}s. Checking OADA if its time to poll every ${checkInterval/1000}s.`);
+info(`Polling FL every ${INTERVAL_MS / 1000}s. Checking OADA if its time to poll every ${checkInterval / 1000}s.`);
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TP_PATH = `/bookmarks/trellisfw/trading-partners`;
+let TP_MPATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
 let TPs;
 let CONNECTION;
 
@@ -186,10 +188,10 @@ async function checkTime() {
   } else {
     info('Not already polling. Starting now...');
     setCurrentlyPolling(true);
-    
+
     let manualPoll;
 
-  //Get last poll date
+    //Get last poll date
     try {
       let response = await CONNECTION.get({ path: `${SERVICE_PATH}` })
 
@@ -297,7 +299,7 @@ async function onTargetUpdate(c, jobId) {
           TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
           await CONNECTION.put({
             path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
-            data: {result: { type, key, _id: c.body.result[type][key]._id } }
+            data: { result: { type, key, _id: c.body.result[type][key]._id } }
           })
           await handleScrapedResult(jobId)
         }
@@ -348,26 +350,26 @@ async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `/bookmarks/services/fl-sync`,
   }).then(r => r.data)
-  .catch(async (err) => {
-    if (err.status === 404) {
-      await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync`,
-        data: {},
-        tree
-      })
-      await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/businesses`,
-        data: {},
-        tree
-      })
-      await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue`,
-        data: {},
-        tree
-      })
-      return {};
-    } else throw err;
-  })
+    .catch(async (err) => {
+      if (err.status === 404) {
+        await CONNECTION.put({
+          path: `/bookmarks/services/fl-sync`,
+          data: {},
+          tree
+        })
+        await CONNECTION.put({
+          path: `/bookmarks/services/fl-sync/businesses`,
+          data: {},
+          tree
+        })
+        await CONNECTION.put({
+          path: `/bookmarks/services/fl-sync/process-queue`,
+          data: {},
+          tree
+        })
+        return {};
+      } else throw err;
+    })
   info('Watching bookmarks/services/fl-sync.');
   setAutoApprove(data['autoapprove-assessments']);
 
@@ -375,14 +377,13 @@ async function watchFlSyncConfig() {
     path: `/bookmarks/services/fl-sync`,
     tree,
     watchCallback: async (change) => {
-      try { 
+      try {
         if (_.has(change.body, 'autoapprove-assessments')) {
           setAutoApprove(change.body['autoapprove-assessments']);
         } else if (/\/businesses\/(.)+\/(.)+\/(.)+/.test(change.path)) {
-          if (change.body['food-logiq-mirror']) console.log('CHANGE', change);
           if (change.body['food-logiq-mirror']) await handleMirrorChange(change)
         }
-      } catch(err) {
+      } catch (err) {
         error('mirror watchCallback error')
         error(err)
       }
@@ -406,7 +407,8 @@ async function watchTargetJobs() {
 
 async function initialize() {
   try {
-    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS/1000} second interval`);
+    info(`<<<<<<<<< Initializing fl-sync service. [v1.1.4] >>>>>>>>>>`);
+    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
     try {
@@ -459,6 +461,9 @@ async function handleFlDocument(item, bid, tp, bname) {
   }
 }
 
+//TODO: Get rid of the GET in this handler; it should go away if change feeds are more consistent under
+// correct fix of tree PUT
+
 // Handle content mirrored into trellis via pollFl
 async function handleMirrorChange(change) {
   try {
@@ -468,37 +473,43 @@ async function handleMirrorChange(change) {
     let type = pieces[2];
     let key = pieces[3];
 
-    // Fetch the associated business and 
     let data = await CONNECTION.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}/${type}/${key}`
     }).then(r => r.data)
-    
+
     if (!data['food-logiq-mirror']) return;
     let item = data['food-logiq-mirror'];
 
-    if (!data['food-logiq-mirror']) { 
+    if (!data['food-logiq-mirror']) {
       error(`Business [${bid}] does not contain FL mirror data`)
       return;
     }
-    let bname = data['food-logiq-mirror'].shareSource.sourceBusiness.name;
+
     let bus = await CONNECTION.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}`
     }).then(r => r.data)
-    .catch(err => {
-      error(`TP masterid entry not found for business ${bid}`);
-      return;
-    })
+      .catch(err => {
+        error(`TP masterid entry not found for business ${bid}`);
+        return;
+      })
     if (!bus.masterid) error(`No trading partner found for business ${bid}.`)
     if (!bus.masterid) return;
-    let tp = BUSINESSES[bus.masterid];
-    let mid = bus['food-logiq-mirror']._id
+    let tp = bus.masterid;
+
+    //    let tp = BUSINESSES[bus.masterid];
+    //    let mid = bus['food-logiq-mirror']._id
     if (!tp) error(`No trading partner found for business ${bid}.`)
     if (!tp) return;
-    info(`Found trading partner [${tp}] for FL business ${bid}`)
+    info(`Found trading partner masterid [${tp}] for FL business ${bid}`)
 
     switch (type) {
       case 'documents':
         let handleDocStart = Date.now()
+        if (!pointer.has(data, '/food-logiq-mirror/shareSource/sourceBusiness/name')) {
+          error('change does not have bname')
+          return;
+        }
+        const bname = pointer.get(data, '/food-logiq-mirror/shareSource/sourceBusiness/name');
         await handleFlDocument(item, bid, tp, bname);
         //setTime('handleFlDoc', Date.now() - handleDocStart)
         break;
@@ -516,7 +527,7 @@ async function handleMirrorChange(change) {
       default:
         return;
     }
-  } catch(err) {
+  } catch (err) {
     error('Error handling mirror change', err);
     throw err;
   }
@@ -533,7 +544,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   }
   if (pageIndex) request.params = { pageIndex };
   let response = await axios(request);
-  if (pageIndex) console.log({pageIndex}, 'current item:', (pageIndex)*50, 'total items:', response.data.totalItemCount);
+  if (pageIndex) console.log({ pageIndex }, 'current item:', (pageIndex) * 50, 'total items:', response.data.totalItemCount);
 
   // Manually check for changes; Only update the resource if it has changed!
   await Promise.map(response.data.pageItems, async (item) => {
@@ -541,16 +552,16 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     let bid;
     if (type === 'assessments') {
       bid = _.has(item, 'performedOnBusiness._id') ? item.performedOnBusiness._id : undefined;
-//      if (_.has(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')) {
-//        bid = _.get(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')
-//        console.log('found an assessment bid');
-//      }
+      //      if (_.has(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')) {
+      //        bid = _.get(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')
+      //        console.log('found an assessment bid');
+      //      }
     } else {
       bid = _.has(item, 'shareSource.sourceBusiness._id') ? item.shareSource.sourceBusiness._id : undefined
-//      if (_.has(item, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
-//        bid = item.shareSource.shareSpecificAttributes.customCentricityTest;
-//        console.log('found a custom bid', bid);
-//      }
+      //      if (_.has(item, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
+      //        bid = item.shareSource.shareSpecificAttributes.customCentricityTest;
+      //        console.log('found a custom bid', bid);
+      //      }
     }
 
     if (!bid) {
@@ -579,7 +590,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
 
       await CONNECTION.put({
         path,
-        data: { 
+        data: {
           "_id": `resources/${_id}`,
           "_rev": 0
         }
@@ -593,8 +604,8 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   })
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
-    info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount*(pageIndex+1)}/${response.data.totalItemCount}`);
-    await fetchCommunityResources({ type, date, pageIndex: pageIndex+1 })
+    info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
+    await fetchCommunityResources({ type, date, pageIndex: pageIndex + 1 })
   }
   if (pageIndex === 1000) info('stopping at page 1000')
 }
@@ -606,10 +617,10 @@ async function getResources() {
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
     info(`Fetching community ${type}`);
-    await fetchCommunityResources({type, date})
+    await fetchCommunityResources({ type, date })
   })
   // Now get assessments (slightly different syntax)
-  await fetchCommunityResources({type: 'assessments', date})
+  await fetchCommunityResources({ type: 'assessments', date })
 }
 
 async function getResourcesByMember(member) {
@@ -623,11 +634,11 @@ async function getResourcesByMember(member) {
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&sourceBusinesses=${bid}&versionUpdated=${date}..`,
       //to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
       to: (i) => {
-//        if (_.has(i, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
-//          bid = i.shareSource.shareSpecificAttributes.customCentricityTest;
-//          console.log('found a custom bid', bid);
-//          return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
-//        }
+        //        if (_.has(i, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
+        //          bid = i.shareSource.shareSpecificAttributes.customCentricityTest;
+        //          console.log('found a custom bid', bid);
+        //          return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
+        //        }
         return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
       }
     })
@@ -666,18 +677,16 @@ function checkCoIAssessment(assessment) {
         return question.productEvaluationOptions.columns.map((column, i) => {
           // Handle columns that aren't scored
           if (column.acceptanceType === "none") return false;
-
-          if (column.statusticsCommon.percentWithinTolerance < 100 && column.name !== "Umbrella Coverage" && column.type === 'numeric') {
+          if (column.statisticsCommon.percentWithinTolerance < 100 && column.name !== "Umbrella Coverage" && column.type === 'numeric') {
             let value = question.productEvaluationOptions.answerRows[0].answers[i].answerNumeric;
             let umbCov = question.productEvaluationOptions.answerRows[0].answers[umbrella].answerNumeric;
             let requirement = column.acceptanceValueNumericPrimary;
             // if umbrella only pertains to specific insurance types
-//            if (types.indexOf(column.name) > -1) {}
-            if (value && umbCov && requirement) {
+            //            if (types.indexOf(column.name) > -1) {}
+            if (value !== undefined && umbCov !== undefined && requirement !== undefined) {
               return (value + umbCov < requirement);
-            }
+            } else return true
           }
-
           return column.statisticsCommon.percentWithinTolerance < 100
         })
       })
@@ -688,7 +697,7 @@ function checkCoIAssessment(assessment) {
 
 function checkAssessment(assessment) {
   info(`Checking assessment ${assessment._id}`);
-  if (assessment.assessmentTemplate === COI_ASSESSMENT_TEMPLATE_ID) {
+  if (assessment.assessmentTemplate._id === ASSESSMENT_TEMPLATE_ID) {
     return checkCoIAssessment(assessment);
   }
   return assessment.sections.map(section => {
@@ -738,7 +747,7 @@ async function handleAssessment(item, bid, tp) {
         path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
         data: {
           assessments: {
-            [item._id]: false 
+            [item._id]: false
           }
         }
       })
@@ -761,7 +770,7 @@ async function handleAssessment(item, bid, tp) {
             headers: { Authorization: FL_TOKEN },
             data: item
           })
-        }
+        } else info(`Assessment ${item._id} failed checkAssessment`);
       } catch (err) {
         error(err)
         throw err;
@@ -846,17 +855,18 @@ async function handlePendingDoc(item, bid, tp, bname) {
         bid,
         bname,
       }
+      let resId = _id.replace(/resources\//, '');
       await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue/${_id}`,
+        path: `/bookmarks/services/fl-sync/process-queue/pdfs/${resId}`,
         data,
       })
       TARGET_PDFS[_id] = data;
 
       //link the file into the documents list
       data = { _id, _rev: 0 }
-      info(`Linking file to documents list at ${TP_PATH}/${tp}/shared/trellisfw/documents: ${JSON.stringify(data, null, 2)}`);
+      info(`Linking file to documents list at ${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}: ${JSON.stringify(data, null, 2)}`);
       await CONNECTION.put({
-        path: `${TP_PATH}/${tp}/shared/trellisfw/documents/${_id}`,
+        path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
         data,
       })
     })
@@ -882,23 +892,23 @@ async function handleApprovedDoc(item, bid, tp) {
 
   TARGET_JOBS[found.jobId].approved = true;
   await CONNECTION.put({
-    path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
-    data: { approved: false }
+    path: `/bookmarks/services/fl-sync/process-queue/jobs/${found.jobId}`,
+    data: { approved: true }
   })
 
   //2. 
-  info(`Moving approved document to [${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
+  info(`Moving approved document to [${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
 
   try {
     //ensure parent exists
     await CONNECTION.put({
-      path: `${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
+      path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
       data: {},
       tree
     })
     await axios({
       method: 'put',
-      url: `https://${DOMAIN}${TP_PATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
+      url: `https://${DOMAIN}${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
       data: { _id: found.result._id },
       headers: {
         'content-type': 'application/json',
@@ -909,10 +919,11 @@ async function handleApprovedDoc(item, bid, tp) {
     info(`Removing ${found.jobId} from fl-sync Jobs index`);
     //setTime('TargetJob', TARGET_JOBS[found.jobId].start - Date.now())
 
-    let tid = TARGET_JOBS[found.jobId];
+    let tid = TARGET_JOBS[found.jobId]
+    let resId = tid.trellisId.replace(/resources\//, '');
 
     await CONNECTION.delete({
-      path: `/bookmarks/services/fl-sync/process-queue/pdfs/${tid.trellisId}`
+      path: `/bookmarks/services/fl-sync/process-queue/pdfs/${resId}`
     })
     delete TARGET_PDFS[tid.trellisId]
     await CONNECTION.delete({
@@ -980,7 +991,7 @@ async function constructAssessment(job, result) {
   let auto = parseInt(al.combined_single_limit || 0);
 
   let ul = _.find(policies, ['type', 'Umbrella Liability']) || {};
-  let umbrella = parseInt(ul.each_occurence1 || 0);
+  let umbrella = parseInt(ul.each_occurrence1 || 0);
 
   let wc = _.find(policies, ['type', `Worker's Compensation`]);
   let worker = wc ? true : false;
@@ -1004,31 +1015,45 @@ async function constructAssessment(job, result) {
 
 async function handleScrapedResult(jobId) {
   let job = TARGET_JOBS[jobId];
-  let result;
   let flDoc;
 
+  info(`--> job type [${job.result.type}]`);
+  info(`--> job key [${job.result.key}]`);
+  let url = `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`;
+  info(`--> url [${url}]`);
   try {
     let request = {
       method: 'get',
-      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+      url: `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
       headers: {
         Authorization: `Bearer ${TRELLIS_TOKEN}`,
       },
-    }
-    await Promise.delay(2000).then(async () => {
-      try {
-        result = await axios(request).then(r => r.data);
-      } catch (err) {
-        await Promise.delay(2000).then(async () => {
-          result = await axios(request).then(r => r.data);
-        })
-      }
-    })
+    };
+    let result = null;
+    let retries = 0;
+
+    // retrying ...
+    while (result === null && retries++ < MAX_RETRIES) {
+      await Promise.delay(2000);
+      result = await axios(request)
+        .then(r => r.data)
+        .catch(err => {
+          if (retries === MAX_RETRIES) {
+            error(err);
+            throw err;
+          }
+          return null;
+        });
+    }//while 
+
+    info(`--> result ${result}`);
+    info(`--> retries ${retries}`);
 
     flDoc = await CONNECTION.get({
       path: `${job.mirrorId}`
     }).then(r => r.data)
 
+    info(`--> flDoc ${flDoc}`);
     let data = {
       services: {
         'fl-sync': {
@@ -1036,7 +1061,7 @@ async function handleScrapedResult(jobId) {
           flId: job.flId
         }
       }
-    }
+    };
 
     let { status, message } = await validatePending(result, flDoc, job.result.type);
 
@@ -1060,7 +1085,7 @@ async function handleScrapedResult(jobId) {
       }).catch(err => {
         error(err);
         throw err;
-      })
+      });
 
       let assess = await constructAssessment(job, result);
 
@@ -1070,13 +1095,13 @@ async function handleScrapedResult(jobId) {
         [assess.data._id]: false
       }
       await CONNECTION.put({
-          path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
-          data: { 
-            assessments: {
-              [assess.data._id]: false
-            }
+        path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
+        data: {
+          assessments: {
+            [assess.data._id]: false
           }
-        })
+        }
+      })
 
       await CONNECTION.post({
         path: `/resources/${job.jobId}`,
@@ -1086,7 +1111,7 @@ async function handleScrapedResult(jobId) {
         }
       }).catch(err => {
         error(err);
-        throw(err);
+        throw (err);
       })
 
       info(`Spawned assessment [${assess.data._id}] for business id [${job.bid}]`);
@@ -1102,17 +1127,17 @@ async function handleScrapedResult(jobId) {
       })
     }
 
-    info(`Job result stored at trading partner ${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+    info(`Job result stored at trading partner ${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
 
     // Link to the original food-logiq document
     let resp = await CONNECTION.put({
-      path: `${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+      path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
       data
     })
     /*
     let resp = await axios({
       method: 'put',
-      url: `https://${DOMAIN}${TP_PATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+      url: `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
       headers: {
         Authorization: `Bearer ${TRELLIS_TOKEN}`,
         'Content-Type': 'application/json'
@@ -1205,23 +1230,24 @@ async function fetchCOIAssessmentTemplateFromTrellis() {
 // The main routine to check for food logiq updates
 async function pollFl() {
   try {
-    let TPs = {};
-    // Get known trading partners
-    let resp = await CONNECTION.get({
-      path: `${TP_PATH}/expand-index`,
-    })
-    .then(r => TPs = r.data)
-    .catch(err => {
-      if (err.status !== 404) throw err;
-    })
-
-    //TODO: this whole bit goes away under the new system
-    await Promise.map(Object.keys(TPs || {}), async (i) => {
-      // 1. Get business id
-      let item = TPs[i];
-      if (!item.masterid) return;
-      BUSINESSES[item.masterid] = i;
-    })
+    /*
+        let TPs = {};
+        // Get known trading partners
+        let resp = await CONNECTION.get({
+          path: `${TP_PATH}/expand-index`,
+        })
+        .then(r => TPs = r.data)
+        .catch(err => {
+          if (err.status !== 404) throw err;
+        })
+    
+        await Promise.map(Object.keys(TPs || {}), async (i) => {
+          // 1. Get business id
+          let item = TPs[i];
+          if (!item.masterid) return;
+          BUSINESSES[item.masterid] = i;
+        })
+    */
 
     //Get assessment templates
     let templates = await fetchAssessmentTemplates();
@@ -1229,10 +1255,10 @@ async function pollFl() {
     // Sync list of suppliers
     let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
     info(`Fetching FL community members with date: [${date}]`)
-    
+
     let start = Date.now();
     await fetchAndSync({
-      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
+      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
       to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
       forEach: async (i) => {
         await Promise.each(['products', 'locations', 'documents'], async (type) => {
@@ -1309,7 +1335,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
           })
           await CONNECTION.put({
             path,
-            data: { 
+            data: {
               "_id": resp.headers['content-location'].replace(/^\//, ''),
               "_rev": 0
             }
@@ -1321,8 +1347,8 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 
     // Repeat for additional pages of FL results
     if (response.data.hasNextPage) {
-      info(`fetchAndSync Finished page ${pageIndex}. Item ${response.data.pageItemCount*(pageIndex+1)}/${response.data.totalItemCount}`);
-      await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach})
+      info(`fetchAndSync Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
+      await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach })
     }
     return;
   } catch (err) {
@@ -1495,7 +1521,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
     answer_content["answers"][4]["answerNumeric"] = umbrella;
     answer_content["answers"][5]["answerNumeric"] = employer;
     answer_content["answers"][6]["answerBool"] = worker;
-//    if (SCALE) answer_content["answers"][7]["answerText"] = customCentricityTest;
+    //    if (SCALE) answer_content["answers"][7]["answerText"] = customCentricityTest;
 
     //including the answers in the answer array
     answers_template.push(answer_content);

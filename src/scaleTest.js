@@ -696,11 +696,12 @@ async function main() {
 // await deleteTargetJobs()
 
 //  let TP = await makeFakeContent();
+    let TP = await makeFlBusiness();
 //  await compareResult();
 //  await checkResult();
 //    await getTPListLibCount();
 
-    await skipTPDocs()
+//    await skipTPDocs()
 
   //Reset the environment for testing business setup
 //  await deleteFlSync();
