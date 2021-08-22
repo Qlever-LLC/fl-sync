@@ -23,6 +23,13 @@ convict.addFormats(convictValidator);
 
 
 const config = convict({
+  delay: {
+    doc: 'amount to delay between pages of documents',
+    default: 0,
+    format: Number,
+    env: 'DELAY',
+    arg: 'delay'
+  },
   trellis: {
     domain: {
       doc: 'OADA API domain',
