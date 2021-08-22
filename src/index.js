@@ -44,6 +44,7 @@ const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 const CONCURRENCY = config.get('trellis.concurrency');
 const LOCAL = process.env.LOCAL;
 const SCALE = (process.env.SCALE);
+const DELAY = config.get('delay');
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
@@ -605,9 +606,10 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
     info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
+    if (type === 'documents') info(`Pausing for ${DELAY/60000} minutes`)
+    if (type === 'documents') await Promise.delay(DELAY)
     await fetchCommunityResources({ type, date, pageIndex: pageIndex + 1 })
   }
-  if (pageIndex === 1000) info('stopping at page 1000')
 }
 
 async function getResources() {
