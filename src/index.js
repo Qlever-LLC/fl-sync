@@ -602,7 +602,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       })
       info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
     }
-  })
+  }, { concurrency: CONCURRENCY })
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
     info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
