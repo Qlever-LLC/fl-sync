@@ -801,6 +801,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
     // create oada resources for each attachment
     await Promise.map(Object.keys(zip.files || {}), async (key) => {
       let zdata = await zip.file(key).async("arraybuffer");
+      /*
       let response = await axios({
         method: 'post',
         url: `https://${DOMAIN}/resources`,
@@ -809,6 +810,16 @@ async function handlePendingDoc(item, bid, tp, bname) {
           'Content-Disposition': 'inline',
           'Content-Type': 'application/pdf',
           Authorization: 'Bearer ' + TRELLIS_TOKEN
+        }
+      })
+      */
+
+      let response = await CONNECTION.post({
+        path: `/resources`,
+        data: zdata,
+        headers: {
+          'Content-Disposition': 'inline',
+          'Content-Type': 'application/pdf',
         }
       })
 
@@ -910,14 +921,10 @@ async function handleApprovedDoc(item, bid, tp) {
       data: {},
       tree
     })
-    await axios({
-      method: 'put',
-      url: `https://${DOMAIN}${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
+    //TODO: test this part also when trying to remove axios requests to trellis
+    await CONNECTION.put({
+      path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
       data: { _id: found.result._id },
-      headers: {
-        'content-type': 'application/json',
-        'Authorization': `Bearer ${TRELLIS_TOKEN}`
-      },
     })
     info(`Removing ${TARGET_JOBS[found.jobId].trellisId} from fl-sync PDF index`);
     info(`Removing ${found.jobId} from fl-sync Jobs index`);
@@ -1027,11 +1034,7 @@ async function handleScrapedResult(jobId) {
   info(`--> url [${url}]`);
   try {
     let request = {
-      method: 'get',
-      url: `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
-      headers: {
-        Authorization: `Bearer ${TRELLIS_TOKEN}`,
-      },
+      url: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
     };
     let result = null;
     let retries = 0;
@@ -1039,7 +1042,7 @@ async function handleScrapedResult(jobId) {
     // retrying ...
     while (result === null && retries++ < MAX_RETRIES) {
       await Promise.delay(2000);
-      result = await axios(request)
+      result = await CONNECTION.get({request})
         .then(r => r.data)
         .catch(err => {
           if (retries === MAX_RETRIES) {
