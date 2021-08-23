@@ -577,6 +577,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
       if (!equals) info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
       if (!equals) {
+        delay+= 20000;
         sync = true;
       }
     } catch (err) {
