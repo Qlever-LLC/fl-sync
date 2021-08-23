@@ -44,7 +44,6 @@ const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 const CONCURRENCY = config.get('trellis.concurrency');
 const LOCAL = process.env.LOCAL;
 const SCALE = (process.env.SCALE);
-const DELAY = config.get('delay');
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
@@ -546,6 +545,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   if (pageIndex) request.params = { pageIndex };
   let response = await axios(request);
   if (pageIndex) console.log({ pageIndex }, 'current item:', (pageIndex) * 50, 'total items:', response.data.totalItemCount);
+  let delay = 0;
 
   // Manually check for changes; Only update the resource if it has changed!
   await Promise.map(response.data.pageItems, async (item) => {
@@ -583,6 +583,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       if (err.status !== 404) throw err;
       info(`Resource is not already on trellis. Syncing...`);
       sync = true;
+      delay+= 20000;
     }
 
     // Now, sync
@@ -606,8 +607,8 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
     info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
-    if (type === 'documents') info(`Pausing for ${DELAY/60000} minutes`)
-    if (type === 'documents') await Promise.delay(DELAY)
+    if (type === 'documents') info(`Pausing for ${delay/60000} minutes`)
+    if (type === 'documents') await Promise.delay(delay)
     await fetchCommunityResources({ type, date, pageIndex: pageIndex + 1 })
   }
 }
