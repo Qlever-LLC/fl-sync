@@ -3,6 +3,7 @@ import fs from 'fs';
 import chaiAsPromised from "chai-as-promised";
 import Promise from "bluebird";
 import moment from "moment";
+import pointer from 'json-pointer'
 import debug from "debug";
 import axios from "axios";
 import ksuid from "ksuid";
@@ -654,6 +655,411 @@ async function getTPCount() {
   console.log('TP Count:', length);
 }
 
+async function handleIncompleteCois(){
+  let {data} = await con.get({
+    path: `/bookmarks/services/fl-sync/process-queue/scripted`
+  })
+  await Promise.each(Object.keys(data), async key => {
+    let item = data[key];
+    await Promise.map(data[key].coiDocuments, async docId => {
+      console.log('getting', `/bookmarks/services/fl-sync/businesses/${item.businessid}/documents/${docId}`)
+      let data = await con.get({
+        path: `/bookmarks/services/fl-sync/businesses/${item.businessid}/documents/${docId}`
+      }).then(r => r.data['food-logiq-mirror'])
+
+      console.log('putting', `/bookmarks/services/fl-sync/businesses/${item.businessid}/documents/${docId}`)
+      await con.put({
+        path: `/bookmarks/services/fl-sync/businesses/${item.businessid}/documents/${docId}`,
+        data: { "food-logiq-mirror": data }
+      })
+    })
+  })
+}
+
+async function cleanupProcessQueue() {
+  let {data} = await con.get({
+    path: `/bookmarks/services/fl-sync/process-queue`
+  })
+
+  await Promise.each(['pdfs', 'jobs'], async type => {
+    await Promise.map(Object.keys(data[type]), async key => {
+      await Promise.map(Object.keys(data[type]), async keyb => {
+        if (key === keyb) return
+        if (data[type][key] === data[type][keyb]) {
+          console.log('found a pair', key, keyb);
+        }
+      })
+    })
+  })
+  
+}
+
+async function reprocessProd() {
+  let count = 0;
+  let badCount = 0;
+  let goods = [];
+  let goodRefs = {};
+  let bads = [];
+  let response = await con.get({
+    path: `/bookmarks/trellisfw/trading-partners/expand-index`
+  })
+  let tps = Object.keys(response).filter(key => key.charAt(0) !== '_')
+
+  let {data} = await con.get({
+    path: `/bookmarks/services/fl-sync/businesses`
+  })
+  let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async bid => {
+    let docs = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents`
+    }).then(r => r.data)
+    .catch(err => {
+      return;
+    })
+    let masterid = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/masterid`
+    }).then(r => r.data)
+    .catch(err => {
+      console.log('MASTERID NOT FOUND FOR BID', bid);
+      return;
+    })
+  
+    let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+
+    await Promise.map(k, async key => {
+      let meta = await con.get({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}/_meta`
+      }).then(r => r.data)
+
+      if (pointer.has(meta, '/vdoc/pdf')) {
+        let vdoc = Object.keys(meta.vdoc.pdf)[0]
+        let ref = meta.vdoc.pdf[vdoc]._id.replace(/^resources\//, '')
+        goods.push({bid, key})
+        goodRefs[key] = {
+          bid, 
+          key, 
+          masterid,
+          path: `/bookmarks/trellisfw/trading-partners/masterid-index/${masterid}/shared/documents/${ref}`
+        };
+        count++;
+      } else {
+        bads.push({bid, key})
+        badCount++;
+      }
+    })
+  })
+
+  let cois = await con.get({
+    path: `/bookmarks/services/fl-sync/process-queue/scripted`
+  }).then(r => r.data);
+
+  let found = [];
+  let overlapgood = 0;
+  let overlapbad = 0;
+  await Promise.map(Object.keys(cois), async k => {
+    await Promise.map(cois[k].coiDocuments, key => {
+      let coi = {bid: cois[k].businessid, key }
+      if (goods.some(item => _.isEqual(item, coi))) {
+        overlapgood++;
+      }
+      if (bads.some(item => _.isEqual(item, coi))) {
+        overlapbad++;
+        delete goodRefs[key]
+      }
+    })
+  })
+
+  console.log({count, badCount, overlapgood, overlapbad});
+  console.log('goodrefs', Object.keys(goodRefs).length);
+
+  await Promise.each(Object.keys(goodRefs), async ref => {
+    let item = goodRefs[ref];
+    console.log('deleting', item.path);
+    await con.delete({
+      path: item.path
+    })
+    console.log('puting',`/bookmarks/services/fl-sync/businesses/${item.bid}/documents/${item.key}/_meta/vdoc`);
+    await con.put({
+      path: `/bookmarks/services/fl-sync/businesses/${item.bid}/documents/${item.key}/_meta/vdoc`,
+      data: 5
+    })
+
+    let path = `/bookmarks/services/fl-sync/businesses/${item.bid}/documents/${item.key}`
+    console.log('GETing', path)
+    let docdata = await con.get({
+      path
+    }).then(r => r.data['food-logiq-mirror']);
+
+    console.log('docdata', docdata);
+    let p = await con.put({
+      path: path,
+      data: {
+        'food-logiq-mirror': docdata
+      }
+    })
+    console.log('p', p.status);
+  })
+
+}
+
+async function findTrellisDocs() {
+  let count = 0;
+  let badCount = 0;
+  let goods = [];
+  let bads = [];
+  let {data} = await con.get({
+    path: `/bookmarks/services/fl-sync/businesses`
+  })
+  let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async bid => {
+    let docs = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents`
+    }).then(r => r.data)
+    .catch(err => {
+      return;
+    })
+  
+    let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+
+    console.log('BID', bid);
+    await Promise.map(k, async key => {
+      let meta = await con.get({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}/_meta`
+      }).then(r => r.data)
+
+      if (pointer.has(meta, '/vdoc/pdf')) {
+        let vdoc = Object.keys(meta.vdoc.pdf)[0]
+        let ref = meta.vdoc.pdf[vdoc]._id.replace(/^resources\//, '')
+        goods.push({bid, key})
+        count++;
+      } else {
+        bads.push({bid, key})
+        badCount++;
+      }
+    })
+  })
+
+  let cois = await con.get({
+    path: `/bookmarks/services/fl-sync/process-queue/scripted`
+  }).then(r => r.data);
+
+  let found = [];
+  let overlapgood = 0;
+  let overlapbad = 0;
+  console.log(bads, goods);
+  await Promise.map(Object.keys(cois), async k => {
+    await Promise.map(cois[k].coiDocuments, key => {
+      let coi = {bid: cois[k].businessid, key }
+      console.log(coi);
+      if (goods.some(item => _.isEqual(item, coi))) {
+        overlapgood++;
+      }
+      if (bads.some(item => _.isEqual(item, coi))) {
+        overlapbad++;
+      }
+    })
+  })
+  console.log({count, badCount, overlapgood, overlapbad});
+
+}
+
+async function countCois() {
+  try {
+  let count = 0;
+  let cois = [];
+  let {data} = await con.get({
+    path: `/bookmarks/services/fl-sync/businesses`
+  })
+  let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async bid => {
+
+    let docs = await axios({
+        method: 'get',
+        url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents`,
+        headers: {Authorization: `Bearer ${TOKEN}`}
+    }).then(r => r.data)
+    /*
+    let docs = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents`
+    }).then(r => r.data)
+    */
+  
+    let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+
+    await Promise.map(k, async key => {
+
+      /*
+      let doc = await con.get({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
+      }).then(r => r.data)
+      */
+
+      let doc = await axios({
+        method: 'get',
+        url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
+        headers: {Authorization: `Bearer ${TOKEN}`}
+      }).then(r => r.data)
+
+
+      if (pointer.has(doc, `/food-logiq-mirror/shareSource/type/name`)) {
+        let type = pointer.get(doc, `/food-logiq-mirror/shareSource/type/name`)
+        if (type === 'Certificate of Insurance') {
+          count++;
+          cois.push({bid, key})
+        }
+      }
+    }, {concurrency: 5}).catch(err => {
+      console.log('there was an error', err);
+    })
+  }).catch(err => {
+    console.log('there was an error', err);
+  })
+  console.log('cois', count);
+
+  await Promise.each(cois, async coi => {
+    let path = `/bookmarks/services/fl-sync/businesses/${coi.bid}/documents/${coi.key}`;
+    let docdata = await con.get({
+      path,
+    }).then(r => r.data['food-logiq-mirror']);
+
+    let p = await con.put({
+      path,
+      data: {
+        'food-logiq-mirror': docdata
+      }
+    })
+  })
+  } catch(err) {
+    console.log('FOUND AN ERROR', err);
+  }
+}
+
+async function howManyDocs() {
+  let totalCount = 0;
+  let cois = 0;
+  let {data} = await con.get({
+    path: `/bookmarks/trellisfw/trading-partners`
+  })
+  delete data['expand-index'];
+  delete data['masterid-index'];
+  let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
+
+  await Promise.map(keys, async tp => {
+    let docs = await con.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tp}/shared/trellisfw/documents`
+    })
+    let dkeys = Object.keys(docs).filter(key => key.charAt(0) !== '_')
+    totalCount+= dkeys.length;
+    
+
+    let cois = await con.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tp}/shared/trellisfw/documents`
+    })
+    let ckeys = Object.keys(cois).filter(key => key.charAt(0) !== '_')
+    cois+= ckeys.length;
+  })
+  console.log('counts', {totalCount, cois});
+}
+
+async function traceCois() {
+  let obj = {
+    a: 0,
+    b: 0,
+    c: 0,
+    d: 0
+  }
+  let {data} = await con.get({
+    path: `/bookmarks/services/fl-sync/businesses`
+  })
+  let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
+
+  let stuff = await Promise.each(keys, async bid => {
+    let docs = await axios({
+      method: 'get',
+      url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents`,
+      headers: {
+        Authorization: `Bearer ${TOKEN}`
+      },
+    }).then(r => r.data)
+    .catch(err => {
+      console.log('nope', bid);
+      return
+    })
+  
+    let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+
+    await Promise.each(k, async key => {
+      let doc = await axios({
+        method: 'get',
+        url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
+        headers: {
+          Authorization: `Bearer ${TOKEN}`
+        },
+      })
+      if (doc.status !== 200) console.log('no a');
+      if (doc.status !== 200) return
+      doc = doc.data;
+
+      if (pointer.has(doc, `/food-logiq-mirror/shareSource/type/name`)) {
+        if (doc['food-logiq-mirror'].shareSource.type.name === 'Certificate of Insurance') {
+          obj.a++;
+          console.log('Found FL coi',`/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`);
+        }
+      }
+
+      let meta = await axios({
+        method: 'get',
+        url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}/_meta`,
+        headers: {
+          Authorization: `Bearer ${TOKEN}`
+        },
+      })
+      if (meta.status !== 200) console.log('no b');
+      if (meta.status !== 200) return
+      meta = meta.data;
+
+      if (pointer.has(meta, '/vdoc/pdf')) {
+        let vdoc = Object.keys(meta.vdoc.pdf)[0]
+        let ref = meta.vdoc.pdf[vdoc]._id;
+        console.log('Found pdf', {bid, key, ref});
+        obj.b++;
+
+        let tpdoc = await axios({
+          method: 'get',
+          headers: {
+            Authorization: `Bearer ${TOKEN}`
+          },
+          url: `https://${DOMAIN}/${ref}/_meta`
+        })
+        if (tpdoc.status !== 200) console.log('no c');
+        if (tpdoc.status !== 200) return;
+        tpdoc = tpdoc.data
+
+        if (pointer.has(tpdoc, `/services/target/jobs`)) {
+          let job = Object.keys(tpdoc.services.target.jobs)[0];
+          console.log('Found job',{bid, key, job});
+          obj.c++;
+        }
+          
+        if (pointer.has(tpdoc, `/vdoc/cois`)) {
+          let coi = Object.keys(tpdoc.vdoc.cois)[0];
+          console.log('Found coi', {bid, key, coi});
+          obj.d++;
+        }
+      }
+    })
+  }).catch(err => {
+    console.log(err);
+    console.log('done (error)', obj);
+  }).then(() => {
+    console.log('done (then)', obj);
+  })
+  console.log('done', obj);
+}
+
 async function findChange(rev) {
   console.log('checking rev', rev);
   let key = "1weDLVHdZUaZfN21fWnNknTGaMq";
@@ -667,7 +1073,8 @@ async function findChange(rev) {
       console.log('FOUND', found, rev)
       return found;
     }
-    if (change.type === 'delete') {
+    if (change.type === 'delete') {  console.log('goodrefs', Object.keys(goodRefs).length);                        
+
         console.log(change);
     }
   })
@@ -677,12 +1084,70 @@ async function findChange(rev) {
     await findChange(rev)
   }
 }
+async function listCois() {
+  let cois = await con.get({
+    path: `/bookmarks/services/fl-sync/process-queue/scripted`
+  }).then(r => r.data);
+ 
+  let keys = Object.keys(cois || {}).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async key => {
+    let item = cois[key];
+    await Promise.map(item.coiDocuments, async docId => {
+      console.log(item.businessid, docId);
+    })
+  })
+
+}
+
+async function postPdfs() {
+
+  let dir = fs.opendirSync('./pdfs');
+
+  for await (const f of dir) {
+    let data = fs.readFileSync(`./pdfs/${f.name}`)
+
+    let _id = await axios({
+      method: 'post',
+      url: `https://localhost:3000/resources`,
+      headers: {
+        'Authorization': `Bearer ${TOKEN}`,
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': "inline",
+      },
+      data
+    }).then(r => r.headers['content-location'].replace(/^\//, ''))
+    console.log(_id);
+
+    let result = await con.post({
+      path: `/resources`,
+      data: {
+        "config": {
+          "type": "pdf",
+          "pdf": {
+            _id
+          },
+        }
+      }
+    }).then(r => r.headers['content-location'].replace(/^\//, ''))
+    console.log(result);
+
+    let key = result.replace(/^resources\//, '');
+    await con.put({
+      path: `/bookmarks/services/target/jobs/${key}`,
+      data: {
+        _id: result,
+        _rev: 0
+      }
+    })
+  }
+}
+
 
 async function main() {
   con = await oada.connect({
     domain: 'https://'+DOMAIN,
-    token: 'Bearer '+TOKEN[0],
-    connection: 'ws'
+    token: 'Bearer '+TOKEN,
   }).catch(err => {
     console.log(err);
     throw err
@@ -690,13 +1155,21 @@ async function main() {
 
   try {
 
-  let start = Date.now()
+    let start = Date.now()
+//    await postPdfs();
+//    await cleanupProcessQueue();
+//    await findTrellisDocs()
+//    await reprocessProd();
+//    await countCois();
+//    await handleIncompleteCois();
+    await traceCois();
+//    await listCois();
 //  await findChange(493126);
 //  await deleteFlBizDocs();
 // await deleteTargetJobs()
 
 //  let TP = await makeFakeContent();
-    let TP = await makeFlBusiness();
+//    let TP = await makeFlBusiness();
 //  await compareResult();
 //  await checkResult();
 //    await getTPListLibCount();
