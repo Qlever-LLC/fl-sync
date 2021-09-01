@@ -42,6 +42,7 @@ const CO_NAME = config.get('foodlogiq.community.owner.name');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 const CONCURRENCY = config.get('trellis.concurrency');
+const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const LOCAL = process.env.LOCAL;
 const SCALE = (process.env.SCALE);
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
@@ -270,11 +271,10 @@ async function getLookup(item, key) {
     TARGET_JOBS[key] = {
       jobId: key,
       trellisId,
-      start: Date.now()
     };
     Object.assign(TARGET_JOBS[key], TARGET_PDFS[trellisId])
     await CONNECTION.put({
-      path: `/bookmarks/services/fl-sync/process-queue/jobs/${key}`,
+      path: `/bookmarks/services/fl-sync/process-queue/jobs${key}`,
       data: TARGET_JOBS[key]
     })
 
@@ -298,7 +298,7 @@ async function onTargetUpdate(c, jobId) {
         if (!TARGET_JOBS[jobId].result) {
           TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
           await CONNECTION.put({
-            path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
+            path: `/bookmarks/services/fl-sync/process-queue/jobs${jobId}`,
             data: { result: { type, key, _id: c.body.result[type][key]._id } }
           })
           await handleScrapedResult(jobId)
@@ -342,6 +342,12 @@ async function onTargetUpdate(c, jobId) {
   } catch (err) {
     error('onTargetUpdate error: ');
     error(err);
+    await CONNECTION.put({
+      path: `/bookmarks/services/fl-sync/process-queue/jobs${jobId}`,
+      data: {
+        status: 'failed',
+      }
+    })
     throw err;
   }
 }
@@ -421,16 +427,92 @@ async function initialize() {
       error(`Initializing Trellis connection failed`);
       error(err)
     }
+    // Run populateIncomplete first so that the change feeds coming in will have
+    // the necessary in-memory items for them to continue being processed.
     setConnection(conn);
+    //await populateIncomplete()
     await watchTargetJobs();
     await watchFlSyncConfig();
     //  await createFlWebsocket();
     await checkTime();
     setInterval(checkTime, checkInterval);
+    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
   } catch (err) {
     error(err);
     throw err;
   }
+}
+
+async function populateIncomplete() {
+  let data = await CONNECTION.get({
+    path: `/bookmarks/services/fl-sync/process-queue`
+  }).catch((err) => {
+    if (err.status === 404) return
+    throw err;
+  }).then(r => r.data);
+
+  await Promise.map(Object.keys(data.pdfs), async key => {
+    let item = data.pdfs[key];
+    TARGET_PDFS[`resources/${key}`] = item;
+  })
+
+  await Promise.map(Object.keys(data.jobs), async key => {
+    let item = data.jobs[key];
+    TARGET_JOBS[key] = item;
+  })
+ 
+}
+
+async function handleIncomplete() {
+  info(`handleIncomplete: CURRENTLY_POLLING: [${CURRENTLY_POLLING}]`);
+  if (CURRENTLY_POLLING) return;
+
+  let pq = await CONNECTION.get({
+    path: `/bookmarks/services/fl-sync/process-queue`
+  }).catch((err) => {
+    if (err.status === 404) return
+    throw err;
+  }).then(r => r.data);
+
+  //a) resubmit as a mirrored FL doc
+  await Promise.map(Object.keys(pq.pdfs), async key => {
+    let item = pq.pdfs[key];
+    //1. Fetch the fl item
+    let path = `/bookmarks/services/fl-sync/businesses/${item.bid}/documents/${item._id}/food-logiq-mirror`;
+    let data = await CONNECTION.get({ path })
+      .then(r => r.data)
+      .catch(err => {
+        if (err.status === 404) info(`handleIncomplete failed to fetch mirror data missing for path: ${path}`)
+      })
+
+    await CONNECTION.delete({
+      path
+    })
+
+    await CONNECTION.put({
+      path,
+      data
+    })
+  })
+
+  //b) submit for reprocessing by target
+  await Promise.map(Object.keys(pq.jobs), async key => {
+    //1. Fetch the trellis doc
+    let item = pq.jobs[key];
+
+    let path = `${TP_MPATH}/${item.tp}/shared/trellisfw/documents/${item.trellisDocKey}`;
+    let data = await CONNECTION.get({ path })
+    .then(r => r.data)
+
+    await CONNECTION.delete({
+      path
+    })
+
+    await CONNECTION.put({
+      path,
+      data,
+    })
+  })
 }
 
 async function handleFlLocation(item, bid, tp) {
@@ -504,22 +586,18 @@ async function handleMirrorChange(change) {
 
     switch (type) {
       case 'documents':
-        let handleDocStart = Date.now()
         if (!pointer.has(data, '/food-logiq-mirror/shareSource/sourceBusiness/name')) {
           error('change does not have bname')
           return;
         }
         const bname = pointer.get(data, '/food-logiq-mirror/shareSource/sourceBusiness/name');
         await handleFlDocument(item, bid, tp, bname);
-        //setTime('handleFlDoc', Date.now() - handleDocStart)
         break;
       case 'locations':
         await handleFlLocation(item, bid, tp);
         break;
       case 'assessments':
-        let handleAssessStart = Date.now()
         await handleAssessment(item, bid, tp)
-        //setTime('handleAssessment', Date.now() - handleAssessStart)
         break;
       case 'product':
         await handleFlProduct(item, bid, tp);
@@ -801,7 +879,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
     // create oada resources for each attachment
     await Promise.map(Object.keys(zip.files || {}), async (key) => {
       let zdata = await zip.file(key).async("arraybuffer");
-      /*
+
       let response = await axios({
         method: 'post',
         url: `https://${DOMAIN}/resources`,
@@ -809,21 +887,29 @@ async function handlePendingDoc(item, bid, tp, bname) {
         headers: {
           'Content-Disposition': 'inline',
           'Content-Type': 'application/pdf',
-          Authorization: 'Bearer ' + TRELLIS_TOKEN
+          'Authorization': "Bearer "+TOKEN
         }
       })
-      */
 
+      /*
       let response = await CONNECTION.post({
         path: `/resources`,
         data: zdata,
         headers: {
           'Content-Disposition': 'inline',
           'Content-Type': 'application/pdf',
+          'Content-Length': zdata.byteLength,
         }
       })
+      */
 
-      let _id = response.headers['content-location'];
+      console.log('RESPONSE', response);
+      let mirrorId = await CONNECTION.get({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_id`,
+      }).then(r => r.data)
+
+
+      let _id = response.headers['content-location'].replace(/^\//, '');
       await CONNECTION.put({
         path: `${_id}/_meta`,
         //TODO: How should this be formatted?
@@ -832,15 +918,13 @@ async function handlePendingDoc(item, bid, tp, bname) {
           services: {
             'fl-sync': {
               [item._id]: {
-                _ref: _id,
+                _ref: mirrorId,
               }
             }
           }
         },
         headers: { 'content-type': 'application/json' },
       })
-
-      _id = _id.replace(/^\//, '');
 
       // Create a link from the FL mirror to the trellis pdf
       await CONNECTION.put({
@@ -855,9 +939,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
         headers: { 'content-type': 'application/json' },
       })
 
-      let mirrorId = await CONNECTION.get({
-        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_id`,
-      }).then(r => r.data)
+      let resId = _id.replace(/resources\//, '');
 
       // Create a lookup in order to track target updates
       info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
@@ -869,8 +951,8 @@ async function handlePendingDoc(item, bid, tp, bname) {
         mirrorId,
         bid,
         bname,
+        trellisDocKey: resId
       }
-      let resId = _id.replace(/resources\//, '');
       await CONNECTION.put({
         path: `/bookmarks/services/fl-sync/process-queue/pdfs/${resId}`,
         data,
@@ -928,7 +1010,6 @@ async function handleApprovedDoc(item, bid, tp) {
     })
     info(`Removing ${TARGET_JOBS[found.jobId].trellisId} from fl-sync PDF index`);
     info(`Removing ${found.jobId} from fl-sync Jobs index`);
-    //setTime('TargetJob', TARGET_JOBS[found.jobId].start - Date.now())
 
     let tid = TARGET_JOBS[found.jobId]
     let resId = tid.trellisId.replace(/resources\//, '');
@@ -1237,38 +1318,15 @@ async function fetchCOIAssessmentTemplateFromTrellis() {
 // The main routine to check for food logiq updates
 async function pollFl() {
   try {
-    /*
-        let TPs = {};
-        // Get known trading partners
-        let resp = await CONNECTION.get({
-          path: `${TP_PATH}/expand-index`,
-        })
-        .then(r => TPs = r.data)
-        .catch(err => {
-          if (err.status !== 404) throw err;
-        })
-    
-        await Promise.map(Object.keys(TPs || {}), async (i) => {
-          // 1. Get business id
-          let item = TPs[i];
-          if (!item.masterid) return;
-          BUSINESSES[item.masterid] = i;
-        })
-    */
-
-    //Get assessment templates
-//    let templates = await fetchAssessmentTemplates();
-
     // Sync list of suppliers
     let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
     info(`Fetching FL community members with date: [${date}]`)
 
-    let start = Date.now();
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
       to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
       forEach: async (i) => {
-        await Promise.each(['products', 'locations', 'documents'], async (type) => {
+        await Promise.each(['products', 'locations', 'documents', 'assessments'], async (type) => {
           await CONNECTION.head({
             path: `/bookmarks/services/fl-sync/businesses/${i.business._id}/${type}`,
           }).catch(async err => {
@@ -1284,16 +1342,12 @@ async function pollFl() {
             })
           })
         })
+
       }
     })
-    let t = Date.now() - start;
-    //setTime('SyncBusiness', t)
     // Now fetch community resources
-    start = Date.now()
-    if (JUST_TPS) info(`JUST_TPS set to true. Only processing businesses, not the resources`)
+    info(`JUST_TPS set to ${!!JUST_TPS}`)
     if (!JUST_TPS) await getResources();
-    t = Date.now() - start
-    //setTime('GetDocs', t)
   } catch (err) {
     throw err;
   }
@@ -1321,6 +1375,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
 
           // Check for changes to the resources
           let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
+          if (equals) info(`Resource difference in FL item [${item._id}] not detected. Skipping...`);
           if (!equals) info(`Resource difference in FL item [${item._id}] detected. Syncing...`);
           if (!equals) {
             sync = true;
@@ -1571,12 +1626,6 @@ function setAutoApprove(value) {
 
 function setCurrentlyPolling(value) {
   CURRENTLY_POLLING = value;
-}
-
-function setTime(key, value) {
-  if (!times[key]) times[key] = 0;
-  times[key] += value;
-  console.log(JSON.stringify(times, null, 2))
 }
 
 async function mockFL({ url }) {

@@ -73,6 +73,13 @@ const config = convict({
       env: 'CONCURRENCY',
       arg: 'concurrency'
     },
+    handleIncompleteInterval: {
+      doc: 'On this regular interval, items from the process queue that failed at some point will be reprocessed',
+      format: Number,
+      default: 3600000,
+      env: 'HANDLE_INCOMPLETE_INTERVAL',
+      arg: 'handleIncompleteInterval'
+    },
   },
   foodlogiq: {
     interval: {
