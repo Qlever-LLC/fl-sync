@@ -976,7 +976,7 @@ async function traceCois() {
   })
   let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
 
-  let stuff = await Promise.each(keys, async bid => {
+  let stuff = await Promise.map(keys, async bid => {
     let docs = await axios({
       method: 'get',
       url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents`,
@@ -985,7 +985,6 @@ async function traceCois() {
       },
     }).then(r => r.data)
     .catch(err => {
-      console.log('nope', bid);
       return
     })
   
@@ -999,16 +998,15 @@ async function traceCois() {
           Authorization: `Bearer ${TOKEN}`
         },
       })
-      if (doc.status !== 200) console.log('no a');
       if (doc.status !== 200) return
       doc = doc.data;
 
       if (pointer.has(doc, `/food-logiq-mirror/shareSource/type/name`)) {
         if (doc['food-logiq-mirror'].shareSource.type.name === 'Certificate of Insurance') {
           obj.a++;
-          console.log('Found FL coi',`/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`);
-        }
-      }
+          //console.log('Found FL coi',`/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`);
+        } else return
+      } else return
 
       let meta = await axios({
         method: 'get',
@@ -1017,14 +1015,13 @@ async function traceCois() {
           Authorization: `Bearer ${TOKEN}`
         },
       })
-      if (meta.status !== 200) console.log('no b');
       if (meta.status !== 200) return
       meta = meta.data;
 
       if (pointer.has(meta, '/vdoc/pdf')) {
         let vdoc = Object.keys(meta.vdoc.pdf)[0]
         let ref = meta.vdoc.pdf[vdoc]._id;
-        console.log('Found pdf', {bid, key, ref});
+        //console.log('Found pdf', {bid, key, ref});
         obj.b++;
 
         let tpdoc = await axios({
@@ -1034,20 +1031,23 @@ async function traceCois() {
           },
           url: `https://${DOMAIN}/${ref}/_meta`
         })
-        if (tpdoc.status !== 200) console.log('no c');
         if (tpdoc.status !== 200) return;
         tpdoc = tpdoc.data
 
         if (pointer.has(tpdoc, `/services/target/jobs`)) {
           let job = Object.keys(tpdoc.services.target.jobs)[0];
-          console.log('Found job',{bid, key, job});
+          //console.log('Found job',{bid, key, job});
           obj.c++;
         }
           
         if (pointer.has(tpdoc, `/vdoc/cois`)) {
           let coi = Object.keys(tpdoc.vdoc.cois)[0];
-          console.log('Found coi', {bid, key, coi});
+          //console.log('Found coi', {bid, key, coi});
           obj.d++;
+        } else {
+          if (ref) {
+            console.log(ref);;
+          }
         }
       }
     })
