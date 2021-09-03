@@ -198,7 +198,7 @@ async function checkTime() {
 
       let demoCleanup = response.data.cleanup || false;
       if (demoCleanup) {
-        await cleanUpFLDocuments();
+        await cleanUpFlDocuments();
       }
 
       manualPoll = response.data.manualPoll || process.env.MANUAL_POLL;
@@ -274,7 +274,7 @@ async function getLookup(item, key) {
     };
     Object.assign(TARGET_JOBS[key], TARGET_PDFS[trellisId])
     await CONNECTION.put({
-      path: `/bookmarks/services/fl-sync/process-queue/jobs${key}`,
+      path: `${SERVICE_PATH}/process-queue/jobs${key}`,
       data: TARGET_JOBS[key]
     })
 
@@ -298,7 +298,7 @@ async function onTargetUpdate(c, jobId) {
         if (!TARGET_JOBS[jobId].result) {
           TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
           await CONNECTION.put({
-            path: `/bookmarks/services/fl-sync/process-queue/jobs${jobId}`,
+            path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
             data: { result: { type, key, _id: c.body.result[type][key]._id } }
           })
           await handleScrapedResult(jobId)
@@ -343,7 +343,7 @@ async function onTargetUpdate(c, jobId) {
     error('onTargetUpdate error: ');
     error(err);
     await CONNECTION.put({
-      path: `/bookmarks/services/fl-sync/process-queue/jobs${jobId}`,
+      path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
       data: {
         status: 'failed',
       }
@@ -354,22 +354,22 @@ async function onTargetUpdate(c, jobId) {
 
 async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
-    path: `/bookmarks/services/fl-sync`,
+    path: `${SERVICE_PATH}`,
   }).then(r => r.data)
     .catch(async (err) => {
       if (err.status === 404) {
         await CONNECTION.put({
-          path: `/bookmarks/services/fl-sync`,
+          path: `${SERVICE_PATH}`,
           data: {},
           tree
         })
         await CONNECTION.put({
-          path: `/bookmarks/services/fl-sync/businesses`,
+          path: `${SERVICE_PATH}/businesses`,
           data: {},
           tree
         })
         await CONNECTION.put({
-          path: `/bookmarks/services/fl-sync/process-queue`,
+          path: `${SERVICE_PATH}/process-queue`,
           data: {},
           tree
         })
@@ -380,7 +380,7 @@ async function watchFlSyncConfig() {
   setAutoApprove(data['autoapprove-assessments']);
 
   await CONNECTION.watch({
-    path: `/bookmarks/services/fl-sync`,
+    path: `${SERVICE_PATH}`,
     tree,
     watchCallback: async (change) => {
       try {
@@ -445,7 +445,7 @@ async function initialize() {
 
 async function populateIncomplete() {
   let data = await CONNECTION.get({
-    path: `/bookmarks/services/fl-sync/process-queue`
+    path: `${SERVICE_PATH}/process-queue`
   }).catch((err) => {
     if (err.status === 404) return
     throw err;
@@ -468,7 +468,7 @@ async function handleIncomplete() {
   if (CURRENTLY_POLLING) return;
 
   let pq = await CONNECTION.get({
-    path: `/bookmarks/services/fl-sync/process-queue`
+    path: `${SERVICE_PATH}/process-queue`
   }).catch((err) => {
     if (err.status === 404) return
     throw err;
@@ -478,7 +478,7 @@ async function handleIncomplete() {
   await Promise.map(Object.keys(pq.pdfs), async key => {
     let item = pq.pdfs[key];
     //1. Fetch the fl item
-    let path = `/bookmarks/services/fl-sync/businesses/${item.bid}/documents/${item._id}/food-logiq-mirror`;
+    let path = `${SERVICE_PATH}/businesses/${item.bid}/documents/${item._id}/food-logiq-mirror`;
     let data = await CONNECTION.get({ path })
       .then(r => r.data)
       .catch(err => {
@@ -556,7 +556,7 @@ async function handleMirrorChange(change) {
     let key = pieces[3];
 
     let data = await CONNECTION.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/${type}/${key}`
+      path: `${SERVICE_PATH}/businesses/${bid}/${type}/${key}`
     }).then(r => r.data)
 
     if (!data['food-logiq-mirror']) return;
@@ -568,7 +568,7 @@ async function handleMirrorChange(change) {
     }
 
     let bus = await CONNECTION.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}`
+      path: `${SERVICE_PATH}/businesses/${bid}`
     }).then(r => r.data)
       .catch(err => {
         error(`TP masterid entry not found for business ${bid}`);
@@ -631,16 +631,8 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     let bid;
     if (type === 'assessments') {
       bid = _.has(item, 'performedOnBusiness._id') ? item.performedOnBusiness._id : undefined;
-      //      if (_.has(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')) {
-      //        bid = _.get(item, 'sections.0.subsections.0.questions.0.productEvaluationOptions.answerRows.0.answers.7.answerText')
-      //        console.log('found an assessment bid');
-      //      }
     } else {
       bid = _.has(item, 'shareSource.sourceBusiness._id') ? item.shareSource.sourceBusiness._id : undefined
-      //      if (_.has(item, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
-      //        bid = item.shareSource.shareSpecificAttributes.customCentricityTest;
-      //        console.log('found a custom bid', bid);
-      //      }
     }
 
     if (!bid) {
@@ -714,13 +706,7 @@ async function getResourcesByMember(member) {
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&sourceBusinesses=${bid}&versionUpdated=${date}..`,
-      //to: `${SERVICE_PATH}/businesses/${bid}/${type}`,
       to: (i) => {
-        //        if (_.has(i, 'shareSource.shareSpecificAttributes.customCentricityTest')) {
-        //          bid = i.shareSource.shareSpecificAttributes.customCentricityTest;
-        //          console.log('found a custom bid', bid);
-        //          return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
-        //        }
         return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
       }
     })
@@ -737,7 +723,7 @@ async function getResourcesByMember(member) {
   }
 }
 
-async function approveFLDoc(docId) {
+async function approveFlDoc(docId) {
   info(`Approving associated FL Doc ${docId}`);
   await axios({
     method: 'put',
@@ -802,14 +788,14 @@ async function handleAssessment(item, bid, tp) {
     await Promise.each(found, async (job) => {
       TARGET_JOBS[job.jobId].assessments[item._id] = true;
       await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
+        path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
         data: {
           assessments: {
             [item._id]: true
           }
         }
       })
-      await approveFLDoc(job.flId);
+      await approveFlDoc(job.flId);
 
       //Create an update message
       await CONNECTION.post({
@@ -826,7 +812,7 @@ async function handleAssessment(item, bid, tp) {
     await Promise.each(found, async (job) => {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
       await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue/jobs/${job.jobId}`,
+        path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
         data: {
           assessments: {
             [item._id]: false
@@ -835,7 +821,7 @@ async function handleAssessment(item, bid, tp) {
       })
       let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
       // TODO: Only do this if it has a current status of 'awaiting-review'
-      await rejectFLDoc(job.flId, message);
+      await rejectFlDoc(job.flId, message);
     })
   } else if (item.state === 'Submitted') {
     info(`Autoapprove Assessments Configuration: [${AUTO_APPROVE_ASSESSMENTS}]`)
@@ -878,66 +864,56 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
     // create oada resources for each attachment
     await Promise.map(Object.keys(zip.files || {}), async (key) => {
-      let zdata = await zip.file(key).async("arraybuffer");
 
-      let response = await axios({
-        method: 'post',
-        url: `https://${DOMAIN}/resources`,
-        data: zdata,
-        headers: {
-          'Content-Disposition': 'inline',
-          'Content-Type': 'application/pdf',
-          'Authorization': "Bearer "+TOKEN
-        }
-      })
-
-      /*
-      let response = await CONNECTION.post({
-        path: `/resources`,
-        data: zdata,
-        headers: {
-          'Content-Disposition': 'inline',
-          'Content-Type': 'application/pdf',
-          'Content-Length': zdata.byteLength,
-        }
-      })
-      */
-
-      console.log('RESPONSE', response);
       let mirrorId = await CONNECTION.get({
         path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_id`,
       }).then(r => r.data)
 
+      let _id = await CONNECTION.get({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf/${key}/_id`,
+      }).then(r => r.data)
+      .catch(err => {
+        return;
+      })
 
-      let _id = response.headers['content-location'].replace(/^\//, '');
-      await CONNECTION.put({
-        path: `${_id}/_meta`,
-        //TODO: How should this be formatted?
-        data: {
-          filename: key,
-          services: {
-            'fl-sync': {
-              [item._id]: {
-                _ref: mirrorId,
+      if (!_id) {
+
+        let zdata = await zip.file(key).async("arraybuffer");
+        let _id = await CONNECTION.post({
+          path: `/resources`,
+          data: zdata,
+          contentType: 'application/json',
+        }).then(r => r.headers['content-location'].replace(/^\//, ''))
+
+        await CONNECTION.put({
+          path: `${_id}/_meta`,
+          //TODO: How should this be formatted?
+          data: {
+            filename: key,
+            services: {
+              'fl-sync': {
+                [item._id]: {
+                  _ref: mirrorId,
+                }
               }
             }
-          }
-        },
-        headers: { 'content-type': 'application/json' },
-      })
+          },
+          headers: { 'content-type': 'application/json' },
+        })
 
-      // Create a link from the FL mirror to the trellis pdf
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
-        data: {
-          vdoc: {
-            pdf: {
-              [key]: { _id }
+        // Create a link from the FL mirror to the trellis pdf
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
+          data: {
+            vdoc: {
+              pdf: {
+                [key]: { _id }
+              }
             }
-          }
-        },
-        headers: { 'content-type': 'application/json' },
-      })
+          },
+          headers: { 'content-type': 'application/json' },
+        })
+      }
 
       let resId = _id.replace(/resources\//, '');
 
@@ -954,17 +930,16 @@ async function handlePendingDoc(item, bid, tp, bname) {
         trellisDocKey: resId
       }
       await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue/pdfs/${resId}`,
+        path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`,
         data,
       })
       TARGET_PDFS[_id] = data;
 
       //link the file into the documents list
-      data = { _id, _rev: 0 }
       info(`Linking file to documents list at ${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}: ${JSON.stringify(data, null, 2)}`);
       await CONNECTION.put({
         path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
-        data,
+        data: { _id, _rev: 0 }
       })
     })
   } catch (err) {
@@ -989,7 +964,7 @@ async function handleApprovedDoc(item, bid, tp) {
 
   TARGET_JOBS[found.jobId].approved = true;
   await CONNECTION.put({
-    path: `/bookmarks/services/fl-sync/process-queue/jobs/${found.jobId}`,
+    path: `${SERVICE_PATH}/process-queue/jobs/${found.jobId}`,
     data: { approved: true }
   })
 
@@ -1015,11 +990,11 @@ async function handleApprovedDoc(item, bid, tp) {
     let resId = tid.trellisId.replace(/resources\//, '');
 
     await CONNECTION.delete({
-      path: `/bookmarks/services/fl-sync/process-queue/pdfs/${resId}`
+      path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`
     })
     delete TARGET_PDFS[tid.trellisId]
     await CONNECTION.delete({
-      path: `/bookmarks/services/fl-sync/process-queue/jobs/${tid}`
+      path: `${SERVICE_PATH}/process-queue/jobs/${tid}`
     })
     delete TARGET_JOBS[tid]
   } catch (err) {
@@ -1070,7 +1045,7 @@ async function validatePending(trellisDoc, flDoc, type) {
   return { message, status }
 }
 
-async function constructAssessment(job, result) {
+async function constructAssessment(job, result, updateFlId) {
   let { bid, bname } = job;
 
   let policies = Object.values(result.policies);
@@ -1091,16 +1066,18 @@ async function constructAssessment(job, result) {
   let el = _.find(policies, ['type', `Employers' Liability`]) || {};
   let employer = parseInt(el.el_each_accident || 0);
 
-  let assess = await spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker, bid);
+  let assess = await spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker, updateFlId);
 
-  let linkResponse = await linkAssessmentToDocument(CO_ID, {
-    "_id": assess.data._id,
-    "type": "assessment"
-  }, {
-    "_id": job.flId,
-    "name": job.name,
-    "type": "document"
-  })
+  if (!updateFlId) {
+    let linkResponse = await linkAssessmentToDocument(CO_ID, {
+      "_id": assess.data._id,
+      "type": "assessment"
+    }, {
+      "_id": job.flId,
+      "name": job.name,
+      "type": "document"
+    })
+  }
 
   return assess;
 }
@@ -1115,7 +1092,7 @@ async function handleScrapedResult(jobId) {
   info(`--> url [${url}]`);
   try {
     let request = {
-      url: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+      path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
     };
     let result = null;
     let retries = 0;
@@ -1154,60 +1131,72 @@ async function handleScrapedResult(jobId) {
     let { status, message } = await validatePending(result, flDoc, job.result.type);
 
     if (status) {
-      await axios({
-        method: 'post',
-        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${job.flId}/capa`,
-        headers: { Authorization: FL_TOKEN },
-        data: {
-          details: 'Document passed validation. Ready for approval.',
-          type: "change_request",
-        }
-      })
 
-      await CONNECTION.post({
-        path: `/resources/${job.jobId}`,
-        data: {
-          time: moment().format('X'),
-          information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
-        }
-      }).catch(err => {
-        error(err);
-        throw err;
-      });
+      let assessmentId = await CONNECTION.get({
+        path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+      }).then(r => {
+        return r.data
+      }
+      .catch(err => { })
 
-      let assess = await constructAssessment(job, result);
+      if (assessmentId) info(job, 'Assessment already exists.')
+      if (!assessmentId) info(job, 'Assessment does not yet exist.')
 
-      data.services['fl-sync'].assessment = assess.data._id;
+      let assess = await constructAssessment(job, result, assessmentId);
+      assessmentId = assess.data._id;
+
+      if (!assessmentId) {
+
+        await CONNECTION.post({
+          path: `/resources/${job.jobId}/updates`,
+          data: {
+            time: moment().format('X'),
+            information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
+          }
+        }).catch(err => {
+          error(err);
+          throw err;
+        });
+
+        await CONNECTION.post({
+          path: `/resources/${job.jobId}/updates`,
+          data: {
+            time: moment().format('X'),
+            information: `A FoodLogiQ Assessment has been created and associated with this document`,
+          }
+        }).catch(err => {
+          error(err);
+          throw (err);
+        })
+
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+          data: assessmentId
+        })
+      }
+
+      data.services['fl-sync'].assessments = {
+        [ASSESSMENT_TEMPLATE_ID]: assessmentId
+      }
 
       TARGET_JOBS[jobId].assessments = {
-        [assess.data._id]: false
+        [assessmentId]: false
       }
       await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/process-queue/jobs/${jobId}`,
+        path: `${SERVICE_PATH}/process-queue/jobs/${jobId}`,
         data: {
           assessments: {
-            [assess.data._id]: false
+            [assessmentId]: false
           }
         }
       })
 
-      await CONNECTION.post({
-        path: `/resources/${job.jobId}`,
-        data: {
-          time: moment().format('X'),
-          information: `A FoodLogiQ Assessment has been created and associated with this document`,
-        }
-      }).catch(err => {
-        error(err);
-        throw (err);
-      })
-
-      info(`Spawned assessment [${assess.data._id}] for business id [${job.bid}]`);
+      info(`Spawned assessment [${assessmentId}] for business id [${job.bid}]`);
     } else {
-      await rejectFLDoc(job.flId, message)
+      await rejectFlDoc(job.flId, message)
 
       await CONNECTION.post({
-        path: `/resources/${job.jobId}`,
+        path: `/resources/${job.jobId}/updates`,
         data: {
           time: moment().format('X'),
           information: `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejecting FL Document`,
@@ -1217,22 +1206,11 @@ async function handleScrapedResult(jobId) {
 
     info(`Job result stored at trading partner ${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
 
-    // Link to the original food-logiq document
+    // Add meta data to the trellis result document
     let resp = await CONNECTION.put({
       path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
       data
     })
-    /*
-    let resp = await axios({
-      method: 'put',
-      url: `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-      headers: {
-        Authorization: `Bearer ${TRELLIS_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      data
-    })
-    */
   } catch (err) {
     error(err);
     throw err;
@@ -1240,7 +1218,7 @@ async function handleScrapedResult(jobId) {
 
 }
 
-async function rejectFLDoc(docId, message) {
+async function rejectFlDoc(docId, message) {
   info(`Rejecting FL document [${docId}]. ${message}`);
   //reject to FL
   await axios({
@@ -1328,7 +1306,7 @@ async function pollFl() {
       forEach: async (i) => {
         await Promise.each(['products', 'locations', 'documents', 'assessments'], async (type) => {
           await CONNECTION.head({
-            path: `/bookmarks/services/fl-sync/businesses/${i.business._id}/${type}`,
+            path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
           }).catch(async err => {
             if (err.status !== 404) throw err;
             let _id = await CONNECTION.post({
@@ -1337,7 +1315,7 @@ async function pollFl() {
             }).then(r => r.headers['content-location'].replace(/^\//, ''))
 
             await CONNECTION.put({
-              path: `/bookmarks/services/fl-sync/businesses/${i.business._id}/${type}`,
+              path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
               data: { _id, _rev: 0 }
             })
           })
@@ -1423,7 +1401,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
  * deletes the Centricity Test Account documents from FL
  * @param path url 
  */
-async function cleanUpFLDocuments() {
+async function cleanUpFlDocuments() {
   info("--> demo cleanup in process ... ");
   try {
     await CONNECTION.put({
@@ -1458,7 +1436,7 @@ async function cleanUpFLDocuments() {
   } catch (e) {
     error("--> Error when demo cleanup ", e);
   }
-}//cleanUpFLDocuments
+}//cleanUpFlDocuments
 
 /** ====================== ASSESSMENTS ===================================== {
  * updates the content of a spawned assessment
@@ -1556,7 +1534,7 @@ async function buildAnswerArrayFromAssessmentTemplate() {
  * @param employer liability
  * @param worker compensation
  */
-async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker, customCentricityTest) {
+async function spawnAssessment(bid, bname, general, aggregate, auto, product, umbrella, employer, worker, updateFlId) {
   let PATH_SPAWN_ASSESSMENT = `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment`;
   let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
   let _assessment_template = _.cloneDeep(assessment_template);
@@ -1564,41 +1542,41 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
   _assessment_template["performedOnBusiness"]["name"] = bname;
 
   //spawning the assessment with some (not all) values 
-  return axios({
-    method: "post",
-    url: PATH_SPAWN_ASSESSMENT,
+  let result = await axios({
+    method: updateFlId ? "get": "post",
+    url: updateFlId ? `${PATH_SPAWN_ASSESSMENT}/${updateFlId}` : PATH_SPAWN_ASSESSMENT,
     headers: { 'Authorization': FL_TOKEN },
     data: _assessment_template
-  }).then(async (result) => {
-    //setting the assessment if to be modified
-    let SPAWNED_ASSESSMENT_ID = result.data._id;
-    let ASSESSMENT_BODY = result.data;
-    let answers_template = [];
+  })
 
-    //populating answers in the COI assessment
-    answer_content["answers"][0]["answerNumeric"] = general;
-    answer_content["answers"][1]["answerNumeric"] = aggregate;
-    answer_content["answers"][2]["answerNumeric"] = auto;
-    answer_content["answers"][3]["answerNumeric"] = product;
-    answer_content["answers"][4]["answerNumeric"] = umbrella;
-    answer_content["answers"][5]["answerNumeric"] = employer;
-    answer_content["answers"][6]["answerBool"] = worker;
-    //    if (SCALE) answer_content["answers"][7]["answerText"] = customCentricityTest;
+  //setting the assessment if to be modified
+  let SPAWNED_ASSESSMENT_ID = result ? result.data._id : updateFlId;
+  let ASSESSMENT_BODY = result.data : 
+  let answers_template = [];
 
-    //including the answers in the answer array
-    answers_template.push(answer_content);
-    //attaching the answers into the assessment template body
-    ASSESSMENT_BODY["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["answerRows"] = answers_template;
-    // updating percentage completed
-    ASSESSMENT_BODY["state"] = "In Progress";
-    ASSESSMENT_BODY["questionInteractionCounts"]["answered"] = 1;
-    ASSESSMENT_BODY["questionInteractionCounts"]["percentageCompleted"] = 100;
-    // creating the path for a specific assessment (update/put)
-    PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
-    //updating assessment
-    ASSESSMENT_BODY["state"] = "Submitted";
-    let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
-    return response || result
+  //populating answers in the COI assessment
+  answer_content["answers"][0]["answerNumeric"] = general;
+  answer_content["answers"][1]["answerNumeric"] = aggregate;
+  answer_content["answers"][2]["answerNumeric"] = auto;
+  answer_content["answers"][3]["answerNumeric"] = product;
+  answer_content["answers"][4]["answerNumeric"] = umbrella;
+  answer_content["answers"][5]["answerNumeric"] = employer;
+  answer_content["answers"][6]["answerBool"] = worker;
+
+  //including the answers in the answer array
+  answers_template.push(answer_content);
+  //attaching the answers into the assessment template body
+  ASSESSMENT_BODY["sections"][0]["subsections"][0]["questions"][0]["productEvaluationOptions"]["answerRows"] = answers_template;
+  // updating percentage completed
+  ASSESSMENT_BODY["state"] = "In Progress";
+  ASSESSMENT_BODY["questionInteractionCounts"]["answered"] = 1;
+  ASSESSMENT_BODY["questionInteractionCounts"]["percentageCompleted"] = 100;
+  // creating the path for a specific assessment (update/put)
+  PATH_TO_UPDATE_ASSESSMENT = PATH_TO_UPDATE_ASSESSMENT + `/${SPAWNED_ASSESSMENT_ID}`;
+  //updating assessment
+  ASSESSMENT_BODY["state"] = "Submitted";
+  let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
+  return response || result
   }).catch((err) => {
     error("--> Error when spawning an assessment.");
     error(err);

@@ -51,7 +51,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@npm:^2.3.0, @oada/client@npm:^2.6.1":
+"@oada/client@npm:^2.3.0":
   version: 2.6.1
   resolution: "@oada/client@npm:2.6.1"
   dependencies:
@@ -68,6 +68,27 @@ __metadata:
     type-is: ^1.6.18
     ws: ^8.0.0
   checksum: 90971ea39ddade6d1c6af6aec1e990fbb00017306260c52fe1c66438b3ec998b1b86684c133a092e81a484d59bef42060483a1d425595129d6d6569e9829c2dd
+  languageName: node
+  linkType: hard
+
+"@oada/client@npm:^2.6.2":
+  version: 2.6.2
+  resolution: "@oada/client@npm:2.6.2"
+  dependencies:
+    "@oada/types": ^1.5.1
+    buffer: ^6.0.3
+    cross-fetch: ^3.0.6
+    debug: ^4.1.1
+    deep-clone: ^3.0.3
+    fetch-h2: ^3.0.0
+    file-type: ^16.5.3
+    isomorphic-ws: ^4.0.1
+    ksuid: ^2.0.0
+    p-queue: ^6.4.0
+    reconnecting-websocket: ^4.4.0
+    type-is: ^1.6.18
+    ws: ^8.0.0
+  checksum: e99cdf634aabedf19313d6089b57afc7aa01c2d3640a1cd757866fdde117dcbd71462f46b6a8c7183ee525da62bd32c1b40795b3b546a0cad2dc9362ea030fd3
   languageName: node
   linkType: hard
 
@@ -102,7 +123,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@qlever-llc/fl-sync@workspace:."
   dependencies:
-    "@oada/client": ^2.6.1
+    "@oada/client": ^2.6.2
     "@oada/list-lib": ^2.1.9
     "@oada/types": ^1.5.1
     "@tsconfig/node16": ^1.0.1
@@ -117,6 +138,7 @@ __metadata:
     chai-as-promised: ^7.1.1
     convict: ^6.1.0
     convict-format-with-validator: ^6.0.1
+    csvjson: ^5.1.0
     debug: ^4.3.1
     dotenv: ^10.0.0
     esm: ^3.2.25
@@ -171,6 +193,13 @@ __metadata:
   dependencies:
     defer-to-connect: ^2.0.0
   checksum: 13d8f71dbd792b620b2cd13d72d086ef031ebefd5263a9db2f34693a32e4d90920fa1d7075cd59bf0c9810b2b1b93ad36d89fc88aba4cd3b8022df7ecc5ffdec
+  languageName: node
+  linkType: hard
+
+"@tokenizer/token@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@tokenizer/token@npm:0.3.0"
+  checksum: e4db685bcb759ded5e4e58dc4df0b15f4b816fb54147391efba2be9a95218aa29b7d98f7d6ff1a903c6d6e7d27ddb47acfbf95f2f2545bb170d27eaea8a5cedc
   languageName: node
   linkType: hard
 
@@ -1248,6 +1277,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"csvjson@npm:^5.1.0":
+  version: 5.1.0
+  resolution: "csvjson@npm:5.1.0"
+  checksum: a845185c1b3edd4c5bfceb11d6a9a31e02b22aaf81e3f4bf9775312f4bd1cb252a0e448882aad3dded5914b27e07489b590bdd220d7b5157889f49c186c66dc1
+  languageName: node
+  linkType: hard
+
 "d@npm:1, d@npm:^1.0.1":
   version: 1.0.1
   resolution: "d@npm:1.0.1"
@@ -1653,6 +1689,17 @@ __metadata:
     to-arraybuffer: ^1.0.1
     tough-cookie: ^4.0.0
   checksum: 9d3e173b9bb2ef116bacd0d63566789d164c98dbccb66f52085f9f2f480bd23b445cd3a9e98824d368e81b6f7a34c9659f5fc12a3cfc1476a3ad0c0481f93499
+  languageName: node
+  linkType: hard
+
+"file-type@npm:^16.5.3":
+  version: 16.5.3
+  resolution: "file-type@npm:16.5.3"
+  dependencies:
+    readable-web-to-node-stream: ^3.0.0
+    strtok3: ^6.2.4
+    token-types: ^4.1.1
+  checksum: 172e198de0cad0c7be54d9fb8f11fbfb89a238d98d9961186ed2bf063f35315cfa67a20531d201e793bc9b154d1882d0924fe7fa13936a667e7dcdd1c545c5f0
   languageName: node
   linkType: hard
 
@@ -3283,6 +3330,13 @@ fsevents@~2.3.1:
   languageName: node
   linkType: hard
 
+"peek-readable@npm:^4.0.1":
+  version: 4.0.1
+  resolution: "peek-readable@npm:4.0.1"
+  checksum: 2be097d82bd97e7f2e48dad35ed654beb0a1ba6dd6454fae7820587d72e4b5b2ec50a8ad40eb315039ef41c5c973bf1631249c84aa3914d8cf46fd6f800c99b2
+  languageName: node
+  linkType: hard
+
 "picomatch@npm:^2.0.4, picomatch@npm:^2.2.1, picomatch@npm:^2.2.3":
   version: 2.3.0
   resolution: "picomatch@npm:2.3.0"
@@ -3472,6 +3526,15 @@ fsevents@~2.3.1:
     string_decoder: ~1.1.1
     util-deprecate: ~1.0.1
   checksum: 6e3826560627a751feb3a8aec073ef94c6e47b8c8e06eb5d136323b5f09db9d2077c23a42a8d54ed0123695af54b36c1e4271a8ec55112b15f4b89020d8dec72
+  languageName: node
+  linkType: hard
+
+"readable-web-to-node-stream@npm:^3.0.0":
+  version: 3.0.2
+  resolution: "readable-web-to-node-stream@npm:3.0.2"
+  dependencies:
+    readable-stream: ^3.6.0
+  checksum: 3abfec81321447ff798072c3bc9cc2f463d76d6de045726964f17a0dca309d2d9eb7fe82898dff41fdaaf03c7cf235b862f945990fa139b88193488633fdeb26
   languageName: node
   linkType: hard
 
@@ -3955,6 +4018,16 @@ fsevents@~2.3.1:
   languageName: node
   linkType: hard
 
+"strtok3@npm:^6.2.4":
+  version: 6.2.4
+  resolution: "strtok3@npm:6.2.4"
+  dependencies:
+    "@tokenizer/token": ^0.3.0
+    peek-readable: ^4.0.1
+  checksum: d1bb0ec1d8316434771bb3a3d7aea351e93068f090f1481a9396ff0397a18eb10ee4fd21d4688b27c2033026d29c3bd3e124c649921c3569711e3cccdaacc2da
+  languageName: node
+  linkType: hard
+
 "supports-color@npm:6.0.0":
   version: 6.0.0
   resolution: "supports-color@npm:6.0.0"
@@ -4039,6 +4112,16 @@ fsevents@~2.3.1:
   dependencies:
     is-number: ^7.0.0
   checksum: 2b6001e314e4998a07137c197e333fac2f86d46d0593da90b678ae64e2daa07274b508f83cca09e6b3504cdf222497dcb5b7daceb6dc13a9a8872f58a27db907
+  languageName: node
+  linkType: hard
+
+"token-types@npm:^4.1.1":
+  version: 4.1.1
+  resolution: "token-types@npm:4.1.1"
+  dependencies:
+    "@tokenizer/token": ^0.3.0
+    ieee754: ^1.2.1
+  checksum: c022ec7a9095414937cb136d038ccb80277bbe9508e967149352819687e30a95374ed76f17ed22f8521b4b1c36d877d4d8945cec537fa7057536dee656a5928f
   languageName: node
   linkType: hard
 
