@@ -65,6 +65,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["mocha", "npm:7.2.0"],
             ["moment", "npm:2.29.1"],
             ["momentjs", "npm:2.0.0"],
+            ["node-stream-zip", "npm:1.14.0"],
             ["nodemon", "npm:2.0.7"],
             ["prettier", "npm:2.3.1"],
             ["sha256", "npm:0.2.0"],
@@ -234,6 +235,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["mocha", "npm:7.2.0"],
             ["moment", "npm:2.29.1"],
             ["momentjs", "npm:2.0.0"],
+            ["node-stream-zip", "npm:1.14.0"],
             ["nodemon", "npm:2.0.7"],
             ["prettier", "npm:2.3.1"],
             ["sha256", "npm:0.2.0"],
@@ -3573,6 +3575,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/node-gyp-build-npm-4.2.3-051c80c95f-8512c25498.zip/node_modules/node-gyp-build/",
           "packageDependencies": [
             ["node-gyp-build", "npm:4.2.3"]
+          ],
+          "linkType": "HARD",
+        }]
+      ]],
+      ["node-stream-zip", [
+        ["npm:1.14.0", {
+          "packageLocation": "./.yarn/cache/node-stream-zip-npm-1.14.0-e74c4ab9a9-96c9e831f7.zip/node_modules/node-stream-zip/",
+          "packageDependencies": [
+            ["node-stream-zip", "npm:1.14.0"]
           ],
           "linkType": "HARD",
         }]

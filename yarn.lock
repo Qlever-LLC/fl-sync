@@ -151,6 +151,7 @@ __metadata:
     mocha: ^7.2.0
     moment: ^2.29.1
     momentjs: ^2.0.0
+    node-stream-zip: ^1.14.0
     nodemon: ^2.0.7
     prettier: ^2.3.0
     sha256: ^0.2.0
@@ -3040,6 +3041,13 @@ fsevents@~2.3.1:
   bin:
     node-gyp: bin/node-gyp.js
   checksum: 6e014ff491cc4fdd25c41e38f9f92ab665d3b2e1ef7cd18e292aff9b293ef485c6bb93194461a5538d3bfa4b678258df974800660dd7d40865866ef3188c5481
+  languageName: node
+  linkType: hard
+
+"node-stream-zip@npm:^1.14.0":
+  version: 1.14.0
+  resolution: "node-stream-zip@npm:1.14.0"
+  checksum: 96c9e831f74f165caff66bfcb8d699187404980d0917986a3e569e5d342ace29d8775a18d72c79683b2fc2de941aa8ed1e5c019a1e004f1990830d726a050e52
   languageName: node
   linkType: hard
 

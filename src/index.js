@@ -19,6 +19,7 @@ const TRELLIS_TOKEN = config.get('trellis.token');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const jszip = require('jszip');
+const StreamZip = require('node-stream-zip');
 const oadalist = require('@oada/list-lib');
 //const sampleDocs = require('./sampleDocs.js');
 const ListWatch = oadalist.ListWatch;
@@ -856,7 +857,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
       method: 'get',
       url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
       headers: { Authorization: FL_TOKEN },
-      responseType: 'arrayBuffer',
+//      responseType: 'arrayBuffer',
       responseEncoding: 'binary'
     }).then(r => r.data);
 
@@ -877,13 +878,18 @@ async function handlePendingDoc(item, bid, tp, bname) {
       })
 
       if (!_id) {
-
-        let zdata = await zip.file(key).async("arraybuffer");
-        let _id = await CONNECTION.post({
-          path: `/resources`,
+        let ab = await zip.file(key).async("uint8array")
+        let zdata = Buffer.alloc(ab.byteLength);
+        for (var i = 0; i < zdata.length; ++i) {
+            zdata[i] = ab[i];
+        }
+        let kid = (await ksuid.random()).string;
+        _id = await CONNECTION.put({
+          path: `/resources/${kid}`,
           data: zdata,
-          contentType: 'application/json',
+          contentType: 'application/pdf',
         }).then(r => r.headers['content-location'].replace(/^\//, ''))
+        console.log("THING", _id);
 
         await CONNECTION.put({
           path: `${_id}/_meta`,
@@ -1100,7 +1106,7 @@ async function handleScrapedResult(jobId) {
     // retrying ...
     while (result === null && retries++ < MAX_RETRIES) {
       await Promise.delay(2000);
-      result = await CONNECTION.get({request})
+      result = await CONNECTION.get(request)
         .then(r => r.data)
         .catch(err => {
           if (retries === MAX_RETRIES) {
@@ -1133,11 +1139,10 @@ async function handleScrapedResult(jobId) {
     if (status) {
 
       let assessmentId = await CONNECTION.get({
-        path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+        path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
       }).then(r => {
         return r.data
-      }
-      .catch(err => { })
+      }).catch(err => { })
 
       if (assessmentId) info(job, 'Assessment already exists.')
       if (!assessmentId) info(job, 'Assessment does not yet exist.')
@@ -1547,11 +1552,15 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
     url: updateFlId ? `${PATH_SPAWN_ASSESSMENT}/${updateFlId}` : PATH_SPAWN_ASSESSMENT,
     headers: { 'Authorization': FL_TOKEN },
     data: _assessment_template
-  })
+  }).catch((err) => {
+    error("--> Error when spawning an assessment.");
+    error(err);
+    throw err;
+  });
 
   //setting the assessment if to be modified
   let SPAWNED_ASSESSMENT_ID = result ? result.data._id : updateFlId;
-  let ASSESSMENT_BODY = result.data : 
+  let ASSESSMENT_BODY = result.data;
   let answers_template = [];
 
   //populating answers in the COI assessment
@@ -1577,11 +1586,6 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
   ASSESSMENT_BODY["state"] = "Submitted";
   let response = await updateAssessment(PATH_TO_UPDATE_ASSESSMENT, ASSESSMENT_BODY);
   return response || result
-  }).catch((err) => {
-    error("--> Error when spawning an assessment.");
-    error(err);
-    throw err;
-  });
 }//spawnAssessment
 // ======================  ASSESSMENTS ============================== }
 
