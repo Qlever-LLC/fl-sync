@@ -969,8 +969,13 @@ async function traceCois() {
     a: 0,
     b: 0,
     c: 0,
-    d: 0
+    d: 0,
+    e: 0,
+    f: 0
   }
+  let queue = await con.get({
+    path: `/bookmarks/services/fl-sync/process-queue`
+  }).then(r => r.data);
   let {data} = await con.get({
     path: `/bookmarks/services/fl-sync/businesses`
   })
@@ -1034,8 +1039,9 @@ async function traceCois() {
         if (tpdoc.status !== 200) return;
         tpdoc = tpdoc.data
 
+        let job;
         if (pointer.has(tpdoc, `/services/target/jobs`)) {
-          let job = Object.keys(tpdoc.services.target.jobs)[0];
+          job = Object.keys(tpdoc.services.target.jobs)[0];
           //console.log('Found job',{bid, key, job});
           obj.c++;
         }
@@ -1044,9 +1050,19 @@ async function traceCois() {
           let coi = Object.keys(tpdoc.vdoc.cois)[0];
           //console.log('Found coi', {bid, key, coi});
           obj.d++;
+
+          if (job && pointer.has(queue, `/jobs//${job}/assessments`)) {
+            let ass = Object.keys(pointer.get(queue, `/jobs//${job}/assessments`))[0];
+            let assess = pointer.get(queue, `/jobs//${job}/assessments/${ass}`)
+            if (assess === false) obj.e++;
+            if (assess === true) {
+              obj.e++;
+              obj.f++;
+            }
+          }
         } else {
           if (ref) {
-            console.log(ref);;
+        //    console.log(ref);;
           }
         }
       }
@@ -1107,6 +1123,7 @@ async function postPdfs() {
   for await (const f of dir) {
     let data = fs.readFileSync(`./pdfs/${f.name}`)
 
+    /*
     let _id = await axios({
       method: 'post',
       url: `https://localhost:3000/resources`,
@@ -1117,8 +1134,18 @@ async function postPdfs() {
       },
       data
     }).then(r => r.headers['content-location'].replace(/^\//, ''))
-    console.log(_id);
+    */
 
+    let _id = await con.post({
+      path: `/resources`,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': "inline",
+      },
+      data
+    }).then(r => r.headers['content-location'].replace(/^\//, ''))
+
+    console.log('id', _id);
     let result = await con.post({
       path: `/resources`,
       data: {
@@ -1131,7 +1158,9 @@ async function postPdfs() {
       }
     }).then(r => r.headers['content-location'].replace(/^\//, ''))
     console.log(result);
+      break;
 
+/*
     let key = result.replace(/^resources\//, '');
     await con.put({
       path: `/bookmarks/services/target/jobs/${key}`,
@@ -1140,6 +1169,7 @@ async function postPdfs() {
         _rev: 0
       }
     })
+    */
   }
 }
 
@@ -1156,13 +1186,13 @@ async function main() {
   try {
 
     let start = Date.now()
-//    await postPdfs();
+    await postPdfs();
 //    await cleanupProcessQueue();
 //    await findTrellisDocs()
 //    await reprocessProd();
 //    await countCois();
 //    await handleIncompleteCois();
-    await traceCois();
+//    await traceCois();
 //    await listCois();
 //  await findChange(493126);
 //  await deleteFlBizDocs();
