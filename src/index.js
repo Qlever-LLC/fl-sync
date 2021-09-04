@@ -45,7 +45,6 @@ const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 const CONCURRENCY = config.get('trellis.concurrency');
 const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const LOCAL = process.env.LOCAL;
-const SCALE = (process.env.SCALE);
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
@@ -63,8 +62,8 @@ const AssessmentType = Object.freeze(
 // left here for reference
 let assessment_template = {
   "assessmentTemplate": {
-    "_id": SCALE ? "61018c2541ae7b000e8ab6eb" : ASSESSMENT_TEMPLATE_ID,
-    "name": SCALE ? "Trellis Test Certificate of Insurance (COI) Requirements" : ASSESSMENT_TEMPLATE_NAME
+    "_id": ASSESSMENT_TEMPLATE_ID,
+    "name": ASSESSMENT_TEMPLATE_NAME
   },
   "availableInCommunity": {
     "community": {
@@ -92,53 +91,45 @@ let assessment_template = {
 // TODO: need to polish this code
 // left here for reference
 let answer_content = {
-  "_id": SCALE ? "610a0130886afc8196000001" : "6091a3bed4e9d21beb000001",
+  "_id": "6091a3bed4e9d21beb000001",
   "answers": [
     {
-      "column": SCALE ? "61018c2541ae7b000e8ab6ef" : "606cc7eff8014707de000012",
+      "column": "606cc7eff8014707de000012",
       "answerText": null,
       "answerBool": null,
     },
     {
-      "column": SCALE ? "61018c2541ae7b000e8ab6f0" : "606cc83bf8014788eb000013",
+      "column": "606cc83bf8014788eb000013",
       "answerText": null,
       "answerBool": null,
     },
     {
-      "column": SCALE ? "61018c2541ae7b000e8ab6f1" : "606cc860f801475f03000014",
+      "column": "606cc860f801475f03000014",
       "answerText": null,
       "answerBool": null,
     },
     {
-      "column": SCALE ? "61018c2541ae7b000e8ab6f2" : "6091a7361b70862ee2000001",
+      "column": "6091a7361b70862ee2000001",
       "answerText": null,
       "answerBool": null,
     },
     {
-      "column": SCALE ? "61018c2541ae7b000e8ab6f3" : "606cc887f80147f255000015",
+      "column": "606cc887f80147f255000015",
       "answerText": null,
       "answerBool": null,
     },
     {
-      "column": SCALE ? "61018c2541ae7b000e8ab6f4" : "606f661d2914d0eaff000001",
+      "column": "606f661d2914d0eaff000001",
       "answerText": null,
       "answerBool": null,
     },
     {
-      "column": SCALE ? "61018c2541ae7b000e8ab6f5" : "606f664b2914d09a5f000002",
+      "column": "606f664b2914d09a5f000002",
       "answerText": null,
       "answerNumeric": null
     }
   ]
 };
-
-if (SCALE) {
-  answer_content.answers[7] = {
-    "column": "6108520538d48cd7a5000001",
-    "answerText": null,
-    "answerNumeric": null
-  }
-}
 
 // ======================  ASSESSMENTS ============================== }
 
