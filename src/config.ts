@@ -51,8 +51,8 @@ const config = convict({
         default: "/bookmarks/trellisfw/trading-partners/",
       },
       utps: {
-       default: "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index",
-       doc: 'unidentified trading partner endpoint in trellis',
+        default: "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index",
+        doc: 'unidentified trading partner endpoint in trellis',
       },
       'fl-bus': {
         default: "/bookmarks/services/fl-sync/businesses",
