@@ -171,7 +171,7 @@ let TARGET_PDFS = {};// index of trellis pdf documents mapped to FL documents
 let TARGET_JOBS = {};// index of target jobs mapped to FL documents
 
 async function getToken() {
-  return TRELLIS_TOKEN
+  return TRELLIS_TOKEN;
 }
 
 async function checkTime() {
@@ -245,12 +245,18 @@ async function checkTime() {
     }
     setCurrentlyPolling(false);
   }
-}
+}//checkTime
 
+/**
+ * searching and assigning target jobs to FL documents
+ * @param {*} item 
+ * @param {*} key 
+ * @returns 
+ */
 async function getLookup(item, key) {
   try {
     let jobId = key;
-    if (!(item.config && item.config.pdf && item.config.pdf._id)) return
+    if (!(item.config && item.config.pdf && item.config.pdf._id)) return;
     let trellisId = item.config.pdf._id;
     info(`New target job [${key}]: Trellis pdf: [${trellisId}]`);
 
@@ -268,14 +274,20 @@ async function getLookup(item, key) {
     await CONNECTION.put({
       path: `${SERVICE_PATH}/process-queue/jobs${key}`,
       data: TARGET_JOBS[key]
-    })
+    });
 
   } catch (err) {
     error(`Error associating new target job to FL documents`)
     error(err);
   }
-}
+}//getLookup
 
+/**
+ * handling an update from target
+ * @param {*} c 
+ * @param {*} jobId 
+ * @returns 
+ */
 async function onTargetUpdate(c, jobId) {
   info(`Recieved update for job [${jobId}]`);
   let job = TARGET_JOBS[jobId];
@@ -342,8 +354,11 @@ async function onTargetUpdate(c, jobId) {
     })
     throw err;
   }
-}
+}//onTargetUpdate
 
+/**
+ * watches FL config
+ */
 async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `${SERVICE_PATH}`,
@@ -389,8 +404,11 @@ async function watchFlSyncConfig() {
   }).catch(err => {
     error(err);
   })
-}
+}//watchFlSyncConfig
 
+/**
+ * watches target jobs
+ */
 async function watchTargetJobs() {
   info(`Started ListWatch on jobs of the target service...`)
   const watch = new ListWatch({
@@ -401,60 +419,35 @@ async function watchTargetJobs() {
     onAddItem: getLookup,
     onChangeItem: onTargetUpdate
   })
-}
+}//watchTargetJobs
 
-async function initialize() {
-  try {
-    info(`<<<<<<<<< Initializing fl-sync service. [v1.1.4] >>>>>>>>>>`);
-    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
-    TOKEN = await getToken();
-    // Connect to oada
-    try {
-      var conn = await oada.connect({
-        domain: 'https://' + DOMAIN,
-        token: TOKEN,
-        concurrency: CONCURRENCY,
-      })
-    } catch (err) {
-      error(`Initializing Trellis connection failed`);
-      error(err)
-    }
-    // Run populateIncomplete first so that the change feeds coming in will have
-    // the necessary in-memory items for them to continue being processed.
-    setConnection(conn);
-    //await populateIncomplete()
-    await watchTargetJobs();
-    await watchFlSyncConfig();
-    //  await createFlWebsocket();
-    await checkTime();
-    setInterval(checkTime, checkInterval);
-    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
-  } catch (err) {
-    error(err);
-    throw err;
-  }
-}
 
+/**
+ * populates target pdfs and jobs - incomplete
+ */
 async function populateIncomplete() {
   let data = await CONNECTION.get({
     path: `${SERVICE_PATH}/process-queue`
   }).catch((err) => {
-    if (err.status === 404) return
+    if (err.status === 404) return;
     throw err;
   }).then(r => r.data);
 
   await Promise.map(Object.keys(data.pdfs), async key => {
     let item = data.pdfs[key];
     TARGET_PDFS[`resources/${key}`] = item;
-  })
+  });
 
   await Promise.map(Object.keys(data.jobs), async key => {
     let item = data.jobs[key];
     TARGET_JOBS[key] = item;
-  })
- 
-}
+  });
 
+}//populateIncomplete
+
+/**
+ * handles incomplete
+ */
 async function handleIncomplete() {
   info(`handleIncomplete: CURRENTLY_POLLING: [${CURRENTLY_POLLING}]`);
   if (CURRENTLY_POLLING) return;
@@ -494,7 +487,7 @@ async function handleIncomplete() {
 
     let path = `${TP_MPATH}/${item.tp}/shared/trellisfw/documents/${item.trellisDocKey}`;
     let data = await CONNECTION.get({ path })
-    .then(r => r.data)
+      .then(r => r.data)
 
     await CONNECTION.delete({
       path
@@ -505,18 +498,39 @@ async function handleIncomplete() {
       data,
     })
   })
-}
+}//handleIncomplete
 
+/**
+ * handles FL Location
+ * @param {*} item 
+ * @param {*} bid 
+ * @param {*} tp 
+ * @returns 
+ */
 async function handleFlLocation(item, bid, tp) {
   info(`Handling FL location ${item._id}. No handlers currently.`);
   return
-}
+}//handleFlLocation
 
+/**
+ * handles FL Product
+ * @param {*} item 
+ * @param {*} bid 
+ * @param {*} tp 
+ * @returns 
+ */
 async function handleFlProduct(item, bid, tp) {
   info(`Handling FL product ${item._id}. No handlers currently.`);
   return
-}
+}//handleFlProduct
 
+/**
+ * handling FL document
+ * @param {*} item 
+ * @param {*} bid businessid
+ * @param {*} tp trading-partner
+ * @param {*} bname business name
+ */
 async function handleFlDocument(item, bid, tp, bname) {
   info(`Handling fl document ${item._id}`)
   let status = item.shareSource && item.shareSource.approvalInfo.status;
@@ -533,12 +547,15 @@ async function handleFlDocument(item, bid, tp, bname) {
     default:
       break;
   }
-}
+}//handleFlDocument
 
-//TODO: Get rid of the GET in this handler; it should go away if change feeds are more consistent under
-// correct fix of tree PUT
-
-// Handle content mirrored into trellis via pollFl
+/**
+ * handles content mirrored into trellis via pollFL
+ * TODO: Get rid of the GET in this handler; it should go away if change feeds are more consistent under
+ * correct fix of tree PUT
+ * @param {*} change 
+ * @returns 
+ */
 async function handleMirrorChange(change) {
   try {
     info('handleMirrorChange processing FL resource');
@@ -565,7 +582,7 @@ async function handleMirrorChange(change) {
       .catch(err => {
         error(`TP masterid entry not found for business ${bid}`);
         return;
-      })
+      });
     if (!bus.masterid) error(`No trading partner found for business ${bid}.`)
     if (!bus.masterid) return;
     let tp = bus.masterid;
@@ -596,13 +613,17 @@ async function handleMirrorChange(change) {
         break;
       default:
         return;
-    }
+    }//switch
   } catch (err) {
     error('Error handling mirror change', err);
     throw err;
   }
-}
+}//handleMirrorChange
 
+/**
+ * fetches community resources
+ * @param {*} param0 pageIndex, type, date
+ */
 async function fetchCommunityResources({ pageIndex, type, date }) {
   pageIndex = pageIndex || 0;
   let url = type === 'assessments' ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${date}..`
@@ -639,14 +660,14 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
       if (!equals) info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
       if (!equals) {
-        delay+= 20000;
+        delay += 20000;
         sync = true;
       }
     } catch (err) {
       if (err.status !== 404) throw err;
       info(`Resource is not already on trellis. Syncing...`);
       sync = true;
-      delay+= 20000;
+      delay += 20000;
     }
 
     // Now, sync
@@ -659,7 +680,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
           "_id": `resources/${_id}`,
           "_rev": 0
         }
-      })
+      });
       let resp = await CONNECTION.put({
         path: `/resources/${_id}`,
         data: { 'food-logiq-mirror': item }
@@ -670,12 +691,15 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
     info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
-    if (type === 'documents') info(`Pausing for ${delay/60000} minutes`)
+    if (type === 'documents') info(`Pausing for ${delay / 60000} minutes`)
     if (type === 'documents') await Promise.delay(delay)
     await fetchCommunityResources({ type, date, pageIndex: pageIndex + 1 })
   }
 }
 
+/**
+ * gets resources
+ */
 async function getResources() {
   //Format date
   let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
@@ -689,6 +713,9 @@ async function getResources() {
   await fetchCommunityResources({ type: 'assessments', date })
 }
 
+/**
+ * gets resources by member
+ */
 async function getResourcesByMember(member) {
   let bid = member.business._id;
   //Format date
@@ -713,8 +740,12 @@ async function getResourcesByMember(member) {
   } catch (err) {
     throw err;
   }
-}
+}//getResourcesByMember
 
+/**
+ * approves fl document
+ * @param {*} docId 
+ */
 async function approveFlDoc(docId) {
   info(`Approving associated FL Doc ${docId}`);
   await axios({
@@ -724,9 +755,14 @@ async function approveFlDoc(docId) {
     data: {
       status: "Approved"
     }
-  })
-}
+  });
+}//approveFlDoc
 
+/**
+ * checks COI assessment
+ * @param {*} assessment 
+ * @returns 
+ */
 function checkCoIAssessment(assessment) {
   info(`Checking assessment ${assessment._id}`);
   let types = ['']
@@ -753,8 +789,13 @@ function checkCoIAssessment(assessment) {
     })
   }).flat(5).some(i => i)
 
-}
+}//checkCoIAssessment
 
+/**
+ * checks assessment
+ * @param {*} assessment 
+ * @returns 
+ */
 function checkAssessment(assessment) {
   info(`Checking assessment ${assessment._id}`);
   if (assessment.assessmentTemplate._id === ASSESSMENT_TEMPLATE_ID) {
@@ -769,10 +810,13 @@ function checkAssessment(assessment) {
           return column.statisticsCommon.percentWithinTolerance < 100
         })
       })
-    })
+    });
   }).flat(5).some(i => i)
-}
+}//checkAssessment
 
+/**
+ * handles assessment
+ */
 async function handleAssessment(item, bid, tp) {
   info(`Handling assessment [${item._id}]`)
   if (item.state === 'Approved') {
@@ -786,7 +830,7 @@ async function handleAssessment(item, bid, tp) {
             [item._id]: true
           }
         }
-      })
+      });
       await approveFlDoc(job.flId);
 
       //Create an update message
@@ -797,7 +841,7 @@ async function handleAssessment(item, bid, tp) {
           information: `FoodLogiQ Assessment has been approved`,
         }
       })
-    })
+    });
 
   } else if (item.state === 'Rejected') {
     let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
@@ -837,9 +881,15 @@ async function handleAssessment(item, bid, tp) {
       }
     }
   }
-}
+}//handleAssessment
 
-// Handle docs pending approval
+/**
+ * handles documents pending approval
+ * @param {*} item 
+ * @param {*} bid 
+ * @param {*} tp 
+ * @param {*} bname 
+ */
 async function handlePendingDoc(item, bid, tp, bname) {
   info(`Handling pending document [${item._id}]`);
   try {
@@ -848,7 +898,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
       method: 'get',
       url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
       headers: { Authorization: FL_TOKEN },
-//      responseType: 'arrayBuffer',
+      //      responseType: 'arrayBuffer',
       responseEncoding: 'binary'
     }).then(r => r.data);
 
@@ -864,15 +914,15 @@ async function handlePendingDoc(item, bid, tp, bname) {
       let _id = await CONNECTION.get({
         path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf/${key}/_id`,
       }).then(r => r.data)
-      .catch(err => {
-        return;
-      })
+        .catch(err => {
+          return;
+        });
 
       if (!_id) {
         let ab = await zip.file(key).async("uint8array")
         let zdata = Buffer.alloc(ab.byteLength);
         for (var i = 0; i < zdata.length; ++i) {
-            zdata[i] = ab[i];
+          zdata[i] = ab[i];
         }
         let kid = (await ksuid.random()).string;
         _id = await CONNECTION.put({
@@ -896,7 +946,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
             }
           },
           headers: { 'content-type': 'application/json' },
-        })
+        });
 
         // Create a link from the FL mirror to the trellis pdf
         await CONNECTION.put({
@@ -909,7 +959,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
             }
           },
           headers: { 'content-type': 'application/json' },
-        })
+        });
       }
 
       let resId = _id.replace(/resources\//, '');
@@ -925,11 +975,11 @@ async function handlePendingDoc(item, bid, tp, bname) {
         bid,
         bname,
         trellisDocKey: resId
-      }
+      };
       await CONNECTION.put({
         path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`,
         data,
-      })
+      });
       TARGET_PDFS[_id] = data;
 
       //link the file into the documents list
@@ -938,19 +988,22 @@ async function handlePendingDoc(item, bid, tp, bname) {
         path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
         data: { _id, _rev: 0 }
       })
-    })
+    });
   } catch (err) {
     error(`Error occurred while fetching FL attachments`);
-    error(err)
+    error(err);
     throw err;
   }
-}
+}//handlePendingDoc
 
-
-
-// Move approved docs into final location
-//TODO No need to rescrape if accepted? Lookup and link in the already-scraped 
-// result
+/**
+ * moves approved documents into final location
+ * TODO: No need to rescrape if accepted? Lookup and link in the already-scraped
+ * @param {*} item 
+ * @param {*} bid 
+ * @param {*} tp 
+ * @returns 
+ */
 async function handleApprovedDoc(item, bid, tp) {
   info(`Handling approved document resource [${item._id}]`)
   //1. Get reference of corresponding pending scraped pdf
@@ -963,7 +1016,7 @@ async function handleApprovedDoc(item, bid, tp) {
   await CONNECTION.put({
     path: `${SERVICE_PATH}/process-queue/jobs/${found.jobId}`,
     data: { approved: true }
-  })
+  });
 
   //2. 
   info(`Moving approved document to [${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
@@ -998,9 +1051,15 @@ async function handleApprovedDoc(item, bid, tp) {
     error('Error moving document result into trading-partner indexed docs')
     error(err)
   }
-}
+}//handleApprovedDoc
 
-// Validate documents that have not yet be approved
+/**
+ * validates documents that have not yet been approved
+ * @param {*} trellisDoc 
+ * @param {*} flDoc 
+ * @param {*} type 
+ * @returns 
+ */
 async function validatePending(trellisDoc, flDoc, type) {
   info(`Validating pending doc [${trellisDoc._id}]`);
   let message;
@@ -1037,11 +1096,18 @@ async function validatePending(trellisDoc, flDoc, type) {
       }
     }
 
-  })
+  });
 
-  return { message, status }
-}
+  return { message, status };
+}//validatePending
 
+/**
+ * builds assessment
+ * @param {*} job 
+ * @param {*} result 
+ * @param {*} updateFlId 
+ * @returns 
+ */
 async function constructAssessment(job, result, updateFlId) {
   let { bid, bname } = job;
 
@@ -1077,8 +1143,12 @@ async function constructAssessment(job, result, updateFlId) {
   }
 
   return assess;
-}
+}//constructAssessment
 
+/**
+ * handles scraped result
+ * @param {*} jobId 
+ */
 async function handleScrapedResult(jobId) {
   let job = TARGET_JOBS[jobId];
   let flDoc;
@@ -1212,8 +1282,11 @@ async function handleScrapedResult(jobId) {
     throw err;
   }
 
-}
+}//handleScrapedResult
 
+/**
+ * rejects fl document
+ */
 async function rejectFlDoc(docId, message) {
   info(`Rejecting FL document [${docId}]. ${message}`);
   //reject to FL
@@ -1222,7 +1295,7 @@ async function rejectFlDoc(docId, message) {
     url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/approvalStatus/rejected`,
     headers: { Authorization: FL_TOKEN },
     data: { status: "Rejected" }
-  })
+  });
 
   //Post message regarding error
   await axios({
@@ -1233,17 +1306,16 @@ async function rejectFlDoc(docId, message) {
       details: `${message} Please correct and resubmit.`,
       type: "change_request",
     }
-  })
+  });
 
   await axios({
     method: 'put',
     url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/submitCorrectiveActions`,
     headers: { Authorization: FL_TOKEN },
     data: {}
-  })
+  });
 
-
-}
+}//rejectFlDoc
 
 async function fetchAssessmentTemplates() {
   await fetchAndSync({
@@ -1289,7 +1361,9 @@ async function fetchCOIAssessmentTemplateFromTrellis() {
   }
 }//fetchCOIAssessmentTemplateFromTrellis
 
-// The main routine to check for food logiq updates
+/**
+ * the main routine to check for food logiq updates
+ */
 async function pollFl() {
   try {
     // Sync list of suppliers
@@ -1325,8 +1399,13 @@ async function pollFl() {
   } catch (err) {
     throw err;
   }
-}
+}//pollFl
 
+/**
+ * fetches and synchronizes
+ * @param {*} param0 
+ * @returns 
+ */
 async function fetchAndSync({ from, to, pageIndex, forEach }) {
   pageIndex = pageIndex || 0;
   try {
@@ -1391,7 +1470,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
     info('getBusinesses Error', err.response ? err.response.status : 'Please check error logs');
     throw err;
   }
-}
+}//fetchAndSync
 
 /**
  * deletes the Centricity Test Account documents from FL
@@ -1539,7 +1618,7 @@ async function spawnAssessment(bid, bname, general, aggregate, auto, product, um
 
   //spawning the assessment with some (not all) values 
   let result = await axios({
-    method: updateFlId ? "get": "post",
+    method: updateFlId ? "get" : "post",
     url: updateFlId ? `${PATH_SPAWN_ASSESSMENT}/${updateFlId}` : PATH_SPAWN_ASSESSMENT,
     headers: { 'Authorization': FL_TOKEN },
     data: _assessment_template
@@ -1621,6 +1700,41 @@ async function testMock() {
   let url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/abc123/attachments`
   let res = mockFL({ url });
 }
+
+/**
+ * initializes service
+ */
+async function initialize() {
+  try {
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.12]       >>>>>>>>>>`);
+    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
+    TOKEN = await getToken();
+    // Connect to oada
+    try {
+      var conn = await oada.connect({
+        domain: 'https://' + DOMAIN,
+        token: TOKEN,
+        concurrency: CONCURRENCY,
+      })
+    } catch (err) {
+      error(`Initializing Trellis connection failed`);
+      error(err)
+    }
+    // Run populateIncomplete first so that the change feeds coming in will have
+    // the necessary in-memory items for them to continue being processed.
+    setConnection(conn);
+    //await populateIncomplete()
+    await watchTargetJobs();
+    await watchFlSyncConfig();
+    //  await createFlWebsocket();
+    await checkTime();
+    setInterval(checkTime, checkInterval);
+    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
+  } catch (err) {
+    error(err);
+    throw err;
+  }
+}//initialize
 
 initialize();
 
