@@ -397,13 +397,13 @@ async function watchFlSyncConfig() {
           if (change.body['food-logiq-mirror']) await handleMirrorChange(change)
         }
       } catch (err) {
-        error('mirror watchCallback error')
-        error(err)
+        error('mirror watchCallback error');
+        error(err);
       }
     }
   }).catch(err => {
     error(err);
-  })
+  });
 }//watchFlSyncConfig
 
 /**
@@ -778,7 +778,7 @@ function checkCoIAssessment(assessment) {
             let umbCov = question.productEvaluationOptions.answerRows[0].answers[umbrella].answerNumeric;
             let requirement = column.acceptanceValueNumericPrimary;
             // if umbrella only pertains to specific insurance types
-            //            if (types.indexOf(column.name) > -1) {}
+            //            if (types.Handling assessmentindexOf(column.name) > -1) {}
             if (value !== undefined && umbCov !== undefined && requirement !== undefined) {
               return (value + umbCov < requirement);
             } else return true
@@ -1027,7 +1027,7 @@ async function handleApprovedDoc(item, bid, tp) {
       path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
       data: {},
       tree
-    })
+    });
     //TODO: test this part also when trying to remove axios requests to trellis
     await CONNECTION.put({
       path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
@@ -1121,7 +1121,7 @@ async function constructAssessment(job, result, updateFlId) {
   let auto = parseInt(al.combined_single_limit || 0);
 
   let ul = _.find(policies, ['type', 'Umbrella Liability']) || {};
-  let umbrella = parseInt(ul.each_occurrence1 || 0);
+  let umbrella = parseInt(ul.each_occurrence || 0);
 
   let wc = _.find(policies, ['type', `Worker's Compensation`]);
   let worker = wc ? true : false;
@@ -1417,7 +1417,6 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
     if (pageIndex) request.params = { pageIndex };
     let response = await axios(request);
 
-
     // Manually check for changes; Only update the resource if it has changed!
     await Promise.map(response.data.pageItems, async (item) => {
       let sync;
@@ -1447,18 +1446,18 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
           let resp = await CONNECTION.post({
             path: `/resources`,
             data: { 'food-logiq-mirror': item }
-          })
+          });
           await CONNECTION.put({
             path,
             data: {
               "_id": resp.headers['content-location'].replace(/^\//, ''),
               "_rev": 0
             }
-          })
+          });
         }
       }
       if (forEach) await forEach(item)
-    })
+    });
 
     // Repeat for additional pages of FL results
     if (response.data.hasNextPage) {
@@ -1706,7 +1705,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.12]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.13]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
