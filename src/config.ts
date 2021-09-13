@@ -129,6 +129,12 @@ const config = convict({
         }
       }
     },
+    supportedTypes: {
+      doc: "Array of supported FL document types",
+      format: Array,
+      default: ["Certificate of Insurance"],
+      env: "flTypes"
+    },
     token: {
       doc: 'Food Logiq API token',
       format: String,

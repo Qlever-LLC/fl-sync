@@ -965,6 +965,14 @@ async function howManyDocs() {
 }
 
 async function traceCois() {
+  let objs = {
+    a: [],
+    b: [],
+    c: [],
+    d: [],
+    e: [],
+    f: [],
+  };
   let obj = {
     a: 0,
     b: 0,
@@ -981,7 +989,7 @@ async function traceCois() {
   })
   let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
 
-  let stuff = await Promise.map(keys, async bid => {
+  let stuff = await Promise.each(keys, async bid => {
     let docs = await axios({
       method: 'get',
       url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents`,
@@ -1009,6 +1017,10 @@ async function traceCois() {
       if (pointer.has(doc, `/food-logiq-mirror/shareSource/type/name`)) {
         if (doc['food-logiq-mirror'].shareSource.type.name === 'Certificate of Insurance') {
           obj.a++;
+          objs.a.push({
+            bid,
+            key
+          });
           //console.log('Found FL coi',`/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`);
         } else return
       } else return
@@ -1028,6 +1040,10 @@ async function traceCois() {
         let ref = meta.vdoc.pdf[vdoc]._id;
         //console.log('Found pdf', {bid, key, ref});
         obj.b++;
+        objs.b.push({
+          bid,
+          key
+        });
 
         let tpdoc = await axios({
           method: 'get',
@@ -1044,20 +1060,42 @@ async function traceCois() {
           job = Object.keys(tpdoc.services.target.jobs)[0];
           //console.log('Found job',{bid, key, job});
           obj.c++;
+          objs.c.push({
+            bid,
+            key
+          });
         }
           
         if (pointer.has(tpdoc, `/vdoc/cois`)) {
           let coi = Object.keys(tpdoc.vdoc.cois)[0];
           //console.log('Found coi', {bid, key, coi});
           obj.d++;
+          objs.d.push({
+            bid,
+            key
+          });
 
           if (job && pointer.has(queue, `/jobs//${job}/assessments`)) {
             let ass = Object.keys(pointer.get(queue, `/jobs//${job}/assessments`))[0];
             let assess = pointer.get(queue, `/jobs//${job}/assessments/${ass}`)
-            if (assess === false) obj.e++;
+            if (assess === false) {
+              obj.e++;
+              objs.e.push({
+                bid,
+                key
+              });
+            }
             if (assess === true) {
               obj.e++;
+              objs.e.push({
+                bid,
+                key
+              });
               obj.f++;
+              objs.f.push({
+                bid,
+                key
+              });
             }
           }
         } else {
@@ -1073,6 +1111,7 @@ async function traceCois() {
   }).then(() => {
     console.log('done (then)', obj);
   })
+  console.log('OBJS', objs);
   console.log('done', obj);
 }
 
@@ -1083,7 +1122,7 @@ async function findChange(rev) {
     path: `/bookmarks/services/target/jobs/_meta/_changes/${rev}`,
   }).then(r => r.data)
   let found;
-  await Promise.map(data, async change => {
+  await Promise.each(data, async change => {
     if (change.body && change.body[key]) {
       found = change.body[key];
       console.log('FOUND', found, rev)
@@ -1186,13 +1225,13 @@ async function main() {
   try {
 
     let start = Date.now()
-    await postPdfs();
+//    await postPdfs();
 //    await cleanupProcessQueue();
 //    await findTrellisDocs()
 //    await reprocessProd();
 //    await countCois();
 //    await handleIncompleteCois();
-//    await traceCois();
+    await traceCois();
 //    await listCois();
 //  await findChange(493126);
 //  await deleteFlBizDocs();

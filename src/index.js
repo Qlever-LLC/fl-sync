@@ -43,6 +43,7 @@ const CO_NAME = config.get('foodlogiq.community.owner.name');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 const CONCURRENCY = config.get('trellis.concurrency');
+const flTypes = config.get('foodlogiq.supportedTypes');
 const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const LOCAL = process.env.LOCAL;
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
@@ -310,6 +311,7 @@ async function onTargetUpdate(c, jobId) {
       })
     })
 
+
     // Provide select update messages to FL
     await Promise.each(Object.values(c && c.body && c.body.updates || {}), async val => {
 
@@ -330,7 +332,7 @@ async function onTargetUpdate(c, jobId) {
         default:
           break;
       }
-      if (details) {
+      if (details && job.flType && flTypes.includes(job.flType)) {
         info(`Posting new update to FL docId ${job.flId}: ${details}`);
         await axios({
           method: 'post',
@@ -857,7 +859,7 @@ async function handleAssessment(item, bid, tp) {
       })
       let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
       // TODO: Only do this if it has a current status of 'awaiting-review'
-      await rejectFlDoc(job.flId, message);
+      await rejectFlDoc(job.flId, message, job.flType);
     })
   } else if (item.state === 'Submitted') {
     info(`Autoapprove Assessments Configuration: [${AUTO_APPROVE_ASSESSMENTS}]`)
@@ -966,6 +968,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
       // Create a lookup in order to track target updates
       info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
+      let flType = pointer.has(item, `/shareSource/type/name`) ? pointer.get(item, `/shareSource/type/name`) : undefined;
       let data = {
         name: item.name,
         tp,
@@ -975,6 +978,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
         bid,
         bname,
         trellisDocKey: resId
+        flType,
       };
       await CONNECTION.put({
         path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`,
@@ -1073,9 +1077,9 @@ async function validatePending(trellisDoc, flDoc, type) {
       let now = moment();
 
       if (!flExp.isSame(trellisExp)) {
-        message = 'Expiration date does not match PDF document.';
+        message = `Expiration date (${flExp}) does not match PDF document (${trellisExp}).`;
         status = false;
-        info(`FoodLogiQ expiration [${flExp}] Trellis expiration [${trellisExp}]`)
+        info(message)
       }
       if (flExp <= now) {
         message = 'Document is already expired.';
@@ -1259,7 +1263,7 @@ async function handleScrapedResult(jobId) {
 
       info(`Spawned assessment [${assessmentId}] for business id [${job.bid}]`);
     } else {
-      await rejectFlDoc(job.flId, message)
+      await rejectFlDoc(job.flId, message, job.flType)
 
       await CONNECTION.post({
         path: `/resources/${job.jobId}/updates`,
@@ -1287,7 +1291,7 @@ async function handleScrapedResult(jobId) {
 /**
  * rejects fl document
  */
-async function rejectFlDoc(docId, message) {
+async function rejectFlDoc(docId, message, flType) {
   info(`Rejecting FL document [${docId}]. ${message}`);
   //reject to FL
   await axios({
@@ -1298,22 +1302,24 @@ async function rejectFlDoc(docId, message) {
   });
 
   //Post message regarding error
-  await axios({
-    method: 'post',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/capa`,
-    headers: { Authorization: FL_TOKEN },
-    data: {
-      details: `${message} Please correct and resubmit.`,
-      type: "change_request",
-    }
-  });
+  if (flType && flTypes.includes(flType)) {
+    await axios({
+      method: 'post',
+      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/capa`,
+      headers: { Authorization: FL_TOKEN },
+      data: {
+        details: `${message} Please correct and resubmit.`,
+        type: "change_request",
+      }
+    });
 
-  await axios({
-    method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/submitCorrectiveActions`,
-    headers: { Authorization: FL_TOKEN },
-    data: {}
-  });
+    await axios({
+      method: 'put',
+      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/submitCorrectiveActions`,
+      headers: { Authorization: FL_TOKEN },
+      data: {}
+    });
+  }
 
 }//rejectFlDoc
 
@@ -1728,7 +1734,7 @@ async function initialize() {
     //  await createFlWebsocket();
     await checkTime();
     setInterval(checkTime, checkInterval);
-    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
+//    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
   } catch (err) {
     error(err);
     throw err;
