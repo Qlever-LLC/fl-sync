@@ -283,6 +283,25 @@ async function getLookup(item, key) {
   }
 }//getLookup
 
+
+/**
+ * manages message creation in FL, avoiding duplication 
+ */
+async function handleMessaging() {
+  info(`Posting new update to FL docId ${job.flId}: ${details}`);
+  await axios({
+    method: 'post',
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${job.flId}/capa`,
+    headers: { Authorization: FL_TOKEN },
+    data: {
+      details,
+      type: "change_request",
+    }
+  })
+}
+
+
+
 /**
  * handling an update from target
  * @param {*} c 
@@ -712,6 +731,7 @@ async function getResources() {
     await fetchCommunityResources({ type, date })
   })
   // Now get assessments (slightly different syntax)
+  info(`Fetching community assessments`);
   await fetchCommunityResources({ type: 'assessments', date })
 }
 
@@ -834,15 +854,6 @@ async function handleAssessment(item, bid, tp) {
         }
       });
       await approveFlDoc(job.flId);
-
-      //Create an update message
-      await CONNECTION.post({
-        path: `/resources/${job.jobId}`,
-        data: {
-          time: moment().format('X'),
-          information: `FoodLogiQ Assessment has been approved`,
-        }
-      })
     });
 
   } else if (item.state === 'Rejected') {
@@ -867,6 +878,10 @@ async function handleAssessment(item, bid, tp) {
       try {
         let failed = checkAssessment(item);
         item.state = failed ? 'Rejected' : 'Approved';
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+          data: {approval: !failed}
+        })
         // Auto-approve only, do not auto-reject
         if (!failed) {
           info(`Assessment Auto-${item.state}. [${item._id}]`);
@@ -895,6 +910,8 @@ async function handleAssessment(item, bid, tp) {
 async function handlePendingDoc(item, bid, tp, bname) {
   info(`Handling pending document [${item._id}]`);
   try {
+    let flType = pointer.has(item, `/shareSource/type/name`) ? pointer.get(item, `/shareSource/type/name`) : undefined;
+
     // retrieve the attachments and unzip
     let file = await axios({
       method: 'get',
@@ -906,8 +923,23 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
     let zip = await new jszip().loadAsync(file);
 
+    let files = Object.keys(zip.files)
+
+    if (files.length !== 1) {
+      let message = 'Multiple files attached. Please upload a single a single PDF per Food LogiQ document.'
+      await CONNECTION.put({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/fl-sync`,
+        data: {
+          valid: false,
+          message
+        }
+      })
+      return rejectFlDoc(item._id, message, flType)
+    }
+
     // create oada resources for each attachment
-    await Promise.map(Object.keys(zip.files || {}), async (key) => {
+    let key = files[0];
+    //await Promise.map(files || {}), async (key) => {
 
       let mirrorId = await CONNECTION.get({
         path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_id`,
@@ -932,7 +964,6 @@ async function handlePendingDoc(item, bid, tp, bname) {
           data: zdata,
           contentType: 'application/pdf',
         }).then(r => r.headers['content-location'].replace(/^\//, ''))
-        console.log("THING", _id);
 
         await CONNECTION.put({
           path: `${_id}/_meta`,
@@ -968,7 +999,6 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
       // Create a lookup in order to track target updates
       info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
-      let flType = pointer.has(item, `/shareSource/type/name`) ? pointer.get(item, `/shareSource/type/name`) : undefined;
       let data = {
         name: item.name,
         tp,
@@ -977,7 +1007,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
         mirrorId,
         bid,
         bname,
-        trellisDocKey: resId
+        trellisDocKey: resId,
         flType,
       };
       await CONNECTION.put({
@@ -992,7 +1022,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
         path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
         data: { _id, _rev: 0 }
       })
-    });
+    //});
   } catch (err) {
     error(`Error occurred while fetching FL attachments`);
     error(err);
@@ -1079,13 +1109,12 @@ async function validatePending(trellisDoc, flDoc, type) {
       if (!flExp.isSame(trellisExp)) {
         message = `Expiration date (${flExp}) does not match PDF document (${trellisExp}).`;
         status = false;
-        info(message)
       }
       if (flExp <= now) {
-        message = 'Document is already expired.';
+        message = `Document is already expired: ${trellisExp}`;
         status = false;
-        info(`Document is already expired: ${trellisExp}]`)
       }
+      if (message) info(message);
       break;
     default:
       break;
@@ -1204,7 +1233,7 @@ async function handleScrapedResult(jobId) {
     if (status) {
 
       let assessmentId = await CONNECTION.get({
-        path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+        path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}/id`,
       }).then(r => {
         return r.data
       }).catch(err => { })
@@ -1213,37 +1242,36 @@ async function handleScrapedResult(jobId) {
       if (!assessmentId) info(job, 'Assessment does not yet exist.')
 
       let assess = await constructAssessment(job, result, assessmentId);
-      assessmentId = assess.data._id;
+      //assessmentId = assess.data._id;
 
       if (!assessmentId) {
-
-        await CONNECTION.post({
-          path: `/resources/${job.jobId}/updates`,
-          data: {
-            time: moment().format('X'),
-            information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
-          }
-        }).catch(err => {
-          error(err);
-          throw err;
-        });
-
-        await CONNECTION.post({
-          path: `/resources/${job.jobId}/updates`,
-          data: {
-            time: moment().format('X'),
-            information: `A FoodLogiQ Assessment has been created and associated with this document`,
-          }
-        }).catch(err => {
-          error(err);
-          throw (err);
-        })
-
         await CONNECTION.put({
           path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-          data: assessmentId
+          data: {id: assess.data._id}
         })
       }
+
+      await CONNECTION.post({
+        path: `/resources/${job.jobId}/updates`,
+        data: {
+          time: moment().format('X'),
+          information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
+        }
+      }).catch(err => {
+        error(err);
+        throw err;
+      });
+
+      await CONNECTION.post({
+        path: `/resources/${job.jobId}/updates`,
+        data: {
+          time: moment().format('X'),
+          information: `A FoodLogiQ Assessment has been created and associated with this document`,
+        }
+      }).catch(err => {
+        error(err);
+        throw (err);
+      })
 
       data.services['fl-sync'].assessments = {
         [ASSESSMENT_TEMPLATE_ID]: assessmentId
@@ -1288,21 +1316,22 @@ async function handleScrapedResult(jobId) {
 
 }//handleScrapedResult
 
+
 /**
  * rejects fl document
  */
 async function rejectFlDoc(docId, message, flType) {
-  info(`Rejecting FL document [${docId}]. ${message}`);
-  //reject to FL
-  await axios({
-    method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/approvalStatus/rejected`,
-    headers: { Authorization: FL_TOKEN },
-    data: { status: "Rejected" }
-  });
+  if (flType && flTypes.includes(flType)) {
+    info(`Rejecting FL document [${docId}]. ${message}`);
+    //reject to FL
+    await axios({
+      method: 'put',
+      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/approvalStatus/rejected`,
+      headers: { Authorization: FL_TOKEN },
+      data: { status: "Rejected" }
+    });
 
   //Post message regarding error
-  if (flType && flTypes.includes(flType)) {
     await axios({
       method: 'post',
       url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/capa`,
@@ -1711,7 +1740,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.13]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.15]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
@@ -1731,7 +1760,6 @@ async function initialize() {
     //await populateIncomplete()
     await watchTargetJobs();
     await watchFlSyncConfig();
-    //  await createFlWebsocket();
     await checkTime();
     setInterval(checkTime, checkInterval);
 //    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
@@ -1741,10 +1769,15 @@ async function initialize() {
   }
 }//initialize
 
+process.on('uncaughtException', function(err) {
+  console.log('Caught exception: ' + err);
+});
+
 initialize();
 
 module.exports = (args) => {
   if (args && args.initialize === false) {
+    info("Importing fl-sync and omitting initialization.")
   } else {
     initialize();
   }
@@ -1758,6 +1791,8 @@ module.exports = (args) => {
       setTree,
       SERVICE_PATH,
       tree,
-    }
+    },
+    checkAssessment,
+    validatePending,
   }
 }
