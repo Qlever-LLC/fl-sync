@@ -56,6 +56,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["debug", "virtual:f42128b523b6b26285cb4da9c7d583621564bd9c53b6bb67b50bbc73cda83aa31c7f631e0f418e6658f25baa78c0768ad15d98251f327db2f9af48eaa944f8dc#npm:4.3.2"],
             ["dotenv", "npm:10.0.0"],
             ["esm", "npm:3.2.25"],
+            ["http", "npm:0.0.1-security"],
             ["http2", "npm:3.3.7"],
             ["js-sha256", "npm:0.9.0"],
             ["json-pointer", "npm:0.6.1"],
@@ -226,6 +227,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["debug", "virtual:f42128b523b6b26285cb4da9c7d583621564bd9c53b6bb67b50bbc73cda83aa31c7f631e0f418e6658f25baa78c0768ad15d98251f327db2f9af48eaa944f8dc#npm:4.3.2"],
             ["dotenv", "npm:10.0.0"],
             ["esm", "npm:3.2.25"],
+            ["http", "npm:0.0.1-security"],
             ["http2", "npm:3.3.7"],
             ["js-sha256", "npm:0.9.0"],
             ["json-pointer", "npm:0.6.1"],
@@ -2445,6 +2447,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/he-npm-1.2.0-3b73a2ff07-212122003c.zip/node_modules/he/",
           "packageDependencies": [
             ["he", "npm:1.2.0"]
+          ],
+          "linkType": "HARD",
+        }]
+      ]],
+      ["http", [
+        ["npm:0.0.1-security", {
+          "packageLocation": "./.yarn/cache/http-npm-0.0.1-security-62a9711fac-247d987fba.zip/node_modules/http/",
+          "packageDependencies": [
+            ["http", "npm:0.0.1-security"]
           ],
           "linkType": "HARD",
         }]
