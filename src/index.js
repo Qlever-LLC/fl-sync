@@ -948,52 +948,50 @@ async function handlePendingDoc(item, bid, tp, bname) {
       let _id = await CONNECTION.get({
         path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf/${key}/_id`,
       }).then(r => r.data)
-        .catch(err => {
-          return;
-        });
+      .catch(err => {});
 
-      if (!_id) {
-        let ab = await zip.file(key).async("uint8array")
-        let zdata = Buffer.alloc(ab.byteLength);
-        for (var i = 0; i < zdata.length; ++i) {
-          zdata[i] = ab[i];
-        }
-        let kid = (await ksuid.random()).string;
-        _id = await CONNECTION.put({
-          path: `/resources/${kid}`,
-          data: zdata,
-          contentType: 'application/pdf',
-        }).then(r => r.headers['content-location'].replace(/^\//, ''))
+      // If it doesn't exist, create a new PDF resource
+      _id = _id || `resources/${ksuid.randomSync().string}`;
 
-        await CONNECTION.put({
-          path: `${_id}/_meta`,
-          //TODO: How should this be formatted?
-          data: {
-            filename: key,
-            services: {
-              'fl-sync': {
-                [item._id]: {
-                  _ref: mirrorId,
-                }
-              }
-            }
-          },
-          headers: { 'content-type': 'application/json' },
-        });
-
-        // Create a link from the FL mirror to the trellis pdf
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
-          data: {
-            vdoc: {
-              pdf: {
-                [key]: { _id }
-              }
-            }
-          },
-          headers: { 'content-type': 'application/json' },
-        });
+      let ab = await zip.file(key).async("uint8array")
+      let zdata = Buffer.alloc(ab.byteLength);
+      for (var i = 0; i < zdata.length; ++i) {
+        zdata[i] = ab[i];
       }
+      await CONNECTION.put({
+        path: `/${_id}`,
+        data: zdata,
+        contentType: 'application/pdf',
+      })
+
+      await CONNECTION.put({
+        path: `${_id}/_meta`,
+        //TODO: How should this be formatted?
+        data: {
+          filename: key,
+          services: {
+            'fl-sync': {
+              [item._id]: {
+                _ref: mirrorId,
+              }
+            }
+          }
+        },
+        headers: { 'content-type': 'application/json' },
+      });
+
+      // Create a link from the FL mirror to the trellis pdf
+      await CONNECTION.put({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
+        data: {
+          vdoc: {
+            pdf: {
+              [key]: { _id }
+            }
+          }
+        },
+        headers: { 'content-type': 'application/json' },
+      });
 
       let resId = _id.replace(/resources\//, '');
 
