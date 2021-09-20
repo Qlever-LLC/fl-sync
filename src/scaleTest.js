@@ -1888,22 +1888,202 @@ async function handleReport() {
   //console.log({fail, success})
 }
 
-async function associateAssessments() {
+async function linkAssessments() {
 
-  /*
   let pairs = [
     {
+      bid: "56c21b30c07c2d0001000117",
       doc: "6123ac5addcaab000e7d08d8",
-      as: "613828fecb4c4d000e7167c8"
-    },
-    {
-      doc: ""
-      as: 
-    },
-    
+      as: "613828fecb4c4d000e7167c8",
+      other: 'delete'
+    }, {
+      bid: "56c21b5450743a00010000b8",
+      doc: "60c7907f5bc57f000ee7fcfd",
+      as: "613834c94c31ba000f2f0c9a"
+      //other: 'delete'
+    }, {
+      bid: "55db1dd3abc8920001000105",
+      doc: "60e5e66fa49a43000e6eede9",
+      as: "61382a6b0edcab000f5d81f2",
+      other: 'delete'
+    }, {
+      bid: "60d21b339c09d3000f6e09e3",
+      doc: "60f7357beb25c0000e420d8e",
+      as: "613a8232cb4c4d000e8b7953",
+      other: 'delete'
+    }, {
+      bid: "60d1ff9daeb961000ea580c2",
+      doc: "60edfcc678bfbb000e743d12",
+      as: "613a33290edcab000ef9db76",
+      other: 'delete'
+    }, {
+    // The next two are the same company???
+      bid: "60d1ffc7aeb961000ea580d1",
+      doc: "60f57b8ca49a43000ee99200",
+      as: "613a8b2a0edcab000ef9fba7"
+//      other: 'delete',
+    }, {
+      bid: "60d1fdb09c09d3000f6dfeab",
+      doc: "60d9f7b9eb25c0000e1dd497",
+      as: "613a32ebf7b9b2000fe63f91",
+    },/* {
+      bid: "60d1fa0beb25c0000e1c5460",
+      doc: "60d1fe7778bfbb000e312820",
+      link: false,
+      as: undefined,
+      other: 'delete'
+    }, {
+      bid: "60d1fa56aeb961000ea57d89",
+      doc: "6123a01baa22e6000fcc175a",
+      link: false,
+      as: undefined,
+      other: 'delete'
+    }, */{
+      // Not linked, not created by us; enter into the system
+      bid: "60d1f216aeb961000ea57ae4",
+      doc: "60d24095eb25c0000e1c70f2",
+      as: "613f8417f7b9b2000e94fb00",
+      link: false,
+    }, {
+      // wierd one; two identical FL docs with same pdf; one assessment
+      // just pick one and associate it
+      // really, two assessments should be created; one for each doc
+      bid: "60d1ead49c09d3000f6df7b7",
+      doc: "60da1a0f9c09d3000f7a2ee2",
+      as: "60d2031eeb25c0000e1c57bf",
+      link: false
+    }, {
+      bid: "60d1e2ada49a43000ec30496",
+      doc: "612e4276f7b9b2000fe38462",
+      as: "613a85dfcb4c4d000e8b7b2a",
+      other: 'delete',
+    }, {
+      bid: "60d10a8078bfbb000e3105d7",
+      doc: "611a48524acc26000e4da26b",
+      as: "613a300b4c31ba000f2fa74e",
+      other: 'delete'
+    }, {
+      bid: "60d0fa82a49a43000ec2e841",
+      doc: "60f09015293a76000e11c13f",
+      as: "613a2f600a2537000eeca1aa",
+    }, {
+      bid: "60d0f75978bfbb000e30ff15",
+      doc: "60db631d9c09d3000f7a69d0",
+      as: "613bba850edcab000efa5189"
+    }, {
+      bid: "60d0f1c1eb25c0000e1c2a79",
+      doc: "60e61427eb25c0000ee43ae4",
+      as: "613a89d00a2537000eecc430"
+    }, {
+      bid: "60d0f14e78bfbb000e30fc76",
+      doc: "612e3271cb4c4d000f5c9f82",
+      as: "613a85c0f7b9b2000fe65e6c"
+    }, {
+      bid: "60ba206b033190000e4b4ae3",
+      doc: "60ca1dfaaeb961000e3a8285",
+      as: "613a2e514c31ba000f2fa6b6"
+    }, {
+      bid: "60ba5721033190000e4b60cb",
+      doc: "60f9d2faeb25c0000e4293d1",
+      as: "613a326f0a2537000eeca29c"
+    }, {
+      bid: "60ba1d7395c48d000e28bf88",
+      doc: "60c11c5f685b46000e5e6ca2",
+      as: "613a2dd4cb4c4d000e8b5961",
+    }, {
+      bid: "5c9a6e7d991c010001ca464f",
+      doc: "60e61f65eb25c0000ee43d43",
+      as: "60eefc1578bfbb000e747515",
+      link: false
+    }, {
+      bid: "5cf98221b58cd50001dd083f",
+      doc: "611ec4860395ed000e3ed1f1",
+      as: "613839ec0edcab000f5d8290",
+    }, {
+      bid: "5cb67bb2499dcf0001a1e811",
+      doc: "60f0a70fa49a43000e70dede",
+      as: "613839cdcb4c4d000e716856",
+    }, {
+      bid: "5adcf497411bf70001ea28c8",
+      doc: "6138b6fd0a2537000eec186e",
+      as: "6138b70a0a2537000eec1876",
+    }, {
+      bid: "585031c1f033a20001622244",
+      doc: "612ce3d8aa22e6000f39f39d",
+      as: "6138382af7b9b2000fe59733",
+    }
   ]
-  */
 
+  await Promise.map(pairs, async ({bid, doc, as, link}) => {
+    console.log({bid, doc, as, link})
+    let assess = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/assessments/${as}`,
+    }).then(r => r.data['food-logiq-mirror'])
+    
+    let approval = !(await flSync.checkAssessment(assess));
+    if (link === false) {
+      let name = await con.get({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${doc}`,
+      }).then(r => r.data['food-logiq-mirror'].name)
+
+      console.log(name, JSON.stringify({
+        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/links/assessment/${as}`,
+        data: [{
+          "businessId": CO_ID,
+          "from": {
+            "_id": as,
+            "type": "assessment"
+          },
+          "linkType": "SOURCES",
+          "linkTypeDisplay": "Sources",
+          "to": {
+            "_id": doc,
+            name,
+            "type": "document"
+          }
+        }]
+      }))
+
+      await axios({
+        method: 'post',
+        headers: {Authorization: FL_TOKEN},
+        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/links/assessment/${as}`,
+        data: [{
+          "businessId": CO_ID,
+          "from": {
+            "_id": as,
+            "type": "assessment"
+          },
+          "linkType": "SOURCES",
+          "linkTypeDisplay": "Sources",
+          "to": {
+            "_id": doc,
+            name,
+            "type": "document"
+          }
+        }]
+      })
+    }
+
+    if (approval !== undefined) {
+      console.log({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${doc}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+        id: as,
+        approval
+      })
+      await con.put({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${doc}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+        data: {
+          id: as,
+          approval
+        }
+      })
+    }
+  })
+}
+
+
+async function associateAssessments() {
   let index = {};
   let report = await con.get({
     path: curReport,
@@ -1960,6 +2140,7 @@ async function associateAssessments() {
     assessments: {},
     docs: {}
   }
+  let out = {};
   await Promise.map(Object.values(index), async ({bid, assessments, docs}) => {
     let as = Object.keys(assessments);
     let ds = Object.keys(docs);
@@ -1977,6 +2158,7 @@ async function associateAssessments() {
       }
     } else {
       console.log(bid, assessments, docs)
+      out[bid] ={bid, assessments, docs}
     }
     let val = as.length.toString();
     res.assessments[val] = res.assessments[val] || 0;
@@ -2002,6 +2184,7 @@ async function associateAssessments() {
 //  console.log(index);
   console.log(results);
   console.log(res);
+  fs.writeFileSync('assessOutput.json', JSON.stringify(out))
 }
 
 
@@ -2118,7 +2301,8 @@ async function main() {
 //    await countCois();
 //    await handleIncompleteCois();
 //    await traceCois();
-    await associateAssessments();
+//    await associateAssessments();
+    await linkAssessments();
 //    await generateReport();
 //    await handleReport();
 //    await reprocessReport();
