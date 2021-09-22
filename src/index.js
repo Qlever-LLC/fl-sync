@@ -842,24 +842,21 @@ function checkAssessment(assessment) {
  */
 async function handleAssessment(item, bid, tp) {
   info(`Handling assessment [${item._id}]`)
-  if (item.state === 'Approved') {
-    let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
-    await Promise.each(found, async (job) => {
-      TARGET_JOBS[job.jobId].assessments[item._id] = true;
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
-        data: {
-          assessments: {
-            [item._id]: true
+  let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
+  await Promise.each(found, async (job) => {
+    if (item.state === 'Approved') {
+        TARGET_JOBS[job.jobId].assessments[item._id] = true;
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
+          data: {
+            assessments: {
+              [item._id]: true
+            }
           }
-        }
+        });
+        await approveFlDoc(job.flId);
       });
-      await approveFlDoc(job.flId);
-    });
-
-  } else if (item.state === 'Rejected') {
-    let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
-    await Promise.each(found, async (job) => {
+    } else if (item.state === 'Rejected') {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
       await CONNECTION.put({
         path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
@@ -872,33 +869,32 @@ async function handleAssessment(item, bid, tp) {
       let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
       // TODO: Only do this if it has a current status of 'awaiting-review'
       await rejectFlDoc(job.flId, message, job.flType);
-    })
-  } else if (item.state === 'Submitted') {
-    info(`Autoapprove Assessments Configuration: [${AUTO_APPROVE_ASSESSMENTS}]`)
-    if (AUTO_APPROVE_ASSESSMENTS) {
-      try {
-        let failed = checkAssessment(item);
-        item.state = failed ? 'Rejected' : 'Approved';
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-          data: {approval: !failed}
-        })
-        // Auto-approve only, do not auto-reject
-        if (!failed) {
-          info(`Assessment Auto-${item.state}. [${item._id}]`);
-          await axios({
-            method: 'put',
-            url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${item._id}/${failed ? 'reject' : 'approve'}spawnedassessment`,
-            headers: { Authorization: FL_TOKEN },
-            data: item
+    } else if (item.state === 'Submitted') {
+      info(`Autoapprove Assessments Configuration: [${AUTO_APPROVE_ASSESSMENTS}]`)
+      if (AUTO_APPROVE_ASSESSMENTS) {
+        try {
+          let failed = checkAssessment(item);
+          item.state = failed ? 'Rejected' : 'Approved';
+          await CONNECTION.put({
+            path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+            data: {approval: !failed}
           })
-        } else info(`Assessment ${item._id} failed checkAssessment`);
-      } catch (err) {
-        error(err)
-        throw err;
+          // Auto-approve only, do not auto-reject
+          if (!failed) {
+            info(`Assessment Auto-${item.state}. [${item._id}]`);
+            await axios({
+              method: 'put',
+              url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${item._id}/${failed ? 'reject' : 'approve'}spawnedassessment`,
+              headers: { Authorization: FL_TOKEN },
+              data: item
+            })
+          } else info(`Assessment ${item._id} failed checkAssessment`);
+        } catch (err) {
+          error(err)
+          throw err;
+        }
       }
-    }
-  }
+    })
 }//handleAssessment
 
 /**
@@ -1739,7 +1735,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.17]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.19]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
