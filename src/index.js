@@ -343,7 +343,9 @@ async function onTargetUpdate(c, jobId) {
           details = val.information
           break;
         case 'identified':
-          details = `PDF successfully identified as document type: ${val.type}`
+          if (val.type) {
+            details = `PDF successfully identified as document type: ${val.type}`
+          }
           break;
         case 'success':
           if (/^Runner/.test(val.meta)) details = 'Trellis automation complete.';
@@ -1241,8 +1243,12 @@ async function handleScrapedResult(jobId) {
 
       if (!assessmentId) {
         await CONNECTION.put({
-          path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+          path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
           data: {id: assess.data._id}
+        })
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${assess.data._id}/_meta/services/fl-sync/documents/${flId}`,
+          data: flId
         })
       }
 
@@ -1735,7 +1741,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.21]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.22]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada

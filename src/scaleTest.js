@@ -34,8 +34,7 @@ const tree = require('./tree.js');
 const dummy = require('./dummyData.js');
 const flSync = require('./index.js')({initialize: false})
 const userId = "5e27480dd85523000155f6db";
-//const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-16/1yCsCFT69ZT5gKOQ8FSfEQ72glT`
-const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-20/1yPWucWrWWtZuC78ucxN0VVXdaq`
+const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-22/1yVX4ozIUTMY5yVyQVgegwCX4HV`
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
@@ -1310,11 +1309,11 @@ async function generateReport() {
         count: 0,
         items: [],
       },
-      d3: {
-        description: 'Target Other (still queued?)',
-        count: 0,
-        items: [],
-      },
+    },
+    d3: {
+      description: 'Target Other (still queued?)',
+      count: 0,
+      items: [],
     },
     e1: {
       description: 'COI data extracted',
@@ -1355,21 +1354,21 @@ async function generateReport() {
       description: 'FL assessment created',
       count: 0,
       items: [],
-    },
-    h1: {
-      description: 'FL assessment passes Trellis approval logic',
-      count: 0,
-      items: [],
-    },
-    h2: {
-      description: 'FL assessment fails Trellis approval logic (not auto-rejected)',
-      count: 0,
-      items: [],
-    },
-    h3: {
-      description: 'Remainder of options',
-      count: 0,
-      items: [],
+      g1: {
+        description: 'FL assessment passes Trellis approval logic',
+        count: 0,
+        items: [],
+      },
+      g2: {
+        description: 'FL assessment fails Trellis approval logic (not auto-rejected)',
+        count: 0,
+        items: [],
+      },
+      g3: {
+        description: 'Remainder of options',
+        count: 0,
+        items: [],
+      },
     },
     A1: {
       description: 'Assessments mirrored',
@@ -1387,22 +1386,22 @@ async function generateReport() {
       },
     },
     B1: {
-      description: 'Assessment Approved',
+      description: 'Assessment state is Approved',
       count: 0,
       items: [],
     },
     B2: {
-      description: 'Assessment Rejected',
+      description: 'Assessment state is Rejected',
       count: 0,
       items: [],
     },
     B3: {
-      description: 'Assessment Submitted',
+      description: 'Assessment state is Submitted',
       count: 0,
       items: [],
     },
     B4: {
-      description: 'Assessment In Progress',
+      description: 'Assessment state is In Progress',
       count: 0,
       items: [],
     },
@@ -1733,8 +1732,8 @@ async function generateReport() {
       }).then(r => r.data)
       .catch(err => {})
       if (assess === undefined) {
-        obj.h3.count++;
-        obj.h3.items.push({
+        obj.g.g3.count++;
+        obj.g.g3.items.push({
           bid,
           key
         })
@@ -1749,21 +1748,21 @@ async function generateReport() {
       })
 
       if (approval === true) {
-        obj.h1.count++;
-        obj.h1.items.push({
+        obj.g.g1.count++;
+        obj.g.g1.items.push({
           bid,
           key
         })
       } else if (approval === false) {
-        obj.h2.count++;
-        obj.h2.items.push({
+        obj.g.g2.count++;
+        obj.g.g2.items.push({
           bid,
           key
         })
         return;
       } else {
-        obj.h3.count++;
-        obj.h3.items.push({
+        obj.g.g3.count++;
+        obj.g.g3.items.push({
           bid,
           key
         })
@@ -2277,74 +2276,34 @@ async function reprocessReport() {
     path: curReport,
   }).then(r => r.data);
 
-  // Handle possible Multi-File Errors (b3)
-  await Promise.each(report.b3.items, async ({bid, key}) => {
-    let data = await con.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
-    }).then(r => r.data);
-    
-    await con.put({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
-      data: {
-        'food-logiq-mirror': data['food-logiq-mirror']
-      }
+  let paths = [
+    'c2',
+    'd2/d2d',
+    'f3',
+    'g/g3',
+    'B3'
+  ]
+
+  await Promise.each(paths, async (path) => {
+    console.log('Handling report items for', path);
+    await Promise.each(pointer.get(report, `/${path}/items`), async ({bid, key}) => {
+      console.log(`reprocessing /bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`)
+      let data = await con.get({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
+      }).then(r => r.data);
+      
+      /*
+      await con.put({
+        path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
+        data: {
+          'food-logiq-mirror': data['food-logiq-mirror']
+        }
+      })
+
+      await Promise.delay(10000);
+      */
     })
   })
-
-  //Why no jobs? Rerun these.
-  await Promise.each(report.c2.items, async ({bid, key}) => {
-    let data = await con.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
-    }).then(r => r.data);
-    
-    await con.put({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
-      data: {
-        'food-logiq-mirror': data['food-logiq-mirror']
-      }
-    })
-  })
-
-  // Job failed? Try again
-  await Promise.each(report.d2.items, async ({bid, key}) => {
-    let data = await con.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
-    }).then(r => r.data);
-    
-    await con.put({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
-      data: {
-        'food-logiq-mirror': data['food-logiq-mirror']
-      }
-    })
-  })
-
-  await Promise.each(report.f3.items, async ({bid, key}) => {
-    let data = await con.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
-    }).then(r => r.data);
-    
-    await con.put({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
-      data: {
-        'food-logiq-mirror': data['food-logiq-mirror']
-      }
-    })
-  })
-
-  await Promise.each(report.h3.items, async ({bid, key}) => {
-    let data = await con.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
-    }).then(r => r.data);
-    
-    await con.put({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
-      data: {
-        'food-logiq-mirror': data['food-logiq-mirror']
-      }
-    })
-  })
-
 }
 
 
@@ -2372,9 +2331,9 @@ async function main() {
 //    await traceCois();
 //    await associateAssessments();
 //    await linkAssessments();
-    await generateReport();
+//    await generateReport();
 //    await handleReport();
-//    await reprocessReport();
+    await reprocessReport();
 //    await listCois();
 //  await findChange(493126);
 //  await deleteFlBizDocs();
