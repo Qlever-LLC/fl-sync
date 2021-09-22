@@ -694,7 +694,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       await CONNECTION.put({
         path,
         data: {
-          "_id": `resources/${_id}`,
+          _id,
           "_rev": 0
         }
       });
@@ -704,7 +704,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     // Now, sync
     if (sync) {
       let resp = await CONNECTION.put({
-        path: `/resources/${_id}`,
+        path: `/${_id}`,
         data: { 'food-logiq-mirror': item }
       })
       info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
