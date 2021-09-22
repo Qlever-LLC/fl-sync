@@ -51,27 +51,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@npm:^2.3.0":
-  version: 2.6.1
-  resolution: "@oada/client@npm:2.6.1"
-  dependencies:
-    "@oada/types": ^1.5.1
-    buffer: ^6.0.3
-    cross-fetch: ^3.0.6
-    debug: ^4.1.1
-    deep-clone: ^3.0.3
-    fetch-h2: ^3.0.0
-    isomorphic-ws: ^4.0.1
-    ksuid: ^2.0.0
-    p-queue: ^6.4.0
-    reconnecting-websocket: ^4.4.0
-    type-is: ^1.6.18
-    ws: ^8.0.0
-  checksum: 90971ea39ddade6d1c6af6aec1e990fbb00017306260c52fe1c66438b3ec998b1b86684c133a092e81a484d59bef42060483a1d425595129d6d6569e9829c2dd
-  languageName: node
-  linkType: hard
-
-"@oada/client@npm:^2.6.2":
+"@oada/client@npm:^2.6.1, @oada/client@npm:^2.6.2":
   version: 2.6.2
   resolution: "@oada/client@npm:2.6.2"
   dependencies:
@@ -92,11 +72,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/list-lib@npm:^2.1.9":
-  version: 2.1.9
-  resolution: "@oada/list-lib@npm:2.1.9"
+"@oada/list-lib@npm:^2.1.10":
+  version: 2.1.10
+  resolution: "@oada/list-lib@npm:2.1.10"
   dependencies:
-    "@oada/client": ^2.3.0
+    "@oada/client": ^2.6.1
     "@oada/types": ^1.2.0
     bluebird: ^3.7.2
     clone-deep: ^4.0.1
@@ -104,7 +84,7 @@ __metadata:
     json-pointer: ^0.6.0
     jsonpath-plus: ^6.0.1
     p-queue: ^6.6.2
-  checksum: a92c9233c451dff5ccdff7d031120e7b3ac1d47f6a885fcc0fcc771cfdadf5887555c92388f0d03c45a2320133fd6f88574740148bfeca9c768e37909ff40569
+  checksum: 64ef05fac813e89c0921184a901c69f6f6eaf381903829656ea9b512d9b329724f3efd14811d1cb4c4618c0a4cb11d1c06626f1e8f24b27bfd9ead21d6388ae0
   languageName: node
   linkType: hard
 
@@ -124,7 +104,7 @@ __metadata:
   resolution: "@qlever-llc/fl-sync@workspace:."
   dependencies:
     "@oada/client": ^2.6.2
-    "@oada/list-lib": ^2.1.9
+    "@oada/list-lib": ^2.1.10
     "@oada/types": ^1.5.1
     "@tsconfig/node16": ^1.0.1
     "@types/convict": ^6.0.2
