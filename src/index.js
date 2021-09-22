@@ -845,17 +845,16 @@ async function handleAssessment(item, bid, tp) {
   let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
   await Promise.each(found, async (job) => {
     if (item.state === 'Approved') {
-        TARGET_JOBS[job.jobId].assessments[item._id] = true;
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
-          data: {
-            assessments: {
-              [item._id]: true
-            }
+      TARGET_JOBS[job.jobId].assessments[item._id] = true;
+      await CONNECTION.put({
+        path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
+        data: {
+          assessments: {
+            [item._id]: true
           }
-        });
-        await approveFlDoc(job.flId);
+        }
       });
+      await approveFlDoc(job.flId);
     } else if (item.state === 'Rejected') {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
       await CONNECTION.put({
@@ -894,7 +893,8 @@ async function handleAssessment(item, bid, tp) {
           throw err;
         }
       }
-    })
+    }
+  })
 }//handleAssessment
 
 /**
@@ -1735,7 +1735,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.19]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.20]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
