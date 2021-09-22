@@ -674,6 +674,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       return;
     }
     let path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
+    let _id;
     try {
       let resp = await CONNECTION.get({ path })
 
@@ -683,18 +684,13 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       if (!equals) {
         delay += 20000;
         sync = true;
+        _id = resp.data._id;
       }
     } catch (err) {
       if (err.status !== 404) throw err;
       info(`Resource is not already on trellis. Syncing...`);
       sync = true;
-      delay += 20000;
-    }
-
-    // Now, sync
-    if (sync) {
       let _id = (await ksuid.random()).string;
-
       await CONNECTION.put({
         path,
         data: {
@@ -702,6 +698,11 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
           "_rev": 0
         }
       });
+      delay += 20000;
+    }
+
+    // Now, sync
+    if (sync) {
       let resp = await CONNECTION.put({
         path: `/resources/${_id}`,
         data: { 'food-logiq-mirror': item }
@@ -1738,7 +1739,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.15]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.17]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada

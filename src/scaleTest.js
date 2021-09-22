@@ -34,7 +34,8 @@ const tree = require('./tree.js');
 const dummy = require('./dummyData.js');
 const flSync = require('./index.js')({initialize: false})
 const userId = "5e27480dd85523000155f6db";
-const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-16/1yCsCFT69ZT5gKOQ8FSfEQ72glT`
+//const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-16/1yCsCFT69ZT5gKOQ8FSfEQ72glT`
+const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-20/1yPWucWrWWtZuC78ucxN0VVXdaq`
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
@@ -1224,6 +1225,21 @@ async function generateReport() {
       description: 'Mirror created',
       count: 0,
       items: [],
+      a1: {
+        description: 'Document approved',
+        count: 0,
+        items: [],
+      },
+      a2: {
+        description: 'Document rejected',
+        count: 0,
+        items: [],
+      },
+      a3: {
+        description: 'Other doc statuses',
+        count: 0,
+        items: [],
+      }
     },
     b1: {
       descrigtion: 'Trellis doc created',
@@ -1236,6 +1252,21 @@ async function generateReport() {
       items: [],
     },
     b3: {
+      description: 'Failed to retrieve FL attachments',
+      count: 0,
+      items: [],
+    },
+    b4: {
+      description: 'Already approved by non-trellis user prior to Trellis automation',
+      count: 0,
+      items: [],
+    },
+    b5: {
+      description: 'Already rejected by non-trellis user prior to Trellis automation',
+      count: 0,
+      items: [],
+    },
+    b6: {
       description: 'Remainder of options',
       count: 0,
       items: [],
@@ -1259,31 +1290,31 @@ async function generateReport() {
       description: 'Target Failure',
       count: 0,
       items: [],
-    },
-    d2a: {
-      description: 'FL Document requires OCR',
-      count: 0,
-      items: [],
-    },
-    d2b: {
-      description: 'FL Document has multiple CoIs within the PDF file',
-      count: 0,
-      items: [],
-    },
-    d2c: {
-      description: 'FL Document PDF format unrecognized',
-      count: 0,
-      items: [],
-    },
-    d2d: {
-      description: 'Other target failure modes',
-      count: 0,
-      items: [],
-    },
-    d3: {
-      description: 'Target Other (still queued?)',
-      count: 0,
-      items: [],
+      d2a: {
+        description: 'FL Document requires OCR',
+        count: 0,
+        items: [],
+      },
+      d2b: {
+        description: 'FL Document has multiple CoIs within the PDF file',
+        count: 0,
+        items: [],
+      },
+      d2c: {
+        description: 'FL Document PDF format unrecognized',
+        count: 0,
+        items: [],
+      },
+      d2d: {
+        description: 'Other target failure modes',
+        count: 0,
+        items: [],
+      },
+      d3: {
+        description: 'Target Other (still queued?)',
+        count: 0,
+        items: [],
+      },
     },
     e1: {
       description: 'COI data extracted',
@@ -1304,16 +1335,16 @@ async function generateReport() {
       description: 'FL Document extracted JSON fails Trellis logic',
       count: 0,
       items: [],
-    },
-    f2a: {
-      description: 'FL Document expired',
-      count: 0,
-      items: [],
-    },
-    f2b: {
-      description: 'FL Document expirations do not match',
-      count: 0,
-      items: [],
+      f2a: {
+        description: 'FL Document expired',
+        count: 0,
+        items: [],
+      },
+      f2b: {
+        description: 'FL Document expirations do not match',
+        count: 0,
+        items: [],
+      },
     },
     f3: {
       description: 'Remainder of options',
@@ -1326,12 +1357,12 @@ async function generateReport() {
       items: [],
     },
     h1: {
-      description: 'FL assessment approved',
+      description: 'FL assessment passes Trellis approval logic',
       count: 0,
       items: [],
     },
     h2: {
-      description: 'FL assessment does not pass (not rejected)',
+      description: 'FL assessment fails Trellis approval logic (not auto-rejected)',
       count: 0,
       items: [],
     },
@@ -1340,21 +1371,20 @@ async function generateReport() {
       count: 0,
       items: [],
     },
-
     A1: {
       description: 'Assessments mirrored',
       count: 0,
       items: [],
-    },
-    A1a: {
-      description: 'Created by Trellis',
-      count: 0,
-      items: [],
-    },
-    A1b: {
-      description: 'Created by someone else',
-      count: 0,
-      items: [],
+      A1a: {
+        description: 'Created by Trellis',
+        count: 0,
+        items: [],
+      },
+      A1b: {
+        description: 'Created by someone else',
+        count: 0,
+        items: [],
+      },
     },
     B1: {
       description: 'Assessment Approved',
@@ -1390,6 +1420,7 @@ async function generateReport() {
     path: `/bookmarks/services/fl-sync/businesses`
   })
   let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
+  let docApproved;
 
   let stuff = await Promise.map(keys, async bid => {
     let docs = await axios({
@@ -1423,9 +1454,50 @@ async function generateReport() {
             bid,
             key
           });
-          //console.log('Found FL coi',`/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`);
         } else return
       } else return
+
+      if (pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`) === 'approved') {
+        docApproved = true;
+        obj.a.a1.count++;
+        obj.a.a1.items.push({
+          bid,
+          key
+        });
+      }
+
+      if (pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`) === 'rejected') {
+        docApproved = false;
+        obj.a.a2.count++;
+        obj.a.a2.items.push({
+          bid,
+          key
+        });
+      }
+      if (docApproved === undefined) {
+        obj.a.a3.count++;
+        obj.a.a3.items.push({
+          bid,
+          key
+        });
+      }
+
+      //b.
+
+      try {
+        let att = await axios({
+          method: 'get',
+          headers: {Authorization: FL_TOKEN},
+          url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/attachments`,
+        })
+      } catch(err) {
+        obj.b3.count++;
+        obj.b3.items.push({
+          bid,
+          key
+        });
+        return;
+      }
 
       let meta = await axios({
         method: 'get',
@@ -1448,317 +1520,330 @@ async function generateReport() {
           return;
         }
       }
-
-
+      
+      //b.
+      let ref;
       if (pointer.has(meta, '/vdoc/pdf')) {
         let vdoc = Object.keys(meta.vdoc.pdf)[0]
-        let ref = meta.vdoc.pdf[vdoc]._id;
+        ref = meta.vdoc.pdf[vdoc]._id;
         obj.b1.count++;
         obj.b1.items.push({
           bid,
           key
         });
-
-        let tpdoc = await axios({
-          method: 'get',
-          headers: {
-            Authorization: `Bearer ${TOKEN}`
-          },
-          url: `https://${DOMAIN}/${ref}/_meta`
-        })
-        if (tpdoc.status !== 200) return;
-        tpdoc = tpdoc.data
-
-        let job;
-        if (pointer.has(tpdoc, `/services/target/jobs`)) {
-          job = Object.keys(tpdoc.services.target.jobs)[0];
-          obj.c1.count++;
-          obj.c1.items.push({
+      } else {
+        if (docApproved) {
+          obj.b4.count++;
+          obj.b4.items.push({
             bid,
             key
-          });
-
-          //Check validation status
-          let jobdata = await axios({
-            method: 'get',
-            headers: {
-              Authorization: `Bearer ${TOKEN}`
-            },
-            url: `https://${DOMAIN}/resources/${job}`,
-          }).then(r => r.data);
-
-          if (jobdata.status === "success") {
-            obj.d1.count++;
-            obj.d1.items.push({
-              bid,
-              key
-            });
-          } else if (jobdata.status === "failure") {
-            obj.d2.count++;
-            obj.d2.items.push({
-              bid,
-              key
-            });
-            let ev = Object.values(jobdata.updates).every(({information}) => {
-              if (information && information.includes('recognized')) {
-                obj.d2c.count++;
-                obj.d2c.items.push({
-                  bid,
-                  key,
-                  job
-                });
-                return false;
-              } else if (information && information.includes('multi-COI')) {
-                obj.d2b.count++;
-                obj.d2b.items.push({
-                  bid,
-                  key,
-                  job
-                });
-                return false;
-              } else if (information && information.includes('OCR')) {
-                obj.d2a.count++;
-                obj.d2a.items.push({
-                  bid,
-                  key,
-                  job
-                })
-                return false;
-              }
-              return true;
-            })
-            if (ev === true) {
-              obj.d2d.count++;
-              obj.d2d.items.push({
-                bid,
-                key,
-                job
-              })
-            }
-            return;
-          } else {
-            obj.d3.count++;
-            obj.d3.items.push({
-              bid,
-              key
-            });
-            return
-          }
-
-          if (pointer.has(tpdoc, `/vdoc/cois`)) {
-            let coi = Object.keys(tpdoc.vdoc.cois)[0];
-            obj.e1.count++;
-            obj.e1.items.push({
-              bid,
-              key
-            });
-
-            //Check validation status
-            let valid = await axios({
-              method: 'get',
-              headers: {
-                Authorization: `Bearer ${TOKEN}`
-              },
-              url: `https://${DOMAIN}/resources/${coi}/_meta/services/fl-sync/valid`,
-            }).then(r => r.data)
-            .catch(err => {})
-            if (valid === undefined) {
-              obj.f3.count++;
-              obj.f3.items.push({
-                bid,
-                key
-              })
-              return;
-            }
-
-            if (valid.status === true) {
-              obj.f1.count++;
-              obj.f1.items.push({
-                bid,
-                key
-              })
-            } else if (valid.status === false) {
-              obj.f2.count++;
-              obj.f2.items.push({
-                bid,
-                key
-              })
-              if (valid.message.includes('expired')) {
-                obj.f2a.count++;
-                obj.f2a.items.push({
-                  bid,
-                  key
-                })
-              } else if (valid.message.includes('match')) {
-                obj.f2b.count++;
-                obj.f2b.items.push({
-                  bid,
-                  key
-                })
-              } 
-              return
-            } else {
-              obj.f3.count++;
-              obj.f3.items.push({
-                bid,
-                key
-              })
-              return;
-            }
-
-            let assess = await axios({
-              method: 'get',
-              headers: {
-                Authorization: `Bearer ${TOKEN}`
-              },
-              url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-            }).then(r => r.data)
-            .catch(err => {})
-            if (assess === undefined) {
-              obj.h3.count++;
-              obj.h3.items.push({
-                bid,
-                key
-              })
-              return;
-            }
-            obj.g.count++;
-            obj.g.items.push({
-              bid,
-              key
-            })
-
-            let approval = assess.approval
-            if (approval === true) {
-              obj.h1.count++;
-              obj.h1.items.push({
-                bid,
-                key
-              })
-            } else if (approval === false) {
-              obj.h2.count++;
-              obj.h2.items.push({
-                bid,
-                key
-              })
-              return
-            } else {
-              obj.h3.count++;
-              obj.h3.items.push({
-                bid,
-                key
-              })
-            }
-          } else {
-            obj.e2.count++;
-            obj.e2.items.push({
-              bid,
-              key
-            })
-          }
+          })
+        } else if (docApproved === false) {
+          obj.b5.count++;
+          obj.b5.items.push({
+            bid,
+            key
+          })
         } else {
-          obj.c2.count++;
-          obj.c2.items.push({
+          obj.b6.count++;
+          obj.b6.items.push({
             bid,
             key
           })
         }
-      } else {
-        obj.b3.count++;
-        obj.b3.items.push({
-          bid,
-          key
-        })
+        return
       }
-    }, {concurrency: 10})
 
-    // Now assessments
-
-    let assessments = await axios({
-      method: 'get',
-      url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/assessments`,
-      headers: {
-        Authorization: `Bearer ${TOKEN}`
-      },
-    }).then(r => r.data)
-    .catch(err => {
-      return
-    })
-  
-    let keys = Object.keys(assessments || {}).filter(key => key.charAt(0) !== '_')
-
-    await Promise.map(keys, async key => {
-      let as = await axios({
+      //c.
+      let tpdoc = await axios({
         method: 'get',
-        url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/assessments/${key}`,
         headers: {
           Authorization: `Bearer ${TOKEN}`
         },
+        url: `https://${DOMAIN}/${ref}/_meta`
       })
-      if (as.status !== 200) return
-      as = as.data['food-logiq-mirror'];
-      if (pointer.has(as, `/assessmentTemplate/name`)) {
-        if (pointer.get(as, `/assessmentTemplate/name`) === ASSESSMENT_TEMPLATE_NAME) {
-          obj.A1.count++;
-          obj.A1.items.push({
+      if (tpdoc.status !== 200) return;
+      tpdoc = tpdoc.data
+
+      let job;
+      if (pointer.has(tpdoc, `/services/target/jobs`)) {
+        job = Object.keys(tpdoc.services.target.jobs)[0];
+        obj.c1.count++;
+        obj.c1.items.push({
+          bid,
+          key
+        });
+      } else {
+        obj.c2.count++;
+        obj.c2.items.push({
+          bid,
+          key
+        })
+        return;
+      }
+
+      //d.
+      //Check validation status
+      let jobdata = await axios({
+        method: 'get',
+        headers: {
+          Authorization: `Bearer ${TOKEN}`
+        },
+        url: `https://${DOMAIN}/resources/${job}`,
+      }).then(r => r.data);
+
+      if (jobdata.status === "success") {
+        obj.d1.count++;
+        obj.d1.items.push({
+          bid,
+          key
+        });
+      } else if (jobdata.status === "failure") {
+        obj.d2.count++;
+        obj.d2.items.push({
+          bid,
+          key
+        });
+
+        let ev = Object.values(jobdata.updates).every(({information}) => {
+          if (information && information.includes('recognized')) {
+            obj.d2.d2c.count++;
+            obj.d2.d2c.items.push({
+              bid,
+              key,
+              job
+            });
+            return false;
+          } else if (information && information.includes('multi-COI')) {
+            obj.d2.d2b.count++;
+            obj.d2.d2b.items.push({
+              bid,
+              key,
+              job
+            });
+            return false;
+          } else if (information && information.includes('OCR')) {
+            obj.d2.d2a.count++;
+            obj.d2.d2a.items.push({
+              bid,
+              key,
+              job
+            })
+            return false;
+          }
+          return true;
+        })
+        if (ev === true) {
+          obj.d2.d2d.count++;
+          obj.d2.d2d.items.push({
+            bid,
+            key,
+            job
+          })
+        }
+        return;
+      } else {
+        obj.d3.count++;
+        obj.d3.items.push({
+          bid,
+          key
+        });
+        return
+      }
+
+      //e.
+      let coi;
+      if (pointer.has(tpdoc, `/vdoc/cois`)) {
+        coi = Object.keys(tpdoc.vdoc.cois)[0];
+        obj.e1.count++;
+        obj.e1.items.push({
+          bid,
+          key
+        });
+      } else {
+        obj.e2.count++;
+        obj.e2.items.push({
+          bid,
+          key
+        })
+        return;
+      }
+
+      //f.
+      //Check validation status
+      let valid = await axios({
+        method: 'get',
+        headers: {
+          Authorization: `Bearer ${TOKEN}`
+        },
+        url: `https://${DOMAIN}/resources/${coi}/_meta/services/fl-sync/valid`,
+      }).then(r => r.data)
+      .catch(err => {})
+      if (valid === undefined) {
+        obj.f3.count++;
+        obj.f3.items.push({
+          bid,
+          key
+        })
+        return;
+      }
+
+      if (valid.status === true) {
+        obj.f1.count++;
+        obj.f1.items.push({
+          bid,
+          key
+        })
+      } else if (valid.status === false) {
+        obj.f2.count++;
+        obj.f2.items.push({
+          bid,
+          key
+        })
+        if (valid.message.includes('expired')) {
+          obj.f2.f2a.count++;
+          obj.f2.f2a.items.push({
+            bid,
+            key
+          })
+        } else if (valid.message.includes('match')) {
+          obj.f2.f2b.count++;
+          obj.f2.f2b.items.push({
+            bid,
+            key
+          })
+        } 
+        return
+      } else {
+        obj.f3.count++;
+        obj.f3.items.push({
+          bid,
+          key
+        })
+        return;
+      }
+
+      //g & h.
+      let assess = await axios({
+        method: 'get',
+        headers: {
+          Authorization: `Bearer ${TOKEN}`
+        },
+        url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+      }).then(r => r.data)
+      .catch(err => {})
+      if (assess === undefined) {
+        obj.h3.count++;
+        obj.h3.items.push({
+          bid,
+          key
+        })
+        return;
+      }
+      let {id, approval} = assess;
+
+      obj.g.count++;
+      obj.g.items.push({
+        bid,
+        key
+      })
+
+      if (approval === true) {
+        obj.h1.count++;
+        obj.h1.items.push({
+          bid,
+          key
+        })
+      } else if (approval === false) {
+        obj.h2.count++;
+        obj.h2.items.push({
+          bid,
+          key
+        })
+        return;
+      } else {
+        obj.h3.count++;
+        obj.h3.items.push({
+          bid,
+          key
+        })
+        return;
+      }
+
+      //A.
+      if (id) {
+
+        let as = await axios({
+          method: 'get',
+          url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/assessments/${id}`,
+          headers: {
+            Authorization: `Bearer ${TOKEN}`
+          },
+        })
+        if (as.status !== 200) return
+        as = as.data['food-logiq-mirror'];
+        if (pointer.has(as, `/assessmentTemplate/name`)) {
+          if (pointer.get(as, `/assessmentTemplate/name`) === ASSESSMENT_TEMPLATE_NAME) {
+            obj.A1.count++;
+            obj.A1.items.push({
+              bid,
+              key
+            });
+          } else return;
+        } else return;
+        if (as.creation.userId === userId) {
+          obj.A1.A1a.count++;
+          obj.A1. A1a.items.push({
             bid,
             key
           });
-        } else return;
-      } else return;
-      if (as.creation.userId === userId) {
-        obj.A1a.count++;
-        obj.A1a.items.push({
-          bid,
-          key
-        });
-      } else {
-        obj.A1b.count++;
-        obj.A1b.items.push({
-          bid,
-          key
-        });
-      }
+        } else {
+          obj.A1.A1b.count++;
+          obj.A1.A1b.items.push({
+            bid,
+            key
+          });
+        }
 
-      if (as.state === 'Approved') {
-        obj.B1.count++;
-        obj.B1.items.push({
-          bid,
-          key
-        });
-      } else if (as.state === 'Rejected') {
-        obj.B2.count++;
-        obj.B2.items.push({
-          bid,
-          key
-        });
-        return;
-      } else if (as.state === 'Submitted') {
-        obj.B3.count++;
-        obj.B3.items.push({
-          bid,
-          key
-        });
-        return;
-      } else if (as.state === 'In Progress') {
-        obj.B4.count++;
-        obj.B4.items.push({
-          bid,
-          key
-        });
-        return;
-      } else {
-        obj.B5.count++;
-        obj.B5.items.push({
-          bid,
-          key,
-          state: as.state
-        });
-        return;
+        //B.
+        if (as.state === 'Approved') {
+          obj.B1.count++;
+          obj.B1.items.push({
+            bid,
+            key
+          });
+        } else if (as.state === 'Rejected') {
+          obj.B2.count++;
+          obj.B2.items.push({
+            bid,
+            key
+          });
+          return;
+        } else if (as.state === 'Submitted') {
+          obj.B3.count++;
+          obj.B3.items.push({
+            bid,
+            key
+          });
+          return;
+        } else if (as.state === 'In Progress') {
+          obj.B4.count++;
+          obj.B4.items.push({
+            bid,
+            key
+          });
+          return;
+        } else {
+          obj.B5.count++;
+          obj.B5.items.push({
+            bid,
+            key,
+            state: as.state
+          });
+          return;
+        }
       }
-
     }, {concurrency: 10})
-
   }, {concurrency: 10}).catch(err => {
     console.log(err);
     console.log('done (error)', obj);
@@ -2082,7 +2167,6 @@ async function linkAssessments() {
   })
 }
 
-
 async function associateAssessments() {
   let index = {};
   let report = await con.get({
@@ -2194,8 +2278,7 @@ async function reprocessReport() {
   }).then(r => r.data);
 
   // Handle possible Multi-File Errors (b3)
-  await Promise.map(report.b3.items, async ({bid, key}) => {
-
+  await Promise.each(report.b3.items, async ({bid, key}) => {
     let data = await con.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
     }).then(r => r.data);
@@ -2209,7 +2292,7 @@ async function reprocessReport() {
   })
 
   //Why no jobs? Rerun these.
-  await Promise.map(report.c2.items, async ({bid, key}) => {
+  await Promise.each(report.c2.items, async ({bid, key}) => {
     let data = await con.get({
       path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
     }).then(r => r.data);
@@ -2222,62 +2305,48 @@ async function reprocessReport() {
     })
   })
 
-
-  //Handle Duplicate Assessments
-  let coiAs = {};
-  await Promise.map(report.A1.items, async ({bid, key}) => {
+  // Job failed? Try again
+  await Promise.each(report.d2.items, async ({bid, key}) => {
     let data = await con.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}/assessments/${key}`
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
     }).then(r => r.data);
-    let as = data['food-logiq-mirror'];
-    if (pointer.has(as, `/assessmentTemplate/name`)) {
-      if (pointer.get(as, `/assessmentTemplate/name`) === ASSESSMENT_TEMPLATE_NAME) {
-        if (coiAs[bid]) {
-          let t = moment(as.lastUpdate.time);
-          let tim = moment(coiAs[bid].time);
-          if (t.isBefore(tim)) {
-            /*
-            await axios({
-              method: 'delete',
-              headers: {Authorization: FL_TOKEN},
-              url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${key}`,
-              data: doc
-            })
-            await con.delete({
-              path: `/bookmarks/services/fl-sync/businesses/${bid}/assessments/${key}`
-            })
-            */
-          } else {
-            /*
-            await axios({
-              method: 'delete',
-              headers: {Authorization: FL_TOKEN},
-              url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${coiAs[bid].key}`,
-              data: doc
-            })
-            await con.delete({
-              path: `/bookmarks/services/fl-sync/businesses/${bid}/assessments/${cois[bid].key}`
-            })
-            */
-            coiAs[bid] = {bid, key, time: as.lastUpdate.time}
-          }
-        } else {
-          coiAs[bid] = {bid, key, time: as.lastUpdate.time}
-        }
+    
+    await con.put({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
+      data: {
+        'food-logiq-mirror': data['food-logiq-mirror']
       }
-    }
-  }, {concurrency: 10})
-  console.log('COIs', Object.keys(coiAs).length);
-
-  await Promise.map(Object.values(coiAs), async ({bid, key})=> {
-    /*
-    await CONNECTION.put({
-      path: `${SERVICE_PATH}/businesses/${bid}/documents/${key}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-      data: {approval: !failed}
     })
-    */
   })
+
+  await Promise.each(report.f3.items, async ({bid, key}) => {
+    let data = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
+    }).then(r => r.data);
+    
+    await con.put({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
+      data: {
+        'food-logiq-mirror': data['food-logiq-mirror']
+      }
+    })
+  })
+
+  await Promise.each(report.h3.items, async ({bid, key}) => {
+    let data = await con.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
+    }).then(r => r.data);
+    
+    await con.put({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
+      data: {
+        'food-logiq-mirror': data['food-logiq-mirror']
+      }
+    })
+  })
+
 }
+
 
 
 
@@ -2302,8 +2371,8 @@ async function main() {
 //    await handleIncompleteCois();
 //    await traceCois();
 //    await associateAssessments();
-    await linkAssessments();
-//    await generateReport();
+//    await linkAssessments();
+    await generateReport();
 //    await handleReport();
 //    await reprocessReport();
 //    await listCois();
