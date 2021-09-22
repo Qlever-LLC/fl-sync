@@ -1246,7 +1246,7 @@ async function generateReport() {
       items: [],
     },
     b2: {
-      description: 'FL Document has multiple CoIs within the PDF file',
+      description: 'FL Document has multiple PDFs attached',
       count: 0,
       items: [],
     },
@@ -1305,6 +1305,11 @@ async function generateReport() {
         items: [],
       },
       d2d: {
+        description: 'Target Validation failure',
+        count: 0,
+        items: [],
+      },
+      d2e: {
         description: 'Other target failure modes',
         count: 0,
         items: [],
@@ -1406,6 +1411,11 @@ async function generateReport() {
       items: [],
     },
     B5: {
+      description: 'Assessment state is Not Started',
+      count: 0,
+      items: [],
+    },
+    B6: {
       description: 'Other assessment states',
       count: 0,
       items: [],
@@ -1629,12 +1639,21 @@ async function generateReport() {
               job
             })
             return false;
+          } else if (information && information.includes('Valiadation')) {
+            obj.d2.d2d.count++;
+            obj.d2.d2d.items.push({
+              bid,
+              key,
+              job
+            })
+            return false;
           }
+
           return true;
         })
         if (ev === true) {
-          obj.d2.d2d.count++;
-          obj.d2.d2d.items.push({
+          obj.d2.d2e.count++;
+          obj.d2.d2e.items.push({
             bid,
             key,
             job
@@ -1817,29 +1836,31 @@ async function generateReport() {
             bid,
             key
           });
-          return;
         } else if (as.state === 'Submitted') {
           obj.B3.count++;
           obj.B3.items.push({
             bid,
             key
           });
-          return;
         } else if (as.state === 'In Progress') {
           obj.B4.count++;
           obj.B4.items.push({
             bid,
             key
           });
-          return;
-        } else {
+        } else if (as.state === 'Not Started') {
           obj.B5.count++;
           obj.B5.items.push({
+            bid,
+            key
+          });
+        } else {
+          obj.B6.count++;
+          obj.B6.items.push({
             bid,
             key,
             state: as.state
           });
-          return;
         }
       }
     }, {concurrency: 10})
@@ -2292,7 +2313,6 @@ async function reprocessReport() {
         path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`
       }).then(r => r.data);
       
-      /*
       await con.put({
         path: `/bookmarks/services/fl-sync/businesses/${bid}/documents/${key}`,
         data: {
@@ -2301,7 +2321,6 @@ async function reprocessReport() {
       })
 
       await Promise.delay(10000);
-      */
     })
   })
 }
@@ -2331,9 +2350,9 @@ async function main() {
 //    await traceCois();
 //    await associateAssessments();
 //    await linkAssessments();
-//    await generateReport();
+    await generateReport();
 //    await handleReport();
-    await reprocessReport();
+//    await reprocessReport();
 //    await listCois();
 //  await findChange(493126);
 //  await deleteFlBizDocs();

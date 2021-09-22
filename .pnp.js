@@ -38,7 +38,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./",
           "packageDependencies": [
             ["@oada/client", "npm:2.6.2"],
-            ["@oada/list-lib", "npm:2.1.9"],
+            ["@oada/list-lib", "npm:2.1.10"],
             ["@oada/types", "npm:1.5.1"],
             ["@tsconfig/node16", "npm:1.0.1"],
             ["@types/convict", "npm:6.0.2"],
@@ -134,25 +134,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]
       ]],
       ["@oada/client", [
-        ["npm:2.6.1", {
-          "packageLocation": "./.yarn/cache/@oada-client-npm-2.6.1-c57f9f6572-90971ea39d.zip/node_modules/@oada/client/",
-          "packageDependencies": [
-            ["@oada/client", "npm:2.6.1"],
-            ["@oada/types", "npm:1.5.1"],
-            ["buffer", "npm:6.0.3"],
-            ["cross-fetch", "npm:3.1.4"],
-            ["debug", "virtual:f42128b523b6b26285cb4da9c7d583621564bd9c53b6bb67b50bbc73cda83aa31c7f631e0f418e6658f25baa78c0768ad15d98251f327db2f9af48eaa944f8dc#npm:4.3.2"],
-            ["deep-clone", "npm:3.0.3"],
-            ["fetch-h2", "npm:3.0.0"],
-            ["isomorphic-ws", "virtual:f42128b523b6b26285cb4da9c7d583621564bd9c53b6bb67b50bbc73cda83aa31c7f631e0f418e6658f25baa78c0768ad15d98251f327db2f9af48eaa944f8dc#npm:4.0.1"],
-            ["ksuid", "npm:2.0.0"],
-            ["p-queue", "npm:6.6.2"],
-            ["reconnecting-websocket", "npm:4.4.0"],
-            ["type-is", "npm:1.6.18"],
-            ["ws", "virtual:f42128b523b6b26285cb4da9c7d583621564bd9c53b6bb67b50bbc73cda83aa31c7f631e0f418e6658f25baa78c0768ad15d98251f327db2f9af48eaa944f8dc#npm:8.0.0"]
-          ],
-          "linkType": "HARD",
-        }],
         ["npm:2.6.2", {
           "packageLocation": "./.yarn/cache/@oada-client-npm-2.6.2-f42128b523-e99cdf634a.zip/node_modules/@oada/client/",
           "packageDependencies": [
@@ -175,11 +156,11 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]
       ]],
       ["@oada/list-lib", [
-        ["npm:2.1.9", {
-          "packageLocation": "./.yarn/cache/@oada-list-lib-npm-2.1.9-a239f41ab3-a92c9233c4.zip/node_modules/@oada/list-lib/",
+        ["npm:2.1.10", {
+          "packageLocation": "./.yarn/cache/@oada-list-lib-npm-2.1.10-b0b2f11ea0-64ef05fac8.zip/node_modules/@oada/list-lib/",
           "packageDependencies": [
-            ["@oada/list-lib", "npm:2.1.9"],
-            ["@oada/client", "npm:2.6.1"],
+            ["@oada/list-lib", "npm:2.1.10"],
+            ["@oada/client", "npm:2.6.2"],
             ["@oada/types", "npm:1.5.1"],
             ["bluebird", "npm:3.7.2"],
             ["clone-deep", "npm:4.0.1"],
@@ -209,7 +190,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [
             ["@qlever-llc/fl-sync", "workspace:."],
             ["@oada/client", "npm:2.6.2"],
-            ["@oada/list-lib", "npm:2.1.9"],
+            ["@oada/list-lib", "npm:2.1.10"],
             ["@oada/types", "npm:1.5.1"],
             ["@tsconfig/node16", "npm:1.0.1"],
             ["@types/convict", "npm:6.0.2"],

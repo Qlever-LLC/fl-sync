@@ -1741,7 +1741,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.22]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.23]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
