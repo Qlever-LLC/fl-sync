@@ -692,7 +692,12 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
       if (err.status !== 404) throw err;
       info(`Resource is not already on trellis. Syncing...`);
       sync = true;
-      let _id = (await ksuid.random()).string;
+      delay += 20000;
+    }
+
+    // Create a new resource if necessary and link to it
+    if (!_id) {
+      _id = ksuid.randomSync().string;
       await CONNECTION.put({
         path,
         data: {
@@ -700,7 +705,6 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
           "_rev": 0
         }
       });
-      delay += 20000;
     }
 
     // Now, sync
@@ -737,35 +741,6 @@ async function getResources() {
   info(`Fetching community assessments`);
   await fetchCommunityResources({ type: 'assessments', date })
 }
-
-/**
- * gets resources by member
- */
-async function getResourcesByMember(member) {
-  let bid = member.business._id;
-  //Format date
-  let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
-
-  // Get pending resources
-  await Promise.each(['products', 'locations', 'documents'], async (type) => {
-    await fetchAndSync({
-      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&sourceBusinesses=${bid}&versionUpdated=${date}..`,
-      to: (i) => {
-        return `${SERVICE_PATH}/businesses/${bid}/${type}/${i._id}`
-      }
-    })
-  })
-  // Now get assessments (slightly different syntax)
-  try {
-    await fetchAndSync({
-      from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?performedOnBusinessIds=${bid}&lastUpdateAt=${date}..`,
-      to: `${SERVICE_PATH}/businesses/${bid}/assessments`,
-    })
-    return;
-  } catch (err) {
-    throw err;
-  }
-}//getResourcesByMember
 
 /**
  * approves fl document
@@ -1741,7 +1716,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.24]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.25]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
