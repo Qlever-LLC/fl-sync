@@ -824,7 +824,7 @@ async function handleAssessment(item, bid, tp) {
     if (item.state === 'Approved') {
       TARGET_JOBS[job.jobId].assessments[item._id] = true;
       await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
+        path: `${SERVICE_PATH}/process-queue/jobs${job.jobId}`,
         data: {
           assessments: {
             [item._id]: true
@@ -835,7 +835,7 @@ async function handleAssessment(item, bid, tp) {
     } else if (item.state === 'Rejected') {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
       await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/jobs/${job.jobId}`,
+        path: `${SERVICE_PATH}/process-queue/jobs${job.jobId}`,
         data: {
           assessments: {
             [item._id]: false
@@ -1020,7 +1020,7 @@ async function handleApprovedDoc(item, bid, tp) {
 
   TARGET_JOBS[found.jobId].approved = true;
   await CONNECTION.put({
-    path: `${SERVICE_PATH}/process-queue/jobs/${found.jobId}`,
+    path: `${SERVICE_PATH}/process-queue/jobs${found.jobId}`,
     data: { approved: true }
   });
 
@@ -1163,8 +1163,10 @@ async function handleScrapedResult(jobId) {
   let url = `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`;
   info(`--> url [${url}]`);
   try {
+    // Don't use this path because Target Helper may be backed up and the link may not have been created yet.
     let request = {
-      path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+    //  path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
+      path: `/resources${jobId}/result/${job.result.type}/${job.result.key}`,
     };
     let result = null;
     let retries = 0;
@@ -1176,7 +1178,7 @@ async function handleScrapedResult(jobId) {
         .then(r => r.data)
         .catch(err => {
           if (retries === MAX_RETRIES) {
-            error(err);
+            error(`Retried several times, but errored: ${job}`);
             throw err;
           }
           return null;
@@ -1228,7 +1230,7 @@ async function handleScrapedResult(jobId) {
       }
 
       await CONNECTION.post({
-        path: `/resources/${job.jobId}/updates`,
+        path: `/resources${job.jobId}/updates`,
         data: {
           time: moment().format('X'),
           information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
@@ -1239,7 +1241,7 @@ async function handleScrapedResult(jobId) {
       });
 
       await CONNECTION.post({
-        path: `/resources/${job.jobId}/updates`,
+        path: `/resources${job.jobId}/updates`,
         data: {
           time: moment().format('X'),
           information: `A FoodLogiQ Assessment has been created and associated with this document`,
@@ -1257,7 +1259,7 @@ async function handleScrapedResult(jobId) {
         [assessmentId]: false
       }
       await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/jobs/${jobId}`,
+        path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
         data: {
           assessments: {
             [assessmentId]: false
@@ -1270,7 +1272,7 @@ async function handleScrapedResult(jobId) {
       await rejectFlDoc(job.flId, message, job.flType)
 
       await CONNECTION.post({
-        path: `/resources/${job.jobId}/updates`,
+        path: `/resources${job.jobId}/updates`,
         data: {
           time: moment().format('X'),
           information: `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejecting FL Document`,
@@ -1716,7 +1718,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.25]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.26]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
