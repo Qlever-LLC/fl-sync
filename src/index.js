@@ -317,20 +317,15 @@ async function onTargetUpdate(c, jobId) {
 
   try {
     // Handle finished target results 
-    await Promise.each(Object.keys(c.body && c.body.result || {}), async type => {
-      await Promise.each(Object.keys(c.body.result[type]), async key => {
-        if (!TARGET_JOBS[jobId].result) {
-          TARGET_JOBS[jobId].result = { type, key, _id: c.body.result[type][key]._id };
-          await CONNECTION.put({
-            path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
-            data: { result: { type, key, _id: c.body.result[type][key]._id } }
-          })
-          await handleScrapedResult(jobId)
-        }
-      })
-    })
-
-
+    let status = pointer.has(c, `/body/status`) ? pointer.get(c, `/body/status`) : undefined;
+    if (status === 'success') {
+      await handleScrapedResult(jobId)
+    } else {
+      //TODO: Handle target failures
+      // Decide which cases to notify SF, Supplier, or our team
+      // Clean up process-queue
+    }
+      
     // Provide select update messages to FL
     await Promise.each(Object.values(c && c.body && c.body.updates || {}), async val => {
 
@@ -348,7 +343,7 @@ async function onTargetUpdate(c, jobId) {
           }
           break;
         case 'success':
-          if (/^Runner/.test(val.meta)) details = 'Trellis automation complete.';
+          if (/^Runner/.test(val.meta)) details = 'PDF data extraction complete.';
           break;
         default:
           break;
@@ -682,8 +677,8 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
 
       // Check for changes to the resources
       let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
-      if (!equals) info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
       if (!equals) {
+        info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
         delay += 20000;
         sync = true;
         _id = resp.data._id;
@@ -697,7 +692,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
 
     // Create a new resource if necessary and link to it
     if (!_id) {
-      _id = ksuid.randomSync().string;
+      _id = `resources/${ksuid.randomSync().string}`;
       await CONNECTION.put({
         path,
         data: {
@@ -764,7 +759,7 @@ async function approveFlDoc(docId) {
  * @returns 
  */
 function checkCoIAssessment(assessment) {
-  info(`Checking assessment ${assessment._id}`);
+  info(`Checking COI assessment ${assessment._id}`);
   let types = ['']
   return assessment.sections.map(section => {
     return section.subsections.map(subsection => {
@@ -1158,140 +1153,130 @@ async function handleScrapedResult(jobId) {
   let job = TARGET_JOBS[jobId];
   let flDoc;
 
-  info(`--> job type [${job.result.type}]`);
-  info(`--> job key [${job.result.key}]`);
-  let url = `https://${DOMAIN}${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`;
-  info(`--> url [${url}]`);
   try {
-    // Don't use this path because Target Helper may be backed up and the link may not have been created yet.
-    let request = {
-    //  path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`,
-      path: `/resources${jobId}/result/${job.result.type}/${job.result.key}`,
-    };
-    let result = null;
-    let retries = 0;
+    let targetResult = await CONNECTION.get({
+      path: `/resources${jobId}/result`
+    }).then(r => r.data);
 
-    // retrying ...
-    while (result === null && retries++ < MAX_RETRIES) {
-      await Promise.delay(2000);
-      result = await CONNECTION.get(request)
-        .then(r => r.data)
-        .catch(err => {
-          if (retries === MAX_RETRIES) {
-            error(`Retried several times, but errored: ${job}`);
-            throw err;
-          }
-          return null;
-        });
-    }//while 
-
-    info(`--> result ${result}`);
-    info(`--> retries ${retries}`);
-
-    flDoc = await CONNECTION.get({
-      path: `${job.mirrorId}`
-    }).then(r => r.data)
-
-    info(`--> flDoc ${flDoc}`);
-    let data = {
-      services: {
-        'fl-sync': {
-          document: { _id: job.mirrorId },
-          flId: job.flId
-        }
-      }
-    };
-
-    let { status, message } = await validatePending(result, flDoc, job.result.type);
-
-    if (status) {
-
-      let assessmentId = await CONNECTION.get({
-        path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}/id`,
-      }).then(r => {
-        return r.data
-      }).catch(err => { })
-
-      if (assessmentId) info(job, 'Assessment already exists.')
-      if (!assessmentId) info(job, 'Assessment does not yet exist.')
-
-      let assess = await constructAssessment(job, result, assessmentId);
-      //assessmentId = assess.data._id;
-
-      if (!assessmentId) {
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-          data: {id: assess.data._id}
-        })
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${assess.data._id}/_meta/services/fl-sync/documents/${job.flId}`,
-          data: job.flId
-        })
-      }
-
-      await CONNECTION.post({
-        path: `/resources${job.jobId}/updates`,
-        data: {
-          time: moment().format('X'),
-          information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
-        }
-      }).catch(err => {
-        error(err);
-        throw err;
-      });
-
-      await CONNECTION.post({
-        path: `/resources${job.jobId}/updates`,
-        data: {
-          time: moment().format('X'),
-          information: `A FoodLogiQ Assessment has been created and associated with this document`,
-        }
-      }).catch(err => {
-        error(err);
-        throw (err);
-      })
-
-      data.services['fl-sync'].assessments = {
-        [ASSESSMENT_TEMPLATE_ID]: assessmentId
-      }
-
-      TARGET_JOBS[jobId].assessments = {
-        [assessmentId]: false
-      }
+    // TODO: Assumes there is just one
+    let type = Object.keys(targetResult || {})[0];
+    let key = Object.keys(targetResult[type])[0];
+    if (!TARGET_JOBS[jobId].result) {
+      TARGET_JOBS[jobId].result = { type, key, _id: targetResult[type][key]._id };
       await CONNECTION.put({
         path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
-        data: {
-          assessments: {
-            [assessmentId]: false
+        data: { result: { type, key, _id: targetResult[type][key]._id } }
+      })
+      info(`Job result: [type: ${type}, key: ${key}, _id: ${targetResult[type][key]._id}]`);
+
+      let result = await CONNECTION.get({
+        path: `/resources${jobId}/result/${type}/${key}`,
+      }).then(r => r.data)
+
+      flDoc = await CONNECTION.get({
+        path: `${job.mirrorId}`
+      }).then(r => r.data)
+
+      info(`--> flDoc ${flDoc}`);
+      let data = {
+        services: {
+          'fl-sync': {
+            document: { _id: job.mirrorId },
+            flId: job.flId
           }
         }
-      })
+      };
 
-      info(`Spawned assessment [${assessmentId}] for business id [${job.bid}]`);
-    } else {
-      await rejectFlDoc(job.flId, message, job.flType)
+      let { status, message } = await validatePending(result, flDoc, job.result.type);
 
-      await CONNECTION.post({
-        path: `/resources${job.jobId}/updates`,
-        data: {
-          time: moment().format('X'),
-          information: `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejecting FL Document`,
+      if (status) {
+
+        let assessmentId = await CONNECTION.get({
+          path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}/id`,
+        }).then(r => {
+          return r.data
+        }).catch(err => { })
+
+        if (assessmentId) info(job, 'Assessment already exists.')
+        if (!assessmentId) info(job, 'Assessment does not yet exist.')
+
+        let assess = await constructAssessment(job, result, assessmentId);
+        //assessmentId = assess.data._id;
+
+        if (!assessmentId) {
+          await CONNECTION.put({
+            path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+            data: {id: assess.data._id}
+          })
+          await CONNECTION.put({
+            path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${assess.data._id}/_meta/services/fl-sync/documents/${job.flId}`,
+            data: job.flId
+          })
         }
+
+        await CONNECTION.post({
+          path: `/resources${job.jobId}/updates`,
+          data: {
+            time: moment().format('X'),
+            information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
+          }
+        }).catch(err => {
+          error(err);
+          throw err;
+        });
+
+        await CONNECTION.post({
+          path: `/resources${job.jobId}/updates`,
+          data: {
+            time: moment().format('X'),
+            information: `A FoodLogiQ Assessment has been created and associated with this document`,
+          }
+        }).catch(err => {
+          error(err);
+          throw (err);
+        })
+
+        data.services['fl-sync'].assessments = {
+          [ASSESSMENT_TEMPLATE_ID]: assessmentId
+        }
+
+        TARGET_JOBS[jobId].assessments = {
+          [assessmentId]: false
+        }
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
+          data: {
+            assessments: {
+              [assessmentId]: false
+            }
+          }
+        })
+
+        info(`Spawned assessment [${assessmentId}] for business id [${job.bid}]`);
+      } else {
+        await rejectFlDoc(job.flId, message, job.flType)
+
+        await CONNECTION.post({
+          path: `/resources${job.jobId}/updates`,
+          data: {
+            time: moment().format('X'),
+            information: `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejecting FL Document`,
+          }
+        })
+      }
+
+      info(`Job result stored at trading partner ${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
+
+      // Add meta data to the trellis result document
+      let resp = await CONNECTION.put({
+        path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
+        data
       })
     }
-
-    info(`Job result stored at trading partner ${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}`)
-
-    // Add meta data to the trellis result document
-    let resp = await CONNECTION.put({
-      path: `${TP_MPATH}/${job.tp}/shared/trellisfw/${job.result.type}/${job.result.key}/_meta`,
-      data
-    })
   } catch (err) {
     error(err);
     throw err;
   }
-
 }//handleScrapedResult
 
 
@@ -1718,7 +1703,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.26]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.27]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
@@ -1748,7 +1733,7 @@ async function initialize() {
 }//initialize
 
 process.on('uncaughtException', function(err) {
-  console.log('Caught exception: ' + err);
+  error('Caught exception: ' + err);
 });
 
 initialize();

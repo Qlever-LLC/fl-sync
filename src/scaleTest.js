@@ -1238,7 +1238,12 @@ async function generateReport() {
         description: 'Other doc statuses',
         count: 0,
         items: [],
-      }
+      },
+      a4: {
+        description: 'Document awaiting-review',
+        count: 0,
+        items: [],
+      },
     },
     b1: {
       descrigtion: 'Trellis doc created',
@@ -1355,25 +1360,20 @@ async function generateReport() {
       count: 0,
       items: [],
     },
-    g: {
-      description: 'FL assessment created',
+    g1: {
+      description: 'FL assessment passes Trellis approval logic',
       count: 0,
       items: [],
-      g1: {
-        description: 'FL assessment passes Trellis approval logic',
-        count: 0,
-        items: [],
-      },
-      g2: {
-        description: 'FL assessment fails Trellis approval logic (not auto-rejected)',
-        count: 0,
-        items: [],
-      },
-      g3: {
-        description: 'Remainder of options',
-        count: 0,
-        items: [],
-      },
+    },
+    g2: {
+      description: 'FL assessment fails Trellis approval logic (not auto-rejected)',
+      count: 0,
+      items: [],
+    },
+    g3: {
+      description: 'Remainder of options',
+      count: 0,
+      items: [],
     },
     A1: {
       description: 'Assessments mirrored',
@@ -1473,17 +1473,20 @@ async function generateReport() {
           bid,
           key
         });
-      }
-
-      if (pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`) === 'rejected') {
+      } else if (pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`) === 'rejected') {
         docApproved = false;
         obj.a.a2.count++;
         obj.a.a2.items.push({
           bid,
           key
         });
-      }
-      if (docApproved === undefined) {
+      } else if (pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`) === 'awaiting-review') {
+        obj.a.a4.count++;
+        obj.a.a4.items.push({
+          bid,
+          key
+        });
+      } else {
         obj.a.a3.count++;
         obj.a.a3.items.push({
           bid,
@@ -1492,7 +1495,6 @@ async function generateReport() {
       }
 
       //b.
-
       try {
         let att = await axios({
           method: 'get',
@@ -1751,8 +1753,8 @@ async function generateReport() {
       }).then(r => r.data)
       .catch(err => {})
       if (assess === undefined) {
-        obj.g.g3.count++;
-        obj.g.g3.items.push({
+        obj.g3.count++;
+        obj.g3.items.push({
           bid,
           key
         })
@@ -1760,28 +1762,22 @@ async function generateReport() {
       }
       let {id, approval} = assess;
 
-      obj.g.count++;
-      obj.g.items.push({
-        bid,
-        key
-      })
-
       if (approval === true) {
-        obj.g.g1.count++;
-        obj.g.g1.items.push({
+        obj.g1.count++;
+        obj.g1.items.push({
           bid,
           key
         })
       } else if (approval === false) {
-        obj.g.g2.count++;
-        obj.g.g2.items.push({
+        obj.g2.count++;
+        obj.g2.items.push({
           bid,
           key
         })
         return;
       } else {
-        obj.g.g3.count++;
-        obj.g.g3.items.push({
+        obj.g3.count++;
+        obj.g3.items.push({
           bid,
           key
         })
@@ -1790,7 +1786,6 @@ async function generateReport() {
 
       //A.
       if (id) {
-
         let as = await axios({
           method: 'get',
           url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${bid}/assessments/${id}`,
@@ -1811,7 +1806,7 @@ async function generateReport() {
         } else return;
         if (as.creation.userId === userId) {
           obj.A1.A1a.count++;
-          obj.A1. A1a.items.push({
+          obj.A1.A1a.items.push({
             bid,
             key
           });
@@ -2299,9 +2294,9 @@ async function reprocessReport() {
 
   let paths = [
     'c2',
-    'd2/d2d',
+    'd2/d2e',
     'f3',
-    'g/g3',
+    'g3',
     'B3'
   ]
 
