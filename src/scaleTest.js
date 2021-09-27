@@ -34,7 +34,7 @@ const tree = require('./tree.js');
 const dummy = require('./dummyData.js');
 const flSync = require('./index.js')({initialize: false})
 const userId = "5e27480dd85523000155f6db";
-const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-22/1yVX4ozIUTMY5yVyQVgegwCX4HV`
+const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-27/1yjbS9L6WJC25a4kpQDSdECOEAE`
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
@@ -2295,11 +2295,11 @@ async function reprocessReport() {
   }).then(r => r.data);
 
   let paths = [
-    'c2',
-    'd2/d2e',
+    //'c2',
+    //'d2/d2e',
     'f3',
-    'g3',
-    'B3'
+    //'g3',
+    //'B3'
   ]
 
   await Promise.each(paths, async (path) => {
@@ -2317,7 +2317,7 @@ async function reprocessReport() {
         }
       })
 
-      await Promise.delay(10000);
+      await Promise.delay(30000);
     })
   })
 }
