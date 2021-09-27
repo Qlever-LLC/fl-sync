@@ -1502,6 +1502,8 @@ async function generateReport() {
           url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/attachments`,
         })
       } catch(err) {
+        console.log('b3 doc', bid, key)
+        console.log('status', pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`));
         obj.b3.count++;
         obj.b3.items.push({
           bid,
