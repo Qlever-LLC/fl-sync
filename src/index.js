@@ -320,10 +320,8 @@ async function onTargetUpdate(c, jobId) {
     let status = pointer.has(c, `/body/status`) ? pointer.get(c, `/body/status`) : undefined;
     if (status === 'success') {
       await handleScrapedResult(jobId)
-    } else {
-      //TODO: Handle target failures
-      // Decide which cases to notify SF, Supplier, or our team
-      // Clean up process-queue
+    } else if (status === 'failure') {
+
     }
       
     // Provide select update messages to FL
@@ -906,89 +904,98 @@ async function handlePendingDoc(item, bid, tp, bname) {
       return rejectFlDoc(item._id, message, flType)
     }
 
-    // create oada resources for each attachment
     let key = files[0];
     //await Promise.map(files || {}), async (key) => {
 
-      let mirrorId = await CONNECTION.get({
-        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_id`,
-      }).then(r => r.data)
+    let mirrorId = await CONNECTION.get({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_id`,
+    }).then(r => r.data)
 
-      let _id = await CONNECTION.get({
-        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf/${key}/_id`,
-      }).then(r => r.data)
-      .catch(err => {});
+    let _id = await CONNECTION.get({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf/${key}/_id`,
+    }).then(r => r.data)
+    .catch(err => {});
 
-      // If it doesn't exist, create a new PDF resource
-      _id = _id || `resources/${ksuid.randomSync().string}`;
+    // If it doesn't exist, create a new PDF resource
+    _id = _id || `resources/${ksuid.randomSync().string}`;
 
-      let ab = await zip.file(key).async("uint8array")
-      let zdata = Buffer.alloc(ab.byteLength);
-      for (var i = 0; i < zdata.length; ++i) {
-        zdata[i] = ab[i];
-      }
-      await CONNECTION.put({
-        path: `/${_id}`,
-        data: zdata,
-        contentType: 'application/pdf',
-      })
+    let ab = await zip.file(key).async("uint8array")
+    let zdata = Buffer.alloc(ab.byteLength);
+    for (var i = 0; i < zdata.length; ++i) {
+      zdata[i] = ab[i];
+    }
+    await CONNECTION.put({
+      path: `/${_id}`,
+      data: zdata,
+      contentType: 'application/pdf',
+    })
 
-      await CONNECTION.put({
-        path: `${_id}/_meta`,
-        //TODO: How should this be formatted?
-        data: {
-          filename: key,
-          services: {
-            'fl-sync': {
-              [item._id]: {
-                _ref: mirrorId,
-              }
+    await CONNECTION.put({
+      path: `${_id}/_meta`,
+      //TODO: How should this be formatted?
+      data: {
+        filename: key,
+        services: {
+          'fl-sync': {
+            [item._id]: {
+              _ref: mirrorId,
             }
           }
-        },
-        headers: { 'content-type': 'application/json' },
-      });
+        }
+      },
+      headers: { 'content-type': 'application/json' },
+    });
 
-      // Create a link from the FL mirror to the trellis pdf
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
-        data: {
-          vdoc: {
-            pdf: {
-              [key]: { _id }
-            }
+    // Create a link from the FL mirror to the trellis pdf
+    // First, overwrite what is currently there if previous pdfs vdocs had been linked
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
+      data: {
+        vdoc: {
+          pdf: 5
+        }
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
+      data: {
+        vdoc: {
+          pdf: {
+            [key]: { _id }
           }
-        },
-        headers: { 'content-type': 'application/json' },
-      });
+        }
+      },
+      headers: { 'content-type': 'application/json' },
+    });
 
-      let resId = _id.replace(/resources\//, '');
+    let resId = _id.replace(/resources\//, '');
 
-      // Create a lookup in order to track target updates
-      info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
-      let data = {
-        name: item.name,
-        tp,
-        flId: item._id,
-        pdfId: _id,
-        mirrorId,
-        bid,
-        bname,
-        trellisDocKey: resId,
-        flType,
-      };
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`,
-        data,
-      });
-      TARGET_PDFS[_id] = data;
+    // Create a lookup in order to track target updates
+    info(`Creating lookup: Trellis: [${_id}]; FL: [${item._id}]`)
+    let data = {
+      name: item.name,
+      tp,
+      flId: item._id,
+      pdfId: _id,
+      mirrorId,
+      bid,
+      bname,
+      trellisDocKey: resId,
+      flType,
+    };
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`,
+      data,
+    });
+    TARGET_PDFS[_id] = data;
 
-      //link the file into the documents list
-      info(`Linking file to documents list at ${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}: ${JSON.stringify(data, null, 2)}`);
-      await CONNECTION.put({
-        path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
-        data: { _id, _rev: 0 }
-      })
+    //link the file into the documents list
+    info(`Linking file to documents list at ${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}: ${JSON.stringify(data, null, 2)}`);
+    await CONNECTION.put({
+      path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
+      data: { _id, _rev: 0 }
+    })
     //});
   } catch (err) {
     error(`Error occurred while fetching FL attachments`);
@@ -1703,7 +1710,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.28]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.29]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
