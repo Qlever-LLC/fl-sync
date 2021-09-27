@@ -272,11 +272,6 @@ async function getLookup(item, key) {
       trellisId,
     };
     Object.assign(TARGET_JOBS[key], TARGET_PDFS[trellisId])
-    await CONNECTION.put({
-      path: `${SERVICE_PATH}/process-queue/jobs${key}`,
-      data: TARGET_JOBS[key]
-    });
-
   } catch (err) {
     error(`Error associating new target job to FL documents`)
     error(err);
@@ -362,12 +357,6 @@ async function onTargetUpdate(c, jobId) {
   } catch (err) {
     error('onTargetUpdate error: ');
     error(err);
-    await CONNECTION.put({
-      path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
-      data: {
-        status: 'failed',
-      }
-    })
     throw err;
   }
 }//onTargetUpdate
@@ -388,11 +377,6 @@ async function watchFlSyncConfig() {
         })
         await CONNECTION.put({
           path: `${SERVICE_PATH}/businesses`,
-          data: {},
-          tree
-        })
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/process-queue`,
           data: {},
           tree
         })
@@ -437,84 +421,6 @@ async function watchTargetJobs() {
   })
 }//watchTargetJobs
 
-
-/**
- * populates target pdfs and jobs - incomplete
- */
-async function populateIncomplete() {
-  let data = await CONNECTION.get({
-    path: `${SERVICE_PATH}/process-queue`
-  }).catch((err) => {
-    if (err.status === 404) return;
-    throw err;
-  }).then(r => r.data);
-
-  await Promise.map(Object.keys(data.pdfs), async key => {
-    let item = data.pdfs[key];
-    TARGET_PDFS[`resources/${key}`] = item;
-  });
-
-  await Promise.map(Object.keys(data.jobs), async key => {
-    let item = data.jobs[key];
-    TARGET_JOBS[key] = item;
-  });
-
-}//populateIncomplete
-
-/**
- * handles incomplete
- */
-async function handleIncomplete() {
-  info(`handleIncomplete: CURRENTLY_POLLING: [${CURRENTLY_POLLING}]`);
-  if (CURRENTLY_POLLING) return;
-
-  let pq = await CONNECTION.get({
-    path: `${SERVICE_PATH}/process-queue`
-  }).catch((err) => {
-    if (err.status === 404) return
-    throw err;
-  }).then(r => r.data);
-
-  //a) resubmit as a mirrored FL doc
-  await Promise.map(Object.keys(pq.pdfs), async key => {
-    let item = pq.pdfs[key];
-    //1. Fetch the fl item
-    let path = `${SERVICE_PATH}/businesses/${item.bid}/documents/${item._id}/food-logiq-mirror`;
-    let data = await CONNECTION.get({ path })
-      .then(r => r.data)
-      .catch(err => {
-        if (err.status === 404) info(`handleIncomplete failed to fetch mirror data missing for path: ${path}`)
-      })
-
-    await CONNECTION.delete({
-      path
-    })
-
-    await CONNECTION.put({
-      path,
-      data
-    })
-  })
-
-  //b) submit for reprocessing by target
-  await Promise.map(Object.keys(pq.jobs), async key => {
-    //1. Fetch the trellis doc
-    let item = pq.jobs[key];
-
-    let path = `${TP_MPATH}/${item.tp}/shared/trellisfw/documents/${item.trellisDocKey}`;
-    let data = await CONNECTION.get({ path })
-      .then(r => r.data)
-
-    await CONNECTION.delete({
-      path
-    })
-
-    await CONNECTION.put({
-      path,
-      data,
-    })
-  })
-}//handleIncomplete
 
 /**
  * handles FL Location
@@ -816,25 +722,9 @@ async function handleAssessment(item, bid, tp) {
   await Promise.each(found, async (job) => {
     if (item.state === 'Approved') {
       TARGET_JOBS[job.jobId].assessments[item._id] = true;
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/jobs${job.jobId}`,
-        data: {
-          assessments: {
-            [item._id]: true
-          }
-        }
-      });
       await approveFlDoc(job.flId);
     } else if (item.state === 'Rejected') {
       TARGET_JOBS[job.jobId].assessments[item._id] = false;
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/jobs${job.jobId}`,
-        data: {
-          assessments: {
-            [item._id]: false
-          }
-        }
-      })
       let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
       // TODO: Only do this if it has a current status of 'awaiting-review'
       await rejectFlDoc(job.flId, message, job.flType);
@@ -984,10 +874,6 @@ async function handlePendingDoc(item, bid, tp, bname) {
       trellisDocKey: resId,
       flType,
     };
-    await CONNECTION.put({
-      path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`,
-      data,
-    });
     TARGET_PDFS[_id] = data;
 
     //link the file into the documents list
@@ -1021,11 +907,6 @@ async function handleApprovedDoc(item, bid, tp) {
   if (!found.result) return;
 
   TARGET_JOBS[found.jobId].approved = true;
-  await CONNECTION.put({
-    path: `${SERVICE_PATH}/process-queue/jobs${found.jobId}`,
-    data: { approved: true }
-  });
-
   //2. 
   info(`Moving approved document to [${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
 
@@ -1047,13 +928,7 @@ async function handleApprovedDoc(item, bid, tp) {
     let tid = TARGET_JOBS[found.jobId]
     let resId = tid.trellisId.replace(/resources\//, '');
 
-    await CONNECTION.delete({
-      path: `${SERVICE_PATH}/process-queue/pdfs/${resId}`
-    })
     delete TARGET_PDFS[tid.trellisId]
-    await CONNECTION.delete({
-      path: `${SERVICE_PATH}/process-queue/jobs/${tid}`
-    })
     delete TARGET_JOBS[tid]
   } catch (err) {
     error('Error moving document result into trading-partner indexed docs')
@@ -1072,26 +947,32 @@ async function validatePending(trellisDoc, flDoc, type) {
   info(`Validating pending doc [${trellisDoc._id}]`);
   let message;
   let status = true;
-  switch (type) {
-    case 'cois':
-      //TODO: current fix to timezone stuff:
-      let offset = LOCAL ? 8 : 12;
-      let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(offset, 'hours');
-      let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
-      let now = moment();
+  try {
+    switch (type) {
+      case 'cois':
+        //TODO: current fix to timezone stuff:
+        let offset = LOCAL ? 8 : 12;
+        let flExp = moment(flDoc['food-logiq-mirror'].expirationDate).subtract(offset, 'hours');
+        let trellisExp = moment(Object.values(trellisDoc.policies)[0].expire_date);
+        let now = moment();
 
-      if (!flExp.isSame(trellisExp)) {
-        message = `Expiration date (${flExp}) does not match PDF document (${trellisExp}).`;
-        status = false;
-      }
-      if (flExp <= now) {
-        message = `Document is already expired: ${trellisExp}`;
-        status = false;
-      }
-      if (message) info(message);
-      break;
-    default:
-      break;
+        if (!flExp.isSame(trellisExp)) {
+          message = `Expiration date (${flExp}) does not match PDF document (${trellisExp}).`;
+          status = false;
+        }
+        if (flExp <= now) {
+          message = `Document is already expired: ${trellisExp}`;
+          status = false;
+        }
+        if (message) info(message);
+        break;
+      default:
+        break;
+    }
+  } catch(err) {
+    error('validatePending Errored: ', err);
+    status = false;
+    message = `validatePending Errored: ` + err.message;
   }
   info(`Validation of pending document [${trellisDoc._id}]: ${status}`);
   await CONNECTION.put({
@@ -1102,8 +983,9 @@ async function validatePending(trellisDoc, flDoc, type) {
         message
       }
     }
-
-  });
+  }).catch((err) => {
+    error('validatePending PUT failed: ', err);
+  })
 
   return { message, status };
 }//validatePending
@@ -1170,10 +1052,6 @@ async function handleScrapedResult(jobId) {
     let key = Object.keys(targetResult[type])[0];
     if (!TARGET_JOBS[jobId].result) {
       TARGET_JOBS[jobId].result = { type, key, _id: targetResult[type][key]._id };
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
-        data: { result: { type, key, _id: targetResult[type][key]._id } }
-      })
       info(`Job result: [type: ${type}, key: ${key}, _id: ${targetResult[type][key]._id}]`);
 
       let result = await CONNECTION.get({
@@ -1250,14 +1128,6 @@ async function handleScrapedResult(jobId) {
         TARGET_JOBS[jobId].assessments = {
           [assessmentId]: false
         }
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/process-queue/jobs${jobId}`,
-          data: {
-            assessments: {
-              [assessmentId]: false
-            }
-          }
-        })
 
         info(`Spawned assessment [${assessmentId}] for business id [${job.bid}]`);
       } else {
@@ -1710,7 +1580,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.29]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.30]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
