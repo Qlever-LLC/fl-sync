@@ -839,16 +839,10 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
     // Create a link from the FL mirror to the trellis pdf
     // First, overwrite what is currently there if previous pdfs vdocs had been linked
-    info(`overwriting pdf vdoc for ${bid}, ${item._id} to ${_id}`)
-    await CONNECTION.put({
-      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
-      data: {
-        vdoc: {
-          pdf: 5
-        }
-      },
-      headers: { 'content-type': 'application/json' },
+    await CONNECTION.delete({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf`,
     });
+    info(`overwriting pdf vdoc for ${bid}, ${item._id} to ${_id}`)
     await CONNECTION.put({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
       data: {
@@ -1560,7 +1554,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.31]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.1]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada

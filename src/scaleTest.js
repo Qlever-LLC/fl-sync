@@ -34,7 +34,7 @@ const tree = require('./tree.js');
 const dummy = require('./dummyData.js');
 const flSync = require('./index.js')({initialize: false})
 const userId = "5e27480dd85523000155f6db";
-const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-29/1yom0YFnNpAa34TsxNQHBCqoEAS`
+const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-29/1ypFKs8LWHvqDh8YwKT54DQ9A3x`
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
