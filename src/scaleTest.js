@@ -2356,9 +2356,9 @@ async function main() {
 //    await traceCois();
 //    await associateAssessments();
 //    await linkAssessments();
-    await generateReport();
+//    await generateReport();
 //    await handleReport();
-//    await reprocessReport();
+    await reprocessReport();
 //    await listCois();
 //  await findChange(493126);
 //  await deleteFlBizDocs();
