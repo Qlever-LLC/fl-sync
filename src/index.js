@@ -839,7 +839,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
     // Create a link from the FL mirror to the trellis pdf
     // First, overwrite what is currently there if previous pdfs vdocs had been linked
-    info('overwriting pdf vdoc for ${bid}, ${item._id} to ${_id}`)
+    info(`overwriting pdf vdoc for ${bid}, ${item._id} to ${_id}`)
     await CONNECTION.put({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
       data: {
