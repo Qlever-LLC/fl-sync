@@ -34,7 +34,7 @@ const tree = require('./tree.js');
 const dummy = require('./dummyData.js');
 const flSync = require('./index.js')({initialize: false})
 const userId = "5e27480dd85523000155f6db";
-const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-27/1yjbS9L6WJC25a4kpQDSdECOEAE`
+const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-29/1yom0YFnNpAa34TsxNQHBCqoEAS`
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
@@ -1218,7 +1218,7 @@ async function postPdfs() {
   }
 }
 
-async function generateReport() {
+async function generateReport(bus, docKey) {
   let obj = {
     a: {
       description: 'Mirror created',
@@ -1431,6 +1431,10 @@ async function generateReport() {
   let keys = Object.keys(data).filter(key => key.charAt(0) !== '_')
   let docApproved;
 
+  if (bus) {
+    keys = [bus];
+  }
+
   let stuff = await Promise.map(keys, async bid => {
     let docs = await axios({
       method: 'get',
@@ -1444,6 +1448,9 @@ async function generateReport() {
     })
   
     let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+    if (bus) {
+      k = [docKey];
+    }
 
     await Promise.map(k, async key => {
       let doc = await axios({
@@ -1693,15 +1700,16 @@ async function generateReport() {
 
       //f.
       //Check validation status
-      let valid = await axios({
+      let v = await axios({
         method: 'get',
         headers: {
           Authorization: `Bearer ${TOKEN}`
         },
-        url: `https://${DOMAIN}/resources/${coi}/_meta/services/fl-sync/valid`,
+        url: `https://${DOMAIN}/resources/${coi}/_meta/services/fl-sync`,
       }).then(r => r.data)
       .catch(err => {})
-      if (valid === undefined) {
+      if (v === undefined || v.valid === false) {
+        console.log('f3a', v, {coi, key, bid});
         obj.f3.count++;
         obj.f3.items.push({
           bid,
@@ -1710,25 +1718,25 @@ async function generateReport() {
         return;
       }
 
-      if (valid.status === true) {
+      if (v.valid.status === true) {
         obj.f1.count++;
         obj.f1.items.push({
           bid,
           key
         })
-      } else if (valid.status === false) {
+      } else if (v.valid.status === false) {
         obj.f2.count++;
         obj.f2.items.push({
           bid,
           key
         })
-        if (valid.message.includes('expired')) {
+        if (v.valid.message.includes('expired')) {
           obj.f2.f2a.count++;
           obj.f2.f2a.items.push({
             bid,
             key
           })
-        } else if (valid.message.includes('match')) {
+        } else if (v.valid.message.includes('match')) {
           obj.f2.f2b.count++;
           obj.f2.f2b.items.push({
             bid,
@@ -1737,6 +1745,7 @@ async function generateReport() {
         } 
         return
       } else {
+        console.log('f3', v);
         obj.f3.count++;
         obj.f3.items.push({
           bid,
@@ -2317,7 +2326,7 @@ async function reprocessReport() {
         }
       })
 
-      await Promise.delay(30000);
+      await Promise.delay(60000);
     })
   })
 }

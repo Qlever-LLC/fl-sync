@@ -557,7 +557,6 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   }
   if (pageIndex) request.params = { pageIndex };
   let response = await axios(request);
-  if (pageIndex) console.log({ pageIndex }, 'current item:', (pageIndex) * 50, 'total items:', response.data.totalItemCount);
   let delay = 0;
 
   // Manually check for changes; Only update the resource if it has changed!
@@ -787,8 +786,10 @@ async function handlePendingDoc(item, bid, tp, bname) {
       await CONNECTION.put({
         path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/fl-sync`,
         data: {
-          valid: false,
-          message
+          valid: {
+            status: false,
+            message
+          },
         }
       })
       return rejectFlDoc(item._id, message, flType)
@@ -838,6 +839,7 @@ async function handlePendingDoc(item, bid, tp, bname) {
 
     // Create a link from the FL mirror to the trellis pdf
     // First, overwrite what is currently there if previous pdfs vdocs had been linked
+    info('overwriting pdf vdoc for ${bid}, ${item._id} to ${_id}`)
     await CONNECTION.put({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
       data: {
@@ -1098,28 +1100,6 @@ async function handleScrapedResult(jobId) {
             data: job.flId
           })
         }
-
-        await CONNECTION.post({
-          path: `/resources${job.jobId}/updates`,
-          data: {
-            time: moment().format('X'),
-            information: `Trellis-extracted PDF data matches FoodLogiQ form data`,
-          }
-        }).catch(err => {
-          error(err);
-          throw err;
-        });
-
-        await CONNECTION.post({
-          path: `/resources${job.jobId}/updates`,
-          data: {
-            time: moment().format('X'),
-            information: `A FoodLogiQ Assessment has been created and associated with this document`,
-          }
-        }).catch(err => {
-          error(err);
-          throw (err);
-        })
 
         data.services['fl-sync'].assessments = {
           [ASSESSMENT_TEMPLATE_ID]: assessmentId
@@ -1580,7 +1560,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.30]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.1.31]       >>>>>>>>>>`);
     info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
     TOKEN = await getToken();
     // Connect to oada
