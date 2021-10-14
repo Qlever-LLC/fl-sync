@@ -1,4 +1,5 @@
 import chai from "chai";
+import csvjson from 'csvjson'
 import fs from 'fs';
 import chaiAsPromised from "chai-as-promised";
 import Promise from "bluebird";
@@ -22,6 +23,7 @@ const expect = chai.expect;
 import config from "./config.js";
 
 const TOKEN = config.get('trellis.token');
+const LOCAL = process.env.LOCAL;
 const DOMAIN = config.get('trellis.domain');
 const FL_TOKEN = config.get('foodlogiq.token') || '';
 const FL_DOMAIN = config.get('foodlogiq.domain') || '';
@@ -32,7 +34,7 @@ const ASSESSMENT_TEMPLATE_ID = config.get('foodlogiq.assessment-template.id');
 const ASSESSMENT_TEMPLATE_NAME = config.get('foodlogiq.assessment-template.name');
 const tree = require('./tree.js');
 const dummy = require('./dummyData.js');
-const flSync = require('./index.js')({initialize: false})
+const flSync = require('./index.js')
 const userId = "5e27480dd85523000155f6db";
 const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-29/1ypFKs8LWHvqDh8YwKT54DQ9A3x`
 
@@ -1218,7 +1220,32 @@ async function postPdfs() {
   }
 }
 
+function pushReportItem(report, item, passFail, reason, remedy, newItems) {
+  let id = item['food-logiq-mirror']._id;
+
+  // Determine if the doc was within the past 24 hours
+  let docTime = moment(item['food-logiq-mirror'].versionInfo.createdAt);
+  let offset = LOCAL ? 8 : 12;
+  let yday = moment().subtract(24, 'hours')//.subtract(offset, 'hours');
+
+  let entry = {
+    'FL Document Name': item['food-logiq-mirror'].name,
+    'Supplier': item['food-logiq-mirror'].shareSource.sourceBusiness.name,
+    'Date': docTime.subtract(offset, 'hours').format(),
+    'Food Logiq Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${id}`,
+    'Trellis Success/Fail': passFail,
+    'Fail Reason': reason,
+    'Suggested Remedy': remedy
+  }
+  report.push(entry)
+  if (docTime > yday) {
+    newItems.push(entry);
+  }
+}
+
 async function generateReport(bus, docKey) {
+  let report = [];
+  let newItems = [];
   let obj = {
     a: {
       description: 'Mirror created',
@@ -1246,7 +1273,7 @@ async function generateReport(bus, docKey) {
       },
     },
     b1: {
-      descrigtion: 'Trellis doc created',
+      description: 'Trellis doc created',
       count: 0,
       items: [],
     },
@@ -1254,26 +1281,31 @@ async function generateReport(bus, docKey) {
       description: 'FL Document has multiple PDFs attached',
       count: 0,
       items: [],
+      remedy: 'Indicate to supplier that they should not be attaching multiple PDFs for, e.g., multiple locations under a single Food LogiQ Document. Trellis can auto-reject these with this note.',
     },
     b3: {
       description: 'Failed to retrieve FL attachments',
       count: 0,
       items: [],
+      remedy: 'Manually determine whether the attachments are available. If not, inform the supplier.'
     },
     b4: {
       description: 'Already approved by non-trellis user prior to Trellis automation',
       count: 0,
       items: [],
+      remedy: '',
     },
     b5: {
       description: 'Already rejected by non-trellis user prior to Trellis automation',
       count: 0,
       items: [],
+      remedy: '',
     },
     b6: {
       description: 'Remainder of options',
       count: 0,
       items: [],
+      remedy: 'Document requires manual evaluation. The Trellis team has flagged this document for their evaluation.',
     },
     c1: {
       description: 'Job created',
@@ -1284,6 +1316,7 @@ async function generateReport(bus, docKey) {
       description: 'Remainder of options',
       count: 0,
       items: [],
+      remedy: 'Document requires manual evaluation. The Trellis team has flagged this document for their evaluation.',
     },
     d1: {
       description: 'Target Success',
@@ -1298,32 +1331,38 @@ async function generateReport(bus, docKey) {
         description: 'FL Document requires OCR',
         count: 0,
         items: [],
+        remedy: 'Document requires manual evaluation.',
       },
       d2b: {
         description: 'FL Document has multiple CoIs within the PDF file',
         count: 0,
         items: [],
+        remedy: 'Indicate to supplier that the PDF should contain a single CoI per Food LogiQ document. Trellis can auto-reject these with this note.',
       },
       d2c: {
         description: 'FL Document PDF format unrecognized',
         count: 0,
         items: [],
+        remedy: 'Document requires manual evaluation.',
       },
       d2d: {
         description: 'Target Validation failure',
         count: 0,
         items: [],
+        remedy: 'Document requires manual evaluation.',
       },
       d2e: {
         description: 'Other target failure modes',
         count: 0,
         items: [],
+        remedy: 'Document requires manual evaluation. The Trellis team has flagged this document for their evaluation.',
       },
     },
     d3: {
-      description: 'Target Other (still queued?)',
+      description: 'Other Target Result',
       count: 0,
       items: [],
+      remedy: 'Document requires manual evaluation. The Trellis team has flagged this document for their evaluation.',
     },
     e1: {
       description: 'COI data extracted',
@@ -1334,6 +1373,7 @@ async function generateReport(bus, docKey) {
       description: 'Remainder of options',
       count: 0,
       items: [],
+      remedy: 'Document requires manual evaluation. The Trellis team has flagged this document for their evaluation.',
     },
     f1: {
       description: 'FL Document extracted JSON passes Trellis logic',
@@ -1348,17 +1388,20 @@ async function generateReport(bus, docKey) {
         description: 'FL Document expired',
         count: 0,
         items: [],
+        remedy: 'Auto-reject Food LogiQ Document and inform the suppler that the document is expired.',
       },
       f2b: {
         description: 'FL Document expirations do not match',
         count: 0,
         items: [],
+        remedy: 'Auto-reject Food LogiQ Document and inform the suppler that the expiration dates do not match between the PDF contents and the date entered into FL.',
       },
     },
     f3: {
       description: 'Remainder of options',
       count: 0,
       items: [],
+      remedy: 'Document requires manual evaluation. The Trellis team has flagged this document for their evaluation.',
     },
     g1: {
       description: 'FL assessment passes Trellis approval logic',
@@ -1369,11 +1412,13 @@ async function generateReport(bus, docKey) {
       description: 'FL assessment fails Trellis approval logic (not auto-rejected)',
       count: 0,
       items: [],
+      remedy: 'Auto-reject the associated Food LogiQ Document and inform the suppler that the policy coverage amounts do not meet Smithfield requirements.',
     },
     g3: {
       description: 'Remainder of options',
       count: 0,
       items: [],
+      remedy: 'Document requires manual evaluation. The Trellis team has flagged this document for their evaluation.',
     },
     A1: {
       description: 'Assessments mirrored',
@@ -1480,6 +1525,9 @@ async function generateReport(bus, docKey) {
           bid,
           key
         });
+//        if (doc.shareSource.approvalInfo.setBy === userId) {
+          //pushReportItem(report, doc, 'Success', '', '')
+//        }
       } else if (pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`) === 'rejected') {
         docApproved = false;
         obj.a.a2.count++;
@@ -1502,20 +1550,32 @@ async function generateReport(bus, docKey) {
       }
 
       //b.
-      try {
-        let att = await axios({
+      let result;
+      let retries = 0;
+      let fail;
+
+      while (!result && retries++ < 5) {
+        await Promise.delay(2000);
+        result = await axios({
           method: 'get',
           headers: {Authorization: FL_TOKEN},
           url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/attachments`,
+        }).catch((err) => {
+          if (retries === 5) {
+            console.log(err);
+            console.log(doc);
+            console.log('failed 5 times', bid, key);
+            fail = true;
+          }
         })
-      } catch(err) {
-        console.log('b3 doc', bid, key)
-        console.log('status', pointer.get(doc, `/food-logiq-mirror/shareSource/approvalInfo/status`));
+      }
+      if (fail === true) {
         obj.b3.count++;
         obj.b3.items.push({
           bid,
           key
         });
+        pushReportItem(report, doc, 'Fail', obj.b3.description, obj.b3.remedy, newItems)
         return;
       }
 
@@ -1537,6 +1597,7 @@ async function generateReport(bus, docKey) {
             bid,
             key
           });
+          pushReportItem(report, doc, 'Fail', obj.b2.description, obj.b3.remedy, newItems)
           return;
         }
       }
@@ -1558,18 +1619,21 @@ async function generateReport(bus, docKey) {
             bid,
             key
           })
+          pushReportItem(report, doc, 'Fail', obj.b4.description, obj.b4.remedy, newItems)
         } else if (docApproved === false) {
           obj.b5.count++;
           obj.b5.items.push({
             bid,
             key
           })
+          pushReportItem(report, doc, 'Fail', obj.b5.description, obj.b5.remedy, newItems)
         } else {
           obj.b6.count++;
           obj.b6.items.push({
             bid,
             key
           })
+          pushReportItem(report, doc, 'Fail', obj.b6.description, obj.b6.remedy, newItems)
         }
         return
       }
@@ -1599,6 +1663,7 @@ async function generateReport(bus, docKey) {
           bid,
           key
         })
+        pushReportItem(report, doc, 'Fail', obj.c2.description, obj.c2.remedy, newItems)
         return;
       }
 
@@ -1625,6 +1690,7 @@ async function generateReport(bus, docKey) {
           key
         });
 
+
         let ev = Object.values(jobdata.updates).every(({information}) => {
           if (information && information.includes('recognized')) {
             obj.d2.d2c.count++;
@@ -1633,6 +1699,7 @@ async function generateReport(bus, docKey) {
               key,
               job
             });
+            pushReportItem(report, doc, 'Fail', obj.d2.d2c.description, obj.d2.d2c.remedy, newItems)
             return false;
           } else if (information && information.includes('multi-COI')) {
             obj.d2.d2b.count++;
@@ -1641,6 +1708,7 @@ async function generateReport(bus, docKey) {
               key,
               job
             });
+            pushReportItem(report, doc, 'Fail', obj.d2.d2b.description, obj.d2.d2b.remedy, newItems)
             return false;
           } else if (information && information.includes('OCR')) {
             obj.d2.d2a.count++;
@@ -1649,6 +1717,7 @@ async function generateReport(bus, docKey) {
               key,
               job
             })
+            pushReportItem(report, doc, 'Fail', obj.d2.d2a.description, obj.d2.d2a.remedy, newItems)
             return false;
           } else if (information && information.includes('Valiadation')) {
             obj.d2.d2d.count++;
@@ -1657,11 +1726,11 @@ async function generateReport(bus, docKey) {
               key,
               job
             })
+            pushReportItem(report, doc, 'Fail', obj.d2.d2d.description, obj.d2.d2d.remedy, newItems)
             return false;
-          }
-
-          return true;
+          } else return true;
         })
+
         if (ev === true) {
           obj.d2.d2e.count++;
           obj.d2.d2e.items.push({
@@ -1669,6 +1738,7 @@ async function generateReport(bus, docKey) {
             key,
             job
           })
+          pushReportItem(report, doc, 'Fail', obj.d2.d2e.description, obj.d2.d2e.remedy, newItems)
         }
         return;
       } else {
@@ -1677,6 +1747,7 @@ async function generateReport(bus, docKey) {
           bid,
           key
         });
+        pushReportItem(report, doc, 'Fail', obj.d3.description, obj.d3.remedy, newItems)
         return
       }
 
@@ -1695,6 +1766,7 @@ async function generateReport(bus, docKey) {
           bid,
           key
         })
+        pushReportItem(report, doc, 'Fail', obj.e2.description, obj.e2.remedy, newItems)
         return;
       }
 
@@ -1709,12 +1781,12 @@ async function generateReport(bus, docKey) {
       }).then(r => r.data)
       .catch(err => {})
       if (v === undefined || v.valid === false) {
-        console.log('f3a', v, {coi, key, bid});
         obj.f3.count++;
         obj.f3.items.push({
           bid,
           key
         })
+        pushReportItem(report, doc, 'Fail', obj.f3.description, obj.f3.remedy, newItems)
         return;
       }
 
@@ -1736,21 +1808,23 @@ async function generateReport(bus, docKey) {
             bid,
             key
           })
+          pushReportItem(report, doc, 'Fail', obj.f2.f2a.description, obj.f2.f2a.remedy, newItems)
         } else if (v.valid.message.includes('match')) {
           obj.f2.f2b.count++;
           obj.f2.f2b.items.push({
             bid,
             key
           })
+          pushReportItem(report, doc, 'Fail', obj.f2.f2b.description, obj.f2.f2b.remedy, newItems)
         } 
         return
       } else {
-        console.log('f3', v);
         obj.f3.count++;
         obj.f3.items.push({
           bid,
           key
         })
+        pushReportItem(report, doc, 'Fail', obj.f3.description, obj.f3.remedy, newItems)
         return;
       }
 
@@ -1769,6 +1843,7 @@ async function generateReport(bus, docKey) {
           bid,
           key
         })
+        pushReportItem(report, doc, 'Fail', obj.g3.description, obj.g3.remedy, newItems)
         return;
       }
       let {id, approval} = assess;
@@ -1785,6 +1860,7 @@ async function generateReport(bus, docKey) {
           bid,
           key
         })
+        pushReportItem(report, doc, 'Fail', obj.g2.description, obj.g2.remedy, newItems)
         return;
       } else {
         obj.g3.count++;
@@ -1792,6 +1868,7 @@ async function generateReport(bus, docKey) {
           bid,
           key
         })
+        pushReportItem(report, doc, 'Fail', obj.g3.description, obj.g3.remedy, newItems)
         return;
       }
 
@@ -1868,18 +1945,35 @@ async function generateReport(bus, docKey) {
             state: as.state
           });
         }
+        pushReportItem(report, doc, 'Success', '', '', newItems);
       }
     }, {concurrency: 10})
-  }, {concurrency: 10}).catch(err => {
+  }, {concurrency: 10}).then(async () => {
+    let date = moment().format('YYYY-MM-DD');
+    let str = ksuid.randomSync().string;
+    await con.put({
+      path: `/bookmarks/services/fl-sync/reports/day-index/${date}`,
+      data: {
+        [str]: obj
+      }
+    })
+    report = csvjson.toCSV(report, {
+      delimeter: ",", 
+      wrap: false,
+      headers: 'key'
+    });
+    fs.writeFileSync(`${date}-${str}.csv`, report)
+
+//    newItems.unshift(headers);
+    newItems = csvjson.toCSV(newItems, {
+      delimeter: ",", 
+      wrap: false,
+      headers: 'key'
+    });
+    fs.writeFileSync(`${date}-${str}-new.csv`, newItems)
+  }).catch(err => {
     console.log(err);
     console.log('done (error)', obj);
-  })
-  let date = moment().format('YYYY-MM-DD');
-  await con.put({
-    path: `/bookmarks/services/fl-sync/reports/day-index/${date}`,
-    data: {
-      [ksuid.randomSync().string]: obj
-    }
   })
 }
 
@@ -2305,8 +2399,9 @@ async function reprocessReport() {
 
   let paths = [
     //'c2',
-    //'d2/d2e',
-    'f3',
+    'b3',
+    //'d2/d2c',
+    //'f3',
     //'g3',
     //'B3'
   ]
@@ -2326,7 +2421,45 @@ async function reprocessReport() {
         }
       })
 
-      await Promise.delay(60000);
+      await Promise.delay(20000);
+    })
+  })
+}
+
+async function stageAsns() {
+  let tok = process.env.CPROD_TOKEN;
+  let cpcon = await oada.connect({
+    domain: 'https://live.trellis.one',
+    token: 'Bearer '+tok,
+  })
+
+  let thing = await cpcon.get({
+    path: `/bookmarks/services/target/jobs`
+  }).then(r => r.data);
+  
+  let keys = Object.keys(thing).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async key => {
+    let job = await cpcon.get({
+      path: `/bookmarks/services/target/jobs/${key}`
+    }).then(r => r.data)
+
+    let asn = await cpcon.get({
+      path: `/bookmarks/services/target/jobs/${key}/config/asn`
+    }).then(r => r.data)
+    
+    let {_type} = asn;
+    let ks = Object.keys(asn).filter(key => key.charAt(0) !== '_')
+    let data = { _type }
+    await Promise.each(ks, k => {
+      data[k] = asn[k];      
+    })
+
+    console.log('posting to path:', `/bookmarks/trellisfw/asn-staging`);
+    console.log('putting data: ', data);
+    let res = await con.post({
+      path: `/bookmarks/trellisfw/asn-staging`,
+      data
     })
   })
 }
@@ -2356,9 +2489,10 @@ async function main() {
 //    await traceCois();
 //    await associateAssessments();
 //    await linkAssessments();
-//    await generateReport();
+    await generateReport();
+//    await stageAsns();
 //    await handleReport();
-    await reprocessReport();
+//    await reprocessReport();
 //    await listCois();
 //  await findChange(493126);
 //  await deleteFlBizDocs();

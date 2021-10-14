@@ -140,6 +140,12 @@ const config = convict({
       format: String,
       default: '-----',
       env: 'FL_TOKEN',
+    },
+    trellisUser: {
+      doc: 'User ID used by Trellis automation',
+      format: String,
+      default: "5e27480dd85523000155f6db",
+      env: 'FL_TRELLIS_USER'
     }
   }
 });
