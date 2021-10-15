@@ -51,10 +51,6 @@ let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
 let AUTO_APPROVE_ASSESSMENTS;
 let FL_WS;
-let persist = {
-  lastRev: undefined,
-  items: {}
-};
 
 const AssessmentType = Object.freeze(
   { "SupplierAudit": "supplier_audit", },
@@ -326,8 +322,7 @@ async function onTargetUpdate(c, jobId) {
 //          await rejectFlDoc(job.flId, job.targetError, job.flType);
         }
       }
-      await persistWatch(job._rev);
-      //TODO: Reject the job??? What about the persist? finishDoc??
+      resolveDocument(job.trellisId, job.jobId);
     }
       
     // Provide select update messages to FL
@@ -393,46 +388,20 @@ async function watchFlSyncConfig() {
   })
   setAutoApprove(data['autoapprove-assessments']);
   
-  //Recover persisted rev
-  await CONNECTION.get({
-    path: `${SERVICE_PATH}/_meta/persist/fl-sync`,
-  }).then(r => {
-    if (r.data.rev !== undefined) {
-      persist.lastRev = r.data.rev;
-    }
-  }).catch(async (err) => {
-//    if (err.status !== 404) throw err;
-    let _id = await CONNECTION.post({
-      path: `/resources`,
-      data: {rev: data._rev || 0},
-    }).then(r => r.headers['content-location'].replace(/^\//, ''))
-    await CONNECTION.put({
-      path: `${SERVICE_PATH}/_meta/persist/fl-sync`,
-      data: {_id}
-    })
-
-    persist.lastRev = data.rev;
-  })
-
   await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
-    rev: persist.lastRev,
+    persist: { name: 'fl-sync' },
     tree,
     watchCallback: async (change) => {
       try {
         if (_.has(change.body, 'autoapprove-assessments')) {
           setAutoApprove(change.body['autoapprove-assessments']);
-          await persistWatch(change.body._rev)
         } else if (/\/businesses\/(.)+\/(.)+\/(.)+/.test(change.path)) {
           if (change.body['food-logiq-mirror']) await handleMirrorChange(change)
-        } else {
-          console.log(change);
-          await persistWatch(change.body._rev)
         }
       } catch (err) {
         error('mirror watchCallback error');
         error(err);
-        await persistWatch(change.body._rev)
       }
     }
   }).catch(err => {
@@ -440,22 +409,6 @@ async function watchFlSyncConfig() {
   });
   info('Watching bookmarks/services/fl-sync.');
 }//watchFlSyncConfig
-
-async function persistWatch(rev) {
-  console.log('setting rev in persist list', {rev}, {lastRev: persist.lastRev});
-  persist.items[rev] = true;
-  if (rev === persist.lastRev+1) {
-    while(persist.items[persist.lastRev+1]) {
-      persist.lastRev++;
-      console.log('advancing lastRev', persist.lastRev);
-      delete persist.items[persist.lastRev]
-    }
-    await CONNECTION.put({
-      path: `${SERVICE_PATH}/_meta/persist/fl-sync/rev`,
-      data: persist.lastRev
-    })
-  }
-}
 
 /**
  * watches target jobs
@@ -510,7 +463,6 @@ async function handleFlDocument(item, bid, tp, bname, _rev) {
   let flType = pointer.has(item, `/shareSource/type/name`) ? pointer.get(item, `/shareSource/type/name`) : undefined;
   if (flType && !flTypes.includes(flType)) {
     info(`Document [${item._id}] was of type [${flType}]. Ignoring.`);
-    await persistWatch(_rev);
     return;
   }
 
@@ -519,14 +471,14 @@ async function handleFlDocument(item, bid, tp, bname, _rev) {
   let approvalUser = pointer.has(item, `/shareSource/approvalInfo/setBy._id`) ?  pointer.get(item, `/shareSource/approvalInfo/setBy._id`) : undefined;
 
   if (status === 'awaiting-review') {
-    await handlePendingDoc(item, bid, tp, bname, status, _rev)
+    return handlePendingDoc(item, bid, tp, bname, status, _rev)
   } else if (approvalUser === FL_TRELLIS_USER) {
     // Approved or rejected by us. Finish up the automation
-    await finishDoc(item, bid, tp, bname, status, _rev);
+    return finishDoc(item, bid, tp, bname, status, _rev);
   } else {
     // Process the document despite being handled by a SF user 
     info(`Document not pending, approval status not set by Trellis. Document: [${item._id}] User: [${approvalUser}] Status: [${status}]`);
-    await handlePendingDoc(item, bid, tp, bname, status, _rev)
+    return handlePendingDoc(item, bid, tp, bname, status, _rev)
   }
 }//handleFlDocument
 
@@ -539,7 +491,8 @@ async function handleFlDocument(item, bid, tp, bname, _rev) {
  */
 async function handleMirrorChange(change) {
   try {
-    info('handleMirrorChange processing FL resource');
+    info(`handleMirrorChange processing FL resource rev: ${change.body._rev}`);
+    console.log('CHANGE', change);
     let pieces = pointer.parse(change.path);
     let bid = pieces[1];
     let type = pieces[2];
@@ -568,8 +521,6 @@ async function handleMirrorChange(change) {
     if (!bus.masterid) return;
     let tp = bus.masterid;
 
-    //    let tp = BUSINESSES[bus.masterid];
-    //    let mid = bus['food-logiq-mirror']._id
     if (!tp) error(`No trading partner found for business ${bid}.`)
     if (!tp) return;
     info(`Found trading partner masterid [${tp}] for FL business ${bid}`)
@@ -581,19 +532,16 @@ async function handleMirrorChange(change) {
           return;
         }
         const bname = pointer.get(data, '/food-logiq-mirror/shareSource/sourceBusiness/name');
-        await handleFlDocument(item, bid, tp, bname, change.body._rev);
+        return handleFlDocument(item, bid, tp, bname, change.body._rev);
         break;
       case 'locations':
         await handleFlLocation(item, bid, tp);
-        await persistWatch(change.body._rev);
         break;
       case 'assessments':
         await handleAssessment(item, bid, tp)
-        await persistWatch(change.body._rev);
         break;
       case 'product':
         await handleFlProduct(item, bid, tp);
-        await persistWatch(change.body._rev);
         break;
       default:
         return;
@@ -779,7 +727,7 @@ function checkAssessment(assessment) {
  */
 async function handleAssessment(item, bid, tp) {
   info(`Handling assessment [${item._id}]`)
-  let found = _.filter(TARGET_JOBS.values(), (o) => _.has(o, ['assessments', item._id])) || [];
+  let found = _.filter(Array.from(TARGET_JOBS.values()), (o) => _.has(o, ['assessments', item._id])) || [];
   await Promise.each(found, async (job) => {
     if (item.state === 'Approved') {
       job.assessments[item._id] = true;
@@ -937,7 +885,6 @@ async function handlePendingDoc(item, bid, tp, bname, status, _rev) {
     let resId = _id.replace(/resources\//, '');
 
     //link the file into the documents list
-    info(`Linking file to documents list at ${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}: ${JSON.stringify(data, null, 2)}`);
     await CONNECTION.put({
       path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
       data: { _id, _rev: 0 }
@@ -954,13 +901,19 @@ async function handlePendingDoc(item, bid, tp, bname, status, _rev) {
       bid,
       bname,
       trellisDocKey: resId,
+      trellisId: _id,
       flType,
       flStatus: status,
       statusUser: item.shareSource.approvalInfo.setBy,
-      _rev
     })
+    info(`Linking file to documents list at ${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}: ${JSON.stringify(TRELLIS_PDFS.get(_id), null, 2)}`);
 
-
+    return new Promise((resolve, reject) => {
+      docPromises.set(_id, {
+        resolve,
+        reject
+      })
+    })
   } catch (err) {
     error(`Error occurred while fetching FL attachments`);
     error(err);
@@ -978,15 +931,14 @@ async function handlePendingDoc(item, bid, tp, bname, status, _rev) {
 async function finishDoc(item, bid, tp, bname, status, _rev) {
   info(`Finishing doc: [${item._id}] with status [${status}] `);
   //1. Get reference of corresponding pending scraped pdf
-  let found = _.find(TARGET_JOBS.values(), ['flId', item._id])
+  let job = _.find(Array.from(TARGET_JOBS.values()), ['flId', item._id])
 
   if (!found || !found.result) {
     info(`Document not currently actively being processed: [${item._id}]. Sending back through the flow...`);
     await handlePendingDoc(item, bid, tp, bname, status, _rev)
   }
-  let tid = TARGET_JOBS.get(found.jobId);
-  let resId = tid.trellisId.replace(/resources\//, '');
-  TARGET_JOBS[found.jobId].approved = status === 'approved';
+  job.approved = status === 'approved';
+  TARGET_JOBS.set(job.jobId, job);
 
   if (status === 'approved') {
     try {
@@ -1008,13 +960,18 @@ async function finishDoc(item, bid, tp, bname, status, _rev) {
     }
   }
 
-  info(`Removing ${TARGET_JOBS.get(found.jobId).trellisId} from fl-sync PDF index`);
-  info(`Removing ${found.jobId} from fl-sync Jobs index`);
-  TRELLIS_PDFS.delete(tid.trellisId)
-  TARGET_JOBS.delete(tid)
-  docPromises.resolve()
-  await persistWatch(tid._rev)
+  resolveDocument(job.trellisId, job.jobId);
 }//finishDoc
+
+async function resolveDocument(trellisId, jobId) {
+  info(`Removing ${trellisId} from fl-sync PDF index`);
+  info(`Removing ${jobId} from fl-sync Jobs index`);
+  TRELLIS_PDFS.delete(trellisId)
+  TARGET_JOBS.delete(jobId)
+  let prom = docPromises.get(trellisId)
+  prom.resolve(trellisId)
+  docPromises.delete(trellisId);
+}
 
 /**
  * validates documents that have not yet been approved
