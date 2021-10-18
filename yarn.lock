@@ -51,9 +51,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
+"@oada/client@portal:/Users/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+  resolution: "@oada/client@portal:/Users/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
   dependencies:
     "@oada/types": ^1.5.1
     cross-fetch: ^3.0.6

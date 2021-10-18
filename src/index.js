@@ -492,7 +492,6 @@ async function handleFlDocument(item, bid, tp, bname, _rev) {
 async function handleMirrorChange(change) {
   try {
     info(`handleMirrorChange processing FL resource rev: ${change.body._rev}`);
-    console.log('CHANGE', change);
     let pieces = pointer.parse(change.path);
     let bid = pieces[1];
     let type = pieces[2];
