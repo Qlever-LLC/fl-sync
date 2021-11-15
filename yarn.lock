@@ -51,9 +51,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/client@npm:^2.6.1, @oada/client@npm:^2.6.3":
+  version: 2.6.3
+  resolution: "@oada/client@npm:2.6.3"
   dependencies:
     "@oada/types": ^1.5.1
     buffer: ^6.0.3
@@ -68,8 +68,9 @@ __metadata:
     reconnecting-websocket: ^4.4.0
     type-is: ^1.6.18
     ws: ^8.0.0
+  checksum: 70446996cc7fffc6d3cd427f7daa0024e01dfeb2b94394503036d014512f9cbee9457209102876858915d8215173af8f26c71c18009996d2b86641af48eb416a
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@oada/list-lib@npm:^2.1.10":
   version: 2.1.10
@@ -102,7 +103,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@qlever-llc/fl-sync@workspace:."
   dependencies:
-    "@oada/client": ^2.6.2
+    "@oada/client": ^2.6.3
     "@oada/list-lib": ^2.1.10
     "@oada/types": ^1.5.1
     "@tsconfig/node16": ^1.0.1
