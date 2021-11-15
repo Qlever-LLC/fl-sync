@@ -162,7 +162,6 @@ let lastPoll;
 info(`Polling FL every ${INTERVAL_MS / 1000}s. Checking OADA if its time to poll every ${checkInterval / 1000}s.`);
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
-let TP_PATH = `/bookmarks/trellisfw/trading-partners`;
 let TP_MPATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
 let TPs;
 let CONNECTION;
@@ -262,7 +261,7 @@ async function getLookup(item, key) {
     info(`New target job [${key}]: Trellis pdf: [${trellisId}]`);
 
     if (!trellisId) return;
-    let pdfEntry = TRELLIS_PDFS.get(trellisID);
+    let pdfEntry = TRELLIS_PDFS.get(trellisId);
     let flId = pdfEntry ? pdfEntry.flId : undefined;
 
     if (!flId) info(`No FL id found to associate to job [${jobId}]`);
@@ -390,7 +389,10 @@ async function watchFlSyncConfig() {
   
   await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
-    persist: { name: 'fl-sync' },
+    persist: {
+      name: 'fl-sync',
+      recordLapsedTimeout: 300000
+    },
     tree,
     watchCallback: async (change) => {
       try {
@@ -468,7 +470,8 @@ async function handleFlDocument(item, bid, tp, bname, _rev) {
 
   let status = item.shareSource && item.shareSource.approvalInfo.status;
 
-  let approvalUser = pointer.has(item, `/shareSource/approvalInfo/setBy._id`) ?  pointer.get(item, `/shareSource/approvalInfo/setBy._id`) : undefined;
+  let approvalUser = pointer.has(item, `/shareSource/approvalInfo/setBy/_id`) ?  pointer.get(item, `/shareSource/approvalInfo/setBy/_id`) : undefined;
+  info(`approvalInfo user: [${approvalUser}]. Trellis user: [${FL_TRELLIS_USER}]`);
 
   if (status === 'awaiting-review') {
     return handlePendingDoc(item, bid, tp, bname, status, _rev)
@@ -491,7 +494,7 @@ async function handleFlDocument(item, bid, tp, bname, _rev) {
  */
 async function handleMirrorChange(change) {
   try {
-    info(`handleMirrorChange processing FL resource rev: ${change.body._rev}`);
+    info(`handleMirrorChange processing FL resource`);
     let pieces = pointer.parse(change.path);
     let bid = pieces[1];
     let type = pieces[2];
@@ -726,6 +729,7 @@ function checkAssessment(assessment) {
  */
 async function handleAssessment(item, bid, tp) {
   info(`Handling assessment [${item._id}]`)
+
   let found = _.filter(Array.from(TARGET_JOBS.values()), (o) => _.has(o, ['assessments', item._id])) || [];
   await Promise.each(found, async (job) => {
     if (item.state === 'Approved') {
@@ -764,6 +768,8 @@ async function handleAssessment(item, bid, tp) {
           error(err)
           throw err;
         }
+      } else {
+        resolveDocument(job.trellisId, job.jobId);
       }
     }
   })
@@ -775,6 +781,8 @@ async function handleAssessment(item, bid, tp) {
  * @param {*} bid 
  * @param {*} tp 
  * @param {*} bname 
+ * @param {*} status 
+ * @param {*} _rev
  */
 async function handlePendingDoc(item, bid, tp, bname, status, _rev) {
   info(`Handling pending document [${item._id}]`);
@@ -932,7 +940,7 @@ async function finishDoc(item, bid, tp, bname, status, _rev) {
   //1. Get reference of corresponding pending scraped pdf
   let job = _.find(Array.from(TARGET_JOBS.values()), ['flId', item._id])
 
-  if (!found || !found.result) {
+  if (!job || !job.result) {
     info(`Document not currently actively being processed: [${item._id}]. Sending back through the flow...`);
     await handlePendingDoc(item, bid, tp, bname, status, _rev)
   }
@@ -942,16 +950,16 @@ async function finishDoc(item, bid, tp, bname, status, _rev) {
   if (status === 'approved') {
     try {
       //2. 
-      info(`Moving approved document to [${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}]`);
+      info(`Moving approved document to [${TP_MPATH}/${tp}/bookmarks/trellisfw/${job.result.type}/${job.result.key}]`);
 
       await CONNECTION.put({
-        path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}`,
+        path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${job.result.type}`,
         data: {},
         tree
       });
       await CONNECTION.put({
-        path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${found.result.type}/${found.result.key}`,
-        data: { _id: found.result._id },
+        path: `${TP_MPATH}/${tp}/bookmarks/trellisfw/${job.result.type}/${job.result.key}`,
+        data: { _id: job.result._id },
       })
     } catch (err) {
       error('Error moving document result into trading-partner indexed docs')
@@ -1113,9 +1121,10 @@ async function handleScrapedResult(jobId) {
 
         let assessmentId = await CONNECTION.get({
           path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}/id`,
-        }).then(r => {
-          return r.data
-        }).catch(err => { })
+        }).then(r => r.data)
+          .catch(err => {
+            if (err.status !== 404) throw err;
+          })
 
         if (assessmentId) info(job, 'Assessment already exists.')
         if (!assessmentId) info(job, 'Assessment does not yet exist.')
@@ -1124,9 +1133,10 @@ async function handleScrapedResult(jobId) {
         //assessmentId = assess.data._id;
 
         if (!assessmentId) {
+          assessmentId = assess.data._id;
           await CONNECTION.put({
             path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-            data: {id: assess.data._id}
+            data: {id: assessmentId}
           })
           await CONNECTION.put({
             path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${assess.data._id}/_meta/services/fl-sync/documents/${job.flId}`,
