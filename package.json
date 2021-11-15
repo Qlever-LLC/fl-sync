@@ -63,6 +63,6 @@
   },
   "packageManager": "yarn@3.0.2",
   "resolutions": {
-    "@oada/client": "portal:/Users/sanoel/client"
+    "@oada/client": "portal:/home/sanoel/client"
   }
 }
