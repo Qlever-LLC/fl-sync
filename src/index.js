@@ -28,6 +28,7 @@ let BUSINESSES = {};
 let TradingPartners = {};
 const FL_MIRROR = "food-logiq-mirror";
 let tree = require('./tree.js');
+let poll = require('./poll.js');
 const TL_TP = config.get('trellis.endpoints.tps');
 const TL_UTP = config.get('trellis.endpoints.utps');
 const TL_FL_BS = config.get('trellis.endpoints.fl-bus');
@@ -159,7 +160,6 @@ let CURRENTLY_POLLING = false;
 let INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
 let checkInterval = INTERVAL_MS / 2; //check OADA to determine if its time to poll
 let lastPoll;
-info(`Polling FL every ${INTERVAL_MS / 1000}s. Checking OADA if its time to poll every ${checkInterval / 1000}s.`);
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TP_MPATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
@@ -175,7 +175,7 @@ async function getToken() {
 }
 
 async function checkTime() {
-  info('Checking OADA to determine whether to poll.');
+  info('Checking to determine whether to poll.');
   if (CURRENTLY_POLLING) {
     info('Currently polling already. Skipping this poll loop');
   } else {
@@ -1570,7 +1570,7 @@ function setPath(newPath) {
 }
 
 function setAutoApprove(value) {
-  info(`Setting Autoapprove to ${value}`)
+  info(`Autoapprove value is ${value}`)
   AUTO_APPROVE_ASSESSMENTS = value;
 }
 
@@ -1594,9 +1594,16 @@ async function mockFL({ url }) {
   //  return { data: sampleDocs[string] };
 }
 
-async function testMock() {
-  let url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/abc123/attachments`
-  let res = mockFL({ url });
+/**
+ * makes reports
+*/
+async function makeReport() {
+  setInterval(() => {
+
+    //1. Check if new day;
+//    if (Date.now
+    
+  }, 3600*1000*6)
 }
 
 /**
@@ -1604,8 +1611,7 @@ async function testMock() {
  */
 async function initialize() {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.3]       >>>>>>>>>>`);
-    info(`Initializing fl-poll service. This service will poll on a ${INTERVAL_MS / 1000} second interval`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.5]       >>>>>>>>>>`);
     TOKEN = await getToken();
     // Connect to oada
     try {
@@ -1624,8 +1630,17 @@ async function initialize() {
     //await populateIncomplete()
     await watchTargetJobs();
     await watchFlSyncConfig();
-    await checkTime();
-    setInterval(checkTime, checkInterval);
+//    await makeReport();
+    await poll.poll({
+      connection: CONNECTION,
+      basePath: SERVICE_PATH,
+      pollOnStartup: true,
+      pollFunc: pollFl,
+      interval: INTERVAL_MS,
+      name: 'food-logiq-poll',
+    });
+//    await checkTime();
+//    setInterval(checkTime, checkInterval);
 //    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
   } catch (err) {
     error(err);
