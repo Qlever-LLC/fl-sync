@@ -1,3 +1,4 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED=0;
 import chai from "chai";
 import csvjson from 'csvjson'
 import fs from 'fs';
@@ -10,6 +11,7 @@ import axios from "axios";
 import ksuid from "ksuid";
 const oada = require('@oada/client');
 const _ = require('lodash');
+const sanitizer = require('string-sanitizer');
 
 const trace = debug('fl-sync:trace');
 const info = debug('fl-sync:info');
@@ -37,8 +39,6 @@ const dummy = require('./dummyData.js');
 const flSync = require('./index.js')
 const userId = "5e27480dd85523000155f6db";
 const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-29/1ypFKs8LWHvqDh8YwKT54DQ9A3x`
-
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TPs;
@@ -2757,6 +2757,111 @@ async function fixTradingPartners() {
   })
 }
 
+function flDocTypeToTrellisType(string) {
+
+  let conversions = {
+    'ACH Form': 'ach-forms',
+    'Certificate of Insurance': 'cois',
+    'Pure Food Guaranty and Indemnification Agreement (LOG)': 'pure-food-guaranties',
+    'W-9': 'w-9s',
+    '100g Nutritional Information': '100g-nutritional-information',
+    'Allergen Statement': 'allergen-statements',
+    'Bioengineered (BE) Ingredient Statement': 'be-ingredient-statements',
+    'California Prop 65 Statement': 'california-prop-65-statements',
+    'Country of Origin Statement': 'country-of-origin-statements',
+    'Gluten Statement': 'gluten-statements',
+    'Ingredient Breakdown Range %': 'ingredient-breakdown-ranges',
+    'Product Label': 'product-labels',
+    'Product Specification': 'product-specifications',
+    'Safety Data Sheet (SDS)': 'sdss',
+    'Natural Statement': 'natural-statements',
+    'GFSI Certificate': 'fsqa-certificates',
+    'Non-Ambulatory (3D/4D) Animal Statement': 'nonambulatory-3d4d-animal-statement',
+    'Specified Risk Materials (SRM) Audit': 'srm-audits',
+    'E.Coli 0157:H7 Intervention Audit': 'ecoli-audits',
+    'Animal Welfare Audit': 'animal-welfare-audits',
+    'Specified Risk Materials (SRM) Statement': 'srm-statements',
+    'Humane Harvest Statement': 'humane-harvest-statements',
+    'National Residue Program (NRP) Statement': 'nrp-statements',
+    'Lot Code Explanation': 'lot-code-explanations',
+    'APHIS Statement': 'aphis-statements',
+    'Foreign Material Control Plan': 'foreign-material-control-plans',
+    'Bisphenol A (BPA) Statement': 'bpa-statements',
+    'GFSI Audit': 'fsqa-audits',
+    'HACCP Plan / Flow Chart': 'haccp-plan--flow-charts',
+    'Co-Packer FSQA Questionnaire (GFSI Certified)': 'copacker-fsqa-questionnaires',
+    'Co-Pack Confidentiality Agreement Form': 'copack-confidentiality-agreement-forms',
+    'Third Party Food Safety GMP Audit Corrective Actions': 'tpfs-gmp-corrective-actions',
+    'W-8': 'w-8s',
+    'Third Party Food Safety GMP Audit': 'fsqa-audits',
+    'Animal Welfare Corrective Actions': 'animal-welfare-corrective-actions',
+    'Third Party Food Safety GMP Certificate': 'tpfs-gmp-certificates',
+    'Small Business Administration (SBA) Form': 'sba-forms',
+    'WIRE Form': 'wire-forms',
+    'E.Coli 0157:H7 Intervention Statement': 'ecoli-statements',
+    'Business License': 'business-licenses',
+    'Rate Sheet': 'rate-sheets',
+    'Master Service Agreement (MSA)': 'msas',
+  }
+  //RemoveWhiteSpaces
+  if (conversions[string]) return conversions[string]
+
+  let out = sanitizer.sanitize.addDash(string).toLowerCase()
+  out = out.replace(/-$/, '');
+
+  console.log('out', 'IN:', string,'; Out:', out);
+  return out;
+}
+
+async function moveFlDocsIntoTrellis() {
+  let docTypes = {};
+  let docText = '';
+
+  let buses = (await con.get({
+    path: `${SERVICE_PATH}/businesses`
+  })).data;
+  let keys = Object.keys(buses).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async bid => {
+    let docs = await axios({
+      method: 'get',
+      url: `https://${DOMAIN}${SERVICE_PATH}/businesses/${bid}/documents`,
+      headers: {
+        Authorization: `Bearer ${TOKEN}`
+      },
+    }).then(r => r.data)
+    .catch(err => {
+    })
+
+    if (!docs) console.log('error 1');
+    if (!docs) return
+
+    let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+
+    await Promise.each(k, async docid => {
+      let doc = await con.get({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${docid}`
+      }).then(r => r.data)
+      .catch(err => {
+        console.log('error 2');
+      })
+      
+      let docType = pointer.has(doc, `/food-logiq-mirror/shareSource/type/name`) ? doc['food-logiq-mirror'].shareSource.type.name : undefined;
+      
+      if (docType) {
+        if (!docTypes[docType]) {
+          docTypes[docType] = docType[docType] || { count: 0};
+          docTypes[docType].trellisName = flDocTypeToTrellisType(docType);
+        }
+        // Go fetch the FL info about this document type
+        docTypes[docType].count++;
+      }
+    })
+  })
+  console.log(docTypes);
+}
+
+
 async function findFlDocumentProperties() {
   let docTypes = {};
   let docText = '';
@@ -2794,18 +2899,17 @@ async function findFlDocumentProperties() {
       
       if (docType && !docTypes[docType]) {
         // Go fetch the FL info about this document type
-        docTypes[docType] = true;
+        docTypes[docType] = docType[docType] || 0;
+        docTypes[docType]++;
         let filterKeys = ['ExpirationEmailSentAt', '_id', 'archivedInCommunity', 'attachments', 'auditAttributes', 'business', 'contentType', 'isArchived', 'links', 'shareRecipients', 'shareSource', 'tags', 'versionInfo', 'originalName'];
         let docKeys = Object.keys(doc['food-logiq-mirror']).filter(key => !filterKeys.includes(key))
         let customKeys = pointer.has(doc, `/food-logiq-mirror/shareSource/shareSpecificAttributes`) ? Object.keys(pointer.get(doc, `/food-logiq-mirror/shareSource/shareSpecificAttributes`)) : undefined;
         let allKeys = docKeys.concat(customKeys)
         docTypes[docType] = allKeys;
-        console.log('-----')
         let dt = Object.keys(docTypes).map(dkey => {
           let txt = dkey+'\r\n\t'+(docTypes[dkey].join('\r\n\t'))
           return txt
         }).join('\r\n')
-        console.log(dt);
       }
     })
   })
@@ -2928,6 +3032,7 @@ async function postTestDocs() {
 }
 
 async function main() {
+  setInterval(() => {}, 1000);
   con = await oada.connect({
     domain: 'https://'+DOMAIN,
     token: 'Bearer '+TOKEN,
@@ -2949,10 +3054,11 @@ async function main() {
 //    await associateAssessments();
 //    await linkAssessments();
 //    await generateReport();
-    await postTestDocs();
+//    await postTestDocs();
 //    await recursiveTreeWalk('/bookmarks', tree.bookmarks, {})
 //    await fixTradingPartners()
 //      await findFlDocumentProperties()
+      await moveFlDocsIntoTrellis();
 //    await stageAsns();
 //    await handleReport();
 //    await reprocessReport();
