@@ -4,6 +4,7 @@ config.default.js
 
 *.log
 .DS_Store
+.dccache
 
 # TypeScript
 dist
@@ -26,5 +27,5 @@ act/
 # ignore sdk stuff
 .vim
 
-# 
+#
 runlocal.bash
