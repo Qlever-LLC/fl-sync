@@ -323,13 +323,13 @@ async function onTargetUpdate(c, jobId) {
     } else if (status === 'failure') {
       if (job.targetError.includes('multi-COI')) {
         if (job.flStatus === 'awaiting-review') {
-//          await rejectFlDoc(job.flId, job.targetError, job.flType);
+          //          await rejectFlDoc(job.flId, job.targetError, job.flType);
         }
       }
       await persistWatch(job._rev);
       //TODO: Reject the job??? What about the persist? finishDoc??
     }
-      
+
     // Provide select update messages to FL
     await Promise.each(Object.values(c && c.body && c.body.updates || {}), async val => {
 
@@ -376,23 +376,23 @@ async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `${SERVICE_PATH}`,
   }).then(r => r.data)
-  .catch(async (err) => {
-    if (err.status === 404) {
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}`,
-        data: {},
-        tree
-      })
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/businesses`,
-        data: {},
-        tree
-      })
-      return {};
-    } else throw err;
-  })
+    .catch(async (err) => {
+      if (err.status === 404) {
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}`,
+          data: {},
+          tree
+        })
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses`,
+          data: {},
+          tree
+        })
+        return {};
+      } else throw err;
+    })
   setAutoApprove(data['autoapprove-assessments']);
-  
+
   //Recover persisted rev
   await CONNECTION.get({
     path: `${SERVICE_PATH}/_meta/persist/fl-sync`,
@@ -401,14 +401,14 @@ async function watchFlSyncConfig() {
       persist.lastRev = r.data.rev;
     }
   }).catch(async (err) => {
-//    if (err.status !== 404) throw err;
+    //    if (err.status !== 404) throw err;
     let _id = await CONNECTION.post({
       path: `/resources`,
-      data: {rev: data._rev || 0},
+      data: { rev: data._rev || 0 },
     }).then(r => r.headers['content-location'].replace(/^\//, ''))
     await CONNECTION.put({
       path: `${SERVICE_PATH}/_meta/persist/fl-sync`,
-      data: {_id}
+      data: { _id }
     })
 
     persist.lastRev = data.rev;
@@ -442,10 +442,10 @@ async function watchFlSyncConfig() {
 }//watchFlSyncConfig
 
 async function persistWatch(rev) {
-  console.log('setting rev in persist list', {rev}, {lastRev: persist.lastRev});
+  console.log('setting rev in persist list', { rev }, { lastRev: persist.lastRev });
   persist.items[rev] = true;
-  if (rev === persist.lastRev+1) {
-    while(persist.items[persist.lastRev+1]) {
+  if (rev === persist.lastRev + 1) {
+    while (persist.items[persist.lastRev + 1]) {
       persist.lastRev++;
       console.log('advancing lastRev', persist.lastRev);
       delete persist.items[persist.lastRev]
@@ -516,7 +516,7 @@ async function handleFlDocument(item, bid, tp, bname, _rev) {
 
   let status = item.shareSource && item.shareSource.approvalInfo.status;
 
-  let approvalUser = pointer.has(item, `/shareSource/approvalInfo/setBy._id`) ?  pointer.get(item, `/shareSource/approvalInfo/setBy._id`) : undefined;
+  let approvalUser = pointer.has(item, `/shareSource/approvalInfo/setBy._id`) ? pointer.get(item, `/shareSource/approvalInfo/setBy._id`) : undefined;
 
   if (status === 'awaiting-review') {
     await handlePendingDoc(item, bid, tp, bname, status, _rev)
@@ -801,7 +801,7 @@ async function handleAssessment(item, bid, tp) {
           item.state = failed ? 'Rejected' : 'Approved';
           await CONNECTION.put({
             path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-            data: {approval: !failed}
+            data: { approval: !failed }
           })
           // Auto-approve only, do not auto-reject
           if (!failed) {
@@ -871,7 +871,7 @@ async function handlePendingDoc(item, bid, tp, bname, status, _rev) {
     let _id = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf/${key}/_id`,
     }).then(r => r.data)
-    .catch(err => {});
+      .catch(err => { });
 
     // If it doesn't exist, create a new PDF resource
     _id = _id || `resources/${ksuid.randomSync().string}`;
@@ -913,7 +913,7 @@ async function handlePendingDoc(item, bid, tp, bname, status, _rev) {
           pdf: 0
         }
       },
-      headers: { 
+      headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${TRELLIS_TOKEN}`
       },
@@ -928,7 +928,7 @@ async function handlePendingDoc(item, bid, tp, bname, status, _rev) {
           }
         }
       },
-      headers: { 
+      headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${TRELLIS_TOKEN}`
       },
@@ -1047,7 +1047,7 @@ async function validatePending(trellisDoc, flDoc, type) {
       default:
         break;
     }
-  } catch(err) {
+  } catch (err) {
     error('validatePending Errored: ', err);
     status = false;
     message = `validatePending Errored: ` + err.message;
@@ -1170,7 +1170,7 @@ async function handleScrapedResult(jobId) {
         if (!assessmentId) {
           await CONNECTION.put({
             path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-            data: {id: assess.data._id}
+            data: { id: assess.data._id }
           })
           await CONNECTION.put({
             path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${assess.data._id}/_meta/services/fl-sync/documents/${job.flId}`,
@@ -1230,7 +1230,7 @@ async function rejectFlDoc(docId, message, flType) {
       data: { status: "Rejected" }
     });
 
-  //Post message regarding error
+    //Post message regarding error
     await axios({
       method: 'post',
       url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/capa`,
@@ -1634,6 +1634,128 @@ async function testMock() {
 }
 
 /**
+ * adds a trading-partner to the trellisfw when
+ * a new business is found under services/fl-sync/businesses
+ * @param {*} item 
+ * @param {*} key 
+ */
+async function addTP2Trellis(item, key) {
+  info(`--> adding businesses as a trading partner to trellis.`);
+  let _key = key.substring(1);
+  let _path_tp_id = TL_TP_PATH + key;
+  try {
+    if (typeof TradingPartners[key] === 'undefined') {//adds the business as trading partner
+      let data = _.cloneDeep(trellisTPTemplate);
+      let expandData = _.cloneDeep(expandIndexTemplate);
+      //FIXME: need to include a flag when search engine is present
+      _path_tp_id = TL_TP_PATH + key; //TL_TP_UNIDENTIFIED_PATH + key;
+
+      trace(`--> #1. item `, item);
+      let _path = item["_id"];
+      if (typeof item[FL_MIRROR] === 'undefined') {
+        info(`--> getting ${_path} with delay.`);
+        //FIXME: find a more robust way to retrieve business content
+        let fl_mirror_content = item[FL_MIRROR];
+        //retry until it gets a body with FL_MIRROR
+        while (typeof fl_mirror_content === 'undefined') {
+          await bPromise.delay(500);
+          await CONNECTION.get({
+            path: _path
+          }).then(async (result) => {
+            fl_mirror_content = result.data[FL_MIRROR];
+            if (typeof fl_mirror_content === 'undefined') {
+              info(`----> ListWatch did not return a complete object retrying ...`);
+            } else {
+              info(`----> Got a complete object.`);
+              info(`----> assigning data after get.`);
+              data = assignData(data, result.data);
+              data["id"] = _path;
+              expandData = assignDataExpandIndex(data, result.data);
+            }//if
+          }).catch((e) => {
+            error("--> error when retrieving business ", e);
+          });
+        }//while FIXME: Verify consistency of this
+      } else {//if
+        data = assignData(data, item);
+        data["id"] = _path;
+        expandData = assignDataExpandIndex(data, item);
+      }//if
+
+      // mirroring the business into trading partners
+      //1. make the resource
+      info("--> mirroring the business into trading partners.");
+      let resId = await CONNECTION.post({
+        path: `/resources`,
+        data: data
+      }).then((r) => {
+        if (r && r.headers && r.headers['content-location']) {
+          return r.headers['content-location'].replace(/^\//, '')
+        }
+      });
+      let dat = { _id: resId, _rev: 0 };
+      await CONNECTION.put({
+        path: _path_tp_id,
+        data: dat
+      }).then(async function () {
+        info("----> business mirrored. ", _path_tp_id);
+        // creating bookmarks endpoint under tp
+        let _tp_bookmarks_path = _path_tp_id + "/bookmarks";
+        await CONNECTION.put({
+          path: _tp_bookmarks_path,
+          data: {},
+          tree: trellisfw_tp_tree
+        }).then(async (bookmarks_result) => {
+          let _bookmarks_id = bookmarks_result["headers"] ? bookmarks_result["headers"]["content-location"] : "";
+          let _string_content = _bookmarks_id.substring(1);
+          if (_bookmarks_id !== "") {
+            let _bookmarks_data = {
+              "bookmarks": {
+                "_id": _string_content
+              }
+            };
+            expandData["user"] = _bookmarks_data;
+          }//if
+        });
+      }).catch((e) => {
+        error("--> error when mirroring ", e);
+      });
+
+      // updating the expand index
+      info("--> updating the expand-idex ", expandData.masterid);
+      let expandIndexRecord = {};
+      expandIndexRecord[_key] = expandData;
+      //await updateExpandIndex(expandIndexRecord);
+
+      // updating the fl-sync/businesses/<bid> index
+      info("--> updating masterid-index, masterid ", expandData.masterid);
+      await updateMasterId(_path, expandData.masterid, resId);
+
+      TradingPartners[key] = data;
+    } else {
+      info("--> TP exists. The FL business was not mirrored.");
+    }//if
+  } catch (e) {
+    error("--> error ", e);
+    throw error;
+  }
+}//addTP2Trellis
+
+/**
+ * watches for changes in the fl-sync/businesses
+ */
+async function watchTrellisFLBusinesses() {
+  info(`--> fl-sync started ListWatch on Trellis - FL Businesses ...`);
+  const watch = new ListWatch({
+    path: TL_FL_BS,
+    name: `fl-sync-fl-businesses-trellis-tp-mirror-ec2c2133b7fc159ad01c`,
+    conn: CONNECTION,
+    resume: true,
+    onAddItem: addTP2Trellis
+  });
+}//watchTrellisFLBusinesses
+
+/**
  * initializes service
  */
 async function initialize() {
@@ -1656,25 +1778,26 @@ async function initialize() {
     // the necessary in-memory items for them to continue being processed.
     setConnection(conn);
     //await populateIncomplete()
+    await watchTrellisFLBusinesses();
     await watchTargetJobs();
     await watchFlSyncConfig();
     await checkTime();
     setInterval(checkTime, checkInterval);
-//    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
+    //    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
   } catch (err) {
     error(err);
     throw err;
   }
 }//initialize
 
-process.on('uncaughtException', function(err) {
+process.on('uncaughtException', function (err) {
   error('Caught exception: ' + err);
 });
 
 if (require.main === module) {
   initialize();
 } else {
-  console.log('Just importing fl-sync') 
+  console.log('Just importing fl-sync')
 }
 
 module.exports = {
