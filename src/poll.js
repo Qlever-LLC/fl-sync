@@ -27,14 +27,12 @@ async function checkTime(config) {
     info('Already polling. Skipping this poll loop');
   } else {
     info('Beginning poll check...');
-    console.log(config);
     _setCurrentlyPolling(true);
 
     let manualPoll;
 
     //Get last poll date
     try {
-      console.log(config.path);
       let response = await config.connection.get({ path: config.path })
 
       manualPoll = response.data.manualPoll || manualPoll;
@@ -67,8 +65,8 @@ async function checkTime(config) {
     if (manualPoll) info(`Manual poll detected. Getting changes since last poll`);
     if (!lastPoll || current > nextUpdate || manualPoll) {
       try {
-        info('Polling now...')
-        await config.pollFunc();
+        info(`Polling now... ${lastPoll}`)
+        await config.pollFunc(lastPoll);
       } catch (err) {
         error('An error occurred while polling');
         error(err);
@@ -83,7 +81,6 @@ async function checkTime(config) {
         info(`Resetting manualPoll to false`)
         await config.connection.put({
           path: config.path,
-          tree,
           data: { manualPoll: false }
         })
       }
@@ -91,7 +88,6 @@ async function checkTime(config) {
       _setCurrentlyPolling(false);
       return config.connection.put({
         path: config.path,
-        tree,
         data: { lastPoll: current }
       })
     }
@@ -105,11 +101,9 @@ async function poll(config) {
     throw new Error('config.basePath is required');
   }
   config.path = `${config.basePath}/_meta/oada-poll/${config.name}`
-  console.log('path', config.path);
   config.checkInterval = config.checkInterval || config.interval / 2;
   
   info(`Initiating poll [${config.name}]. Will poll every ${config.interval / 1000}s. Checking OADA if its time to poll every ${config.checkInterval / 1000}s.`);
-  console.log('CONfIG', config);
   if (config.pollOnStartup) {
     await checkTime(config);
   }

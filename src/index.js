@@ -29,6 +29,8 @@ let TradingPartners = {};
 const FL_MIRROR = "food-logiq-mirror";
 let tree = require('./tree.js');
 let poll = require('./poll.js');
+let reports = require('./reports.js');
+let genReport = require('./generateReport.js');
 const TL_TP = config.get('trellis.endpoints.tps');
 const TL_UTP = config.get('trellis.endpoints.utps');
 const TL_FL_BS = config.get('trellis.endpoints.fl-bus');
@@ -47,6 +49,7 @@ const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 const CONCURRENCY = config.get('trellis.concurrency');
 const flTypes = config.get('foodlogiq.supportedTypes');
 const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
+const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 let PATH_DOCUMENTS = `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents`;
 let ASSESSMENT_TEMPLATES = {};
 let COI_ASSESSMENT_TEMPLATE_ID = null;
@@ -159,7 +162,7 @@ let TOKEN;
 let CURRENTLY_POLLING = false;
 let INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
 let checkInterval = INTERVAL_MS / 2; //check OADA to determine if its time to poll
-let lastPoll;
+//let lastPoll;
 
 let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TP_MPATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
@@ -638,7 +641,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
 /**
  * gets resources
  */
-async function getResources() {
+async function getResources(lastPoll) {
   //Format date
   let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
 
@@ -1261,9 +1264,9 @@ async function fetchCOIAssessmentTemplateFromTrellis() {
 }//fetchCOIAssessmentTemplateFromTrellis
 
 /**
- * the main routine to check for food logiq updates
+ * The callback to be used in the poller. Gets lastPoll date
  */
-async function pollFl() {
+async function pollFl(lastPoll) {
   try {
     // Sync list of suppliers
     let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
@@ -1273,6 +1276,7 @@ async function pollFl() {
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
       to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
       forEach: async (i) => {
+        // Ensure main endpoints
         await Promise.each(['products', 'locations', 'documents', 'assessments'], async (type) => {
           await CONNECTION.head({
             path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
@@ -1294,7 +1298,7 @@ async function pollFl() {
     })
     // Now fetch community resources
     info(`JUST_TPS set to ${!!JUST_TPS}`)
-    if (!JUST_TPS) await getResources();
+    if (!JUST_TPS) await getResources(lastPoll);
   } catch (err) {
     throw err;
   }
@@ -1595,18 +1599,6 @@ async function mockFL({ url }) {
 }
 
 /**
- * makes reports
-*/
-async function makeReport() {
-  setInterval(() => {
-
-    //1. Check if new day;
-//    if (Date.now
-    
-  }, 3600*1000*6)
-}
-
-/**
  * initializes service
  */
 async function initialize() {
@@ -1630,7 +1622,6 @@ async function initialize() {
     //await populateIncomplete()
     await watchTargetJobs();
     await watchFlSyncConfig();
-//    await makeReport();
     await poll.poll({
       connection: CONNECTION,
       basePath: SERVICE_PATH,
@@ -1639,6 +1630,15 @@ async function initialize() {
       interval: INTERVAL_MS,
       name: 'food-logiq-poll',
     });
+/*    await reports.interval({
+      connection: CONNECTION,
+      basePath: SERVICE_PATH,
+      interval: 3600*24*1000,
+      reportFunc: genReport,
+      interval: INTERVAL_MS,
+      name: 'fl-sync',
+    });
+    */
 //    await checkTime();
 //    setInterval(checkTime, checkInterval);
 //    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
