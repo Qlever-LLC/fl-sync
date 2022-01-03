@@ -80,6 +80,13 @@ const config = convict({
       env: 'HANDLE_INCOMPLETE_INTERVAL',
       arg: 'handleIncompleteInterval'
     },
+    reportInterval: {
+      doc: 'Time interval for reports to be generated.',
+      format: Number,
+      default: 86400000,
+      env: 'REPORT_INTERVAL',
+      arg: 'reportInterval'
+    },
   },
   foodlogiq: {
     interval: {

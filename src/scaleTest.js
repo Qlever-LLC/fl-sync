@@ -2916,7 +2916,6 @@ async function findFlDocumentProperties() {
 }
 
 async function postTestDocs() {
-  console.log('running');
   let testDocs = {
     b2: {
       "bid": "60d2184baeb961000ea58b3d",
@@ -3018,16 +3017,14 @@ async function postTestDocs() {
         delete doc[key]
       }
     })
-    console.log('Doc', JSON.stringify(doc));
     let result = await axios({
       method: 'post',
       headers,
-      url: `https://sandbox-api.foodlogiq.com/v2/businesses/612fd011ba2bb8000e1101bc/documents`,
+      url: `https://sandbox-api.foodlogiq.com/v2/businesses/61c22e047953d4000ee0363f/documents`,
       data: doc
     }).catch(err => {
       console.log(err);
     })
-    console.log(result);
   })
 }
 
@@ -3054,11 +3051,11 @@ async function main() {
 //    await associateAssessments();
 //    await linkAssessments();
 //    await generateReport();
-//    await postTestDocs();
+    await postTestDocs();
 //    await recursiveTreeWalk('/bookmarks', tree.bookmarks, {})
 //    await fixTradingPartners()
 //      await findFlDocumentProperties()
-      await moveFlDocsIntoTrellis();
+//      await moveFlDocsIntoTrellis();
 //    await stageAsns();
 //    await handleReport();
 //    await reprocessReport();
