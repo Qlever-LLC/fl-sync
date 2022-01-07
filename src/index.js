@@ -155,8 +155,6 @@ let trellisfw_tp_tree = require('./trellis_tp_tree.js');
 let TL_TP_PATH = TL_TP;
 let TL_TP_UNIDENTIFIED_PATH = TL_UTP;
 
-//const { getToken } = require(SHARED_PATH+'/service-user');
-
 //const DOMAIN = config.get('fl-shared:domain') || 'https://localhost'
 let TOKEN;
 let CURRENTLY_POLLING = false;
