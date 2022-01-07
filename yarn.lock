@@ -72,7 +72,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@npm:^3.0.4":
+"@oada/client@npm:^3.0.4, @oada/client@npm:^3.0.5":
   version: 3.0.5
   resolution: "@oada/client@npm:3.0.5"
   dependencies:
@@ -102,6 +102,31 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@oada/jobs@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "@oada/jobs@npm:3.0.0"
+  dependencies:
+    "@oada/client": ^3.0.5
+    "@oada/oadaify": ^1.0.1
+    "@oada/types": ^1.5.1
+    "@sindresorhus/is": ^2.1.1
+    "@types/bluebird": ^3.5.35
+    "@types/tiny-json-http": ^7.3.1
+    bluebird: ^3.7.2
+    chalk: ^4.1.1
+    color-json: ^2.0.1
+    debug: ^4.3.2
+    minimist: ^1.2.5
+    moment: ^2.29.1
+    p-timeout: ^3.2.0
+    tiny-json-http: ^7.3.0
+    tslib: ^2.2.0
+  bin:
+    oada-jobs: ./src/cli.mjs
+  checksum: ef0bcc99fb6dbb095f79d7baa58db21ee5edbd68856be8a822b6b5bd3f18e9f0d065a4d9d3381108551bfb7fe3c4c2eab07760fe6c747c3713f9705c30eca7ff
+  languageName: node
+  linkType: hard
+
 "@oada/list-lib@npm:^2.1.10":
   version: 2.1.10
   resolution: "@oada/list-lib@npm:2.1.10"
@@ -115,6 +140,27 @@ __metadata:
     jsonpath-plus: ^6.0.1
     p-queue: ^6.6.2
   checksum: 0f51a74f821dec8bb59b21fd46ffe2052994440e4777eaa2964cf7fce3d61639c3be922e04d734b0fec8ac0fe0835a34a7687420a3e583a571fcd6240de64608
+  languageName: node
+  linkType: hard
+
+"@oada/oadaify@npm:^1.0.1":
+  version: 1.0.1
+  resolution: "@oada/oadaify@npm:1.0.1"
+  dependencies:
+    type-fest: ^0.20.2
+  checksum: 7908ea6b211a2e51f244ce14c738986114e67192fb7cd66c433745bdee7a05ed2ab85a60d72b1ff036e4e892358a302b5203b43bcf4756edcdb84d26aeeaef8c
+  languageName: node
+  linkType: hard
+
+"@oada/poll@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@oada/poll@npm:0.0.1"
+  dependencies:
+    "@oada/client": ^3.0.5
+    "@types/node": ^17.0.8
+    debug: ^4.3.3
+    moment: ^2.29.1
+  checksum: a198e48996f555a124679d3b8193fc41da6feb678a5cf4d080abe845cc7f4dfb763eb9f9d8d5e3bf62315b97d35d8baae104be61034076db786af5604e0d5085
   languageName: node
   linkType: hard
 
@@ -140,13 +186,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@overleaf/o-error@npm:^3.3.1":
+  version: 3.3.1
+  resolution: "@overleaf/o-error@npm:3.3.1"
+  dependencies:
+    core-js: ^3.8.3
+  checksum: 59d12d48e803b4ee60fc8dd73f4573b3d32fa95aa2754ede17b1ef6333c2584d109770a39a3e2eca184fff56a1f98787da89862bfa3f530ff4e981bfdbca7938
+  languageName: node
+  linkType: hard
+
 "@qlever-llc/fl-sync@workspace:.":
   version: 0.0.0-use.local
   resolution: "@qlever-llc/fl-sync@workspace:."
   dependencies:
     "@oada/client": ^3.0.4
+    "@oada/jobs": ^3.0.0
     "@oada/list-lib": ^2.1.10
+    "@oada/poll": ^0.0.1
     "@oada/types": ^1.5.1
+    "@overleaf/o-error": ^3.3.1
     "@tsconfig/node16": ^1.0.1
     "@types/convict": ^6.0.2
     "@types/convict-format-with-validator": ^6
@@ -192,6 +250,13 @@ __metadata:
   version: 0.14.0
   resolution: "@sindresorhus/is@npm:0.14.0"
   checksum: 971e0441dd44ba3909b467219a5e242da0fc584048db5324cfb8048148fa8dcc9d44d71e3948972c4f6121d24e5da402ef191420d1266a95f713bb6d6e59c98a
+  languageName: node
+  linkType: hard
+
+"@sindresorhus/is@npm:^2.1.1":
+  version: 2.1.1
+  resolution: "@sindresorhus/is@npm:2.1.1"
+  checksum: cbae604a29931dd33a0ecb77ef50e7ac6f4b626939aad84e4d4da06ace624902f294bd652268939b94596c725ed1905a73c453a5574b8504010296f5619e44cc
   languageName: node
   linkType: hard
 
@@ -259,6 +324,13 @@ __metadata:
   version: 1.0.1
   resolution: "@tsconfig/node16@npm:1.0.1"
   checksum: 5fdfd91e48dc1f406cb59d19fd450a594ea6279f3be54a50bd6fd6b8d189a53bb930f2e7d496cbc3bb45fbb23f0ce5c69086f90c796ce8441cbd2a26fb738fd5
+  languageName: node
+  linkType: hard
+
+"@types/bluebird@npm:^3.5.35":
+  version: 3.5.36
+  resolution: "@types/bluebird@npm:3.5.36"
+  checksum: efe7484e1f6c3443c083f052efb7688b461a9f43899b1891c10b1faf92e4932d686265d10c3e02b8c8fe0c8c371774e6a55ff6eec5e79525390a1ddeee7eb41b
   languageName: node
   linkType: hard
 
@@ -336,6 +408,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/node@npm:^17.0.8":
+  version: 17.0.8
+  resolution: "@types/node@npm:17.0.8"
+  checksum: f4cadeb9e602027520abc88c77142697e33cf6ac98bb02f8b595a398603cbd33df1f94d01c055c9f13cde0c8eaafc5e396ca72645458d42b4318b845bc7f1d0f
+  languageName: node
+  linkType: hard
+
 "@types/responselike@npm:*, @types/responselike@npm:^1.0.0":
   version: 1.0.0
   resolution: "@types/responselike@npm:1.0.0"
@@ -349,6 +428,13 @@ __metadata:
   version: 7.3.6
   resolution: "@types/semver@npm:7.3.6"
   checksum: 933b115a59b1665b4418f48264cc8e497fa8c72425554e97dad07a4fbad09ba3744a726a58fb11c739a944ac868ba4aef926697ad1facedf7858be3410c10d6f
+  languageName: node
+  linkType: hard
+
+"@types/tiny-json-http@npm:^7.3.1":
+  version: 7.3.1
+  resolution: "@types/tiny-json-http@npm:7.3.1"
+  checksum: 98ccbb7d8cb43e363dcde88dd13fb5d630fccb8a649936afc1fd294595027bd6517a36515df4ae01b6a68008e24f1be6ae56d1f4f69784edf3446a4870d3d9f4
   languageName: node
   linkType: hard
 
@@ -1047,6 +1133,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"chalk@npm:^4.1.1":
+  version: 4.1.2
+  resolution: "chalk@npm:4.1.2"
+  dependencies:
+    ansi-styles: ^4.1.0
+    supports-color: ^7.1.0
+  checksum: fe75c9d5c76a7a98d45495b91b2172fa3b7a09e0cc9370e5c8feb1c567b85c4288e2b3fded7cfdd7359ac28d6b3844feb8b82b8686842e93d23c827c417e83fc
+  languageName: node
+  linkType: hard
+
 "check-error@npm:^1.0.2":
   version: 1.0.2
   resolution: "check-error@npm:1.0.2"
@@ -1187,6 +1283,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"color-json@npm:^2.0.1":
+  version: 2.0.1
+  resolution: "color-json@npm:2.0.1"
+  checksum: b233643a29b7cb638477e0db2c80c9bdb83a03dfdb8bb23dddc1de66f5dedd03a3a6c0b88bbfb9f3ae7945182ae3da23aa0bccb78242de769e825c436a5523a1
+  languageName: node
+  linkType: hard
+
 "color-name@npm:1.1.3":
   version: 1.1.3
   resolution: "color-name@npm:1.1.3"
@@ -1290,6 +1393,13 @@ __metadata:
     lodash.clonedeep: ^4.5.0
     yargs-parser: ^18.1.3
   checksum: 24276d478842ea8b48071289a4658bce742d3fc5231c72e6691375affabda5875f600bc85bc2a9fdf72454b0ab2bf8bef413b589afb255018bb4e3327156c1bd
+  languageName: node
+  linkType: hard
+
+"core-js@npm:^3.8.3":
+  version: 3.20.2
+  resolution: "core-js@npm:3.20.2"
+  checksum: dc055a5a79f2e3c2e060b4fb8a3e228fa0de16464bff3c6605646183139eebaa68c390ec6d9c3acc5677f333df510b977ee3f1d5992e6c36b1f200e35f5ed8ca
   languageName: node
   linkType: hard
 
@@ -1412,7 +1522,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"debug@npm:^4.3.3":
+"debug@npm:^4.3.2, debug@npm:^4.3.3":
   version: 4.3.3
   resolution: "debug@npm:4.3.3"
   dependencies:
@@ -4346,6 +4456,13 @@ fsevents@~2.3.1:
   languageName: node
   linkType: hard
 
+"tiny-json-http@npm:^7.3.0":
+  version: 7.3.1
+  resolution: "tiny-json-http@npm:7.3.1"
+  checksum: c5d0aeafe0648b931d43d6bf420a644d2e574799eddf374414d0cb7d6a895389991680bfcefd704da54078583ce8e5e9c9521053a8ab6c7698535eec380aa026
+  languageName: node
+  linkType: hard
+
 "to-arraybuffer@npm:^1.0.1":
   version: 1.0.1
   resolution: "to-arraybuffer@npm:1.0.1"
@@ -4491,6 +4608,13 @@ fsevents@~2.3.1:
   version: 4.0.8
   resolution: "type-detect@npm:4.0.8"
   checksum: 62b5628bff67c0eb0b66afa371bd73e230399a8d2ad30d852716efcc4656a7516904570cd8631a49a3ce57c10225adf5d0cbdcb47f6b0255fe6557c453925a15
+  languageName: node
+  linkType: hard
+
+"type-fest@npm:^0.20.2":
+  version: 0.20.2
+  resolution: "type-fest@npm:0.20.2"
+  checksum: 4fb3272df21ad1c552486f8a2f8e115c09a521ad7a8db3d56d53718d0c907b62c6e9141ba5f584af3f6830d0872c521357e512381f24f7c44acae583ad517d73
   languageName: node
   linkType: hard
 
