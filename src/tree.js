@@ -126,6 +126,13 @@ module.exports = {
       'fl-sync': {
         '_type': 'application/vnd.oada.service.1+json',
         '_rev': 0,
+        'jobs': {
+          '_type': 'application/vnd.oada.service.jobs.1+json',
+          '*': {
+            '_type': 'application/vnd.oada.service.job.1+json',
+            '_rev': 0,
+          }
+        },
         'assessment-templates': {
           '_type': 'application/vnd.oada.trellisfw.1+json',
           '_rev': 0,

@@ -14,12 +14,14 @@
  */
 
 import convict from 'convict';
+import convictMoment from 'convict-format-with-moment'
 import convictValidator from 'convict-format-with-validator';
 import { config as load } from 'dotenv';
 
 load();
 
 convict.addFormats(convictValidator);
+convict.addFormats(convictMoment);
 
 
 const config = convict({
@@ -154,7 +156,26 @@ const config = convict({
       default: "5e27480dd85523000155f6db",
       env: 'FL_TRELLIS_USER'
     }
-  }
+  },
+  slack: {
+    posturl: {
+      format: 'url',
+      // Use a real slack webhook URL
+      default: 'https://localhost',
+      env: 'SLACK_WEBHOOK',
+      arg: 'slack-webhook',
+    },
+  },
+  timeouts: {
+    mirrorWatch: {
+      doc: 'Timeout duration for mirror handler jobs',
+      format: 'duration',
+      // The types for duration suck
+      default: 3_600_000 as unknown as number,
+      env: 'MIRROR_WATCH_TIMEOUT',
+      arg: 'mirror-watch-timeout',
+    },
+  },
 });
 
 config.validate({ allowed: 'warn' });
