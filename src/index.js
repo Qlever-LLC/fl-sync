@@ -723,7 +723,7 @@ async function handleAssessment(item, bid, tp) {
     //Document the relationships here
     await CONNECTION.put({
       path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-      data: {id: assess.data._id}
+      data: {id: item._id}
     })
     await CONNECTION.put({
       path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${item._id}/_meta/services/fl-sync/documents/${job.flId}`,
