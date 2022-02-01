@@ -1,4 +1,6 @@
 let config = require('./config').default;
+const axios = require('axios');
+const _ = require('lodash');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');
 const ASSESSMENT_BID = config.ASSESSMENT_BID;
@@ -8,6 +10,11 @@ const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 const CONCURRENCY = config.get('trellis.concurrency');
 const FL_DOMAIN = config.get('foodlogiq.domain');
+const FL_TOKEN = config.get('foodlogiq.token');
+const debug = require('debug');
+const info = debug('fl-sync:info');
+const trace = debug('fl-sync:trace');
+const error = debug('fl-sync:error');
 
 let COI_ASSESSMENT_TEMPLATE_ID = null;
 
@@ -276,6 +283,7 @@ async function updateAssessment(path, data) {
 
 
 module.exports = {
+  linkAssessmentToDocument,
   assessment_template,
   answer_content,
   spawnAssessment,

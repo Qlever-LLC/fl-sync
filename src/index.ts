@@ -33,7 +33,7 @@ let tree = require('./tree.js');
 let poll = require('@oada/poll');
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
-const { onTargetUpdate, getLookup, JobHandler, startJobCreator } = require('./mirrorWatch.ts');
+const { onTargetUpdate, getLookup, jobHandler, startJobCreator } = require('./mirrorWatch');
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -59,6 +59,7 @@ let CONNECTION;
 /**
  * watches FL config
  */
+  // @ts-ignore
 async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `${SERVICE_PATH}`,
@@ -82,10 +83,6 @@ async function watchFlSyncConfig() {
   
   await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
-    persist: {
-      name: 'fl-sync',
-      recordLapsedTimeout: 300000
-    },
     tree,
     watchCallback: async (change) => {
       try {
@@ -106,6 +103,7 @@ async function watchFlSyncConfig() {
 /**
  * watches target jobs
  */
+// @ts-ignore
 async function watchTargetJobs() {
   info(`Started ListWatch on jobs of the target service...`)
   // @ts-ignore
@@ -334,10 +332,6 @@ function setConnection(conn) {
   CONNECTION = conn;
 }
 
-function getConnection() {
-  return CONNECTION;
-}
-
 function setAutoApprove(value) {
   info(`Autoapprove value is ${value}`)
   AUTO_APPROVE_ASSESSMENTS = value;
@@ -375,45 +369,41 @@ async function initialize() {
     // the necessary in-memory items for them to continue being processed.
     //await populateIncomplete()
     await watchTargetJobs();
-    await watchFlSyncConfig();
+//    await watchFlSyncConfig();
 
-    // Handle each token concurrently
-    await Promise.all(
-      TRELLIS_TOKEN.map(async (token) => {
-        // --------------------------------------------------
-        // Create the service
-        const service = new Service('fl-sync', DOMAIN, token, 1, {
-          finishReporters: [
-            {
-              type: 'slack',
-              status: 'failure',
-              posturl: config.get('slack.posturl'),
-            },
-          ],
-        }); // 1 concurrent job
+    // Create the service
+    const service = new Service({
+      name: 'fl-sync', 
+      oada: CONNECTION,
+      opts: {
+        finishReporters: [
+          {
+            type: 'slack',
+            status: 'failure',
+            posturl: config.get('slack.posturl'),
+          },
+        ],
+      }
+    }); 
 
-        // --------------------------------------------------
-        // Set the job type handlers
-        service.on('translation', config.get('timeouts.pdf'), JobHandler);
+    // Set the job type handlers
+    service.on('mirror-watch', config.get('timeouts.mirrorWatch'), jobHandler);
 
-        // --------------------------------------------------
-        // Start the jobs watching service
-        const serviceP = service.start();
+    // Start the jobs watching service
+    const serviceP = service.start();
 
-        // Start the things watching to create jobs
-        const p = startJobCreator({ domain: DOMAIN, token });
+    // Start the things watching to create jobs
+    const p = startJobCreator(CONNECTION);
 
-        info('Initializing fl-sync service. v1.2.6');
+    info('Initializing fl-sync service. v1.2.6');
 
-        // Catch errors
-        // eslint-disable-next-line github/no-then
-        await Promise.all([serviceP, p]).catch((cError) => {
-          error(cError);
-          // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
-          process.exit(1);
-        });
-      })
-    );
+    // Catch errors
+    // eslint-disable-next-line github/no-then
+    await Promise.all([serviceP, p]).catch((cError) => {
+      error(cError);
+      // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
+      process.exit(1);
+    });
 
     await poll.poll({
       connection: CONNECTION,
@@ -454,7 +444,6 @@ module.exports = {
   pollFl,
   initialize,
   getAutoApprove,
-  getConnection,
   testing: {
     setConnection,
     SERVICE_PATH,
