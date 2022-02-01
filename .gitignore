@@ -4,6 +4,7 @@ config.default.js
 
 *.log
 .DS_Store
+.dccache
 
 # TypeScript
 dist
