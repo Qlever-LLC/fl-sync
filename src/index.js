@@ -719,6 +719,17 @@ async function handleAssessment(item, bid, tp) {
   info(`Handling assessment [${item._id}]`)
   let found = _.filter(Object.values(TARGET_JOBS), (o) => _.has(o, ['assessments', item._id])) || [];
   await Promise.each(found, async (job) => {
+
+    //Document the relationships here
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+      data: {id: assess.data._id}
+    })
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${item._id}/_meta/services/fl-sync/documents/${job.flId}`,
+      data: job.flId
+    })
+
     if (item.state === 'Approved') {
       TARGET_JOBS[job.jobId].assessments[item._id] = true;
       await approveFlDoc(job.flId);
@@ -1097,9 +1108,9 @@ async function handleScrapedResult(jobId) {
         if (!assessmentId) info(job, 'Assessment does not yet exist.')
 
         let assess = await constructAssessment(job, result, assessmentId);
-        //assessmentId = assess.data._id;
 
         if (!assessmentId) {
+          assessmentId = assess.data._id;
           await CONNECTION.put({
             path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
             data: {id: assess.data._id}
