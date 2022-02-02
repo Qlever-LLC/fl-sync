@@ -354,6 +354,17 @@ async function handleAssessment(item) {
 
   let found = _.filter(Array.from(TARGET_JOBS.values()), (o) => _.has(o, ['assessments', item._id])) || [];
   await Promise.each(found, async (job) => {
+
+    //Document the relationships here. Redundancy should not affect anything.
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+      data: {id: item._id}
+    })
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${item._id}/_meta/services/fl-sync/documents/${job.flId}`,
+      data: job.flId
+    })
+
     if (item.state === 'Approved') {
       job.assessments[item._id] = true;
       TARGET_JOBS.set(job.targetJobKey, job)
@@ -796,14 +807,6 @@ async function handleScrapedResult(targetJobKey) {
 
         if (!assessmentId) {
           assessmentId = assess.data._id;
-          await CONNECTION.put({
-            path: `${SERVICE_PATH}/businesses/${job.bid}/documents/${job.flId}/_meta/services/fl-sync/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-            data: {id: assessmentId}
-          })
-          await CONNECTION.put({
-            path: `${SERVICE_PATH}/businesses/${job.bid}/assessments/${assess.data._id}/_meta/services/fl-sync/documents/${job.flId}`,
-            data: job.flId
-          })
         }
 
         await postUpdate(
