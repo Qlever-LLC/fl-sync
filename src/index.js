@@ -749,7 +749,7 @@ async function handleAssessment(item, bid, tp) {
             data: {approval: !failed}
           })
           // Auto-approve only, do not auto-reject
-          if (!failed) {
+//          if (!failed) {
             info(`Assessment Auto-${item.state}. [${item._id}]`);
             await axios({
               method: 'put',
@@ -757,7 +757,7 @@ async function handleAssessment(item, bid, tp) {
               headers: { Authorization: FL_TOKEN },
               data: item
             })
-          } else info(`Assessment ${item._id} failed checkAssessment`);
+//          } else info(`Assessment ${item._id} failed checkAssessment`);
         } catch (err) {
           error(err)
           throw err;
