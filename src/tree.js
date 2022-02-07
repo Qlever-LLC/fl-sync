@@ -126,6 +126,12 @@ module.exports = {
       'fl-sync': {
         '_type': 'application/vnd.oada.service.1+json',
         '_rev': 0,
+        'monitors': {
+          '_type': 'application/vnd.oada.service.1+json',
+          '*': {
+            '_type': 'application/vnd.oada.service.1+json'
+          }
+        },
         'jobs': {
           '_type': 'application/vnd.oada.service.jobs.1+json',
           '*': {

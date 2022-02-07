@@ -57,7 +57,7 @@ __metadata:
   dependencies:
     "@oada/types": ^1.8.1
     buffer: ^6.0.3
-    bufferutil: ^4.0.5
+    bufferutil: ^4.0.6
     cross-fetch: ^3.1.4
     debug: ^4.3.3
     deep-clone: ^3.0.3
@@ -69,14 +69,15 @@ __metadata:
     isomorphic-timers-promises: ^1.0.1
     isomorphic-ws: ^4.0.1
     ksuid: ^3.0.0
+    node-abort-controller: ^3.0.1
     p-queue: ^6.6.2
     reconnecting-websocket: ^4.4.0
     resolve-alpn: ^1.2.1
     supports-color: ^9.2.1
     tslib: ^2.3.1
     type-is: ^1.6.18
-    utf-8-validate: ^5.0.7
-    ws: ^8.4.0
+    utf-8-validate: ^5.0.8
+    ws: ^8.4.2
   languageName: node
   linkType: soft
 
@@ -104,21 +105,20 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@oada/list-lib@npm:^2.1.10":
-  version: 2.1.10
-  resolution: "@oada/list-lib@npm:2.1.10"
+"@oada/list-lib@portal:/home/sanoel/list-lib::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@oada/list-lib@portal:/home/sanoel/list-lib::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
   dependencies:
-    "@oada/client": ^2.6.1
-    "@oada/types": ^1.2.0
-    bluebird: ^3.7.2
+    "@oada/client": ^3.0.3
+    "@oada/types": ^1.7.0
     clone-deep: ^4.0.1
-    debug: ^4.3.1
-    json-pointer: ^0.6.0
+    debug: ^4.3.3
+    isomorphic-timers-promises: ^1.0.1
+    json-pointer: ^0.6.1
     jsonpath-plus: ^6.0.1
-    p-queue: ^6.6.2
-  checksum: 0f51a74f821dec8bb59b21fd46ffe2052994440e4777eaa2964cf7fce3d61639c3be922e04d734b0fec8ac0fe0835a34a7687420a3e583a571fcd6240de64608
+    tslib: ^2.3.1
   languageName: node
-  linkType: hard
+  linkType: soft
 
 "@oada/oadaify@npm:^1.0.1":
   version: 1.0.1
@@ -140,7 +140,7 @@ __metadata:
   languageName: node
   linkType: soft
 
-"@oada/types@npm:^1.2.0, @oada/types@npm:^1.5.1":
+"@oada/types@npm:^1.5.1":
   version: 1.5.1
   resolution: "@oada/types@npm:1.5.1"
   dependencies:
@@ -151,7 +151,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/types@npm:^1.8.1":
+"@oada/types@npm:^1.7.0, @oada/types@npm:^1.8.1":
   version: 1.8.1
   resolution: "@oada/types@npm:1.8.1"
   dependencies:
@@ -177,14 +177,15 @@ __metadata:
   dependencies:
     "@oada/client": ^3.0.4
     "@oada/jobs": ^3.0.0
-    "@oada/list-lib": ^2.1.10
+    "@oada/list-lib": ^2.2.0
     "@oada/poll": ^0.0.1
     "@oada/types": ^1.5.1
     "@overleaf/o-error": ^3.3.1
     "@tsconfig/node16": ^1.0.1
     "@types/convict": ^6.0.2
     "@types/convict-format-with-validator": ^6
-    "@types/node": ^14.17.0
+    "@types/mocha": ^9.1.0
+    "@types/node": latest
     "@yarnpkg/pnpify": ^3.0.0-rc.6
     adm-zip: ^0.5.3
     axios: ^0.21.1
@@ -364,6 +365,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/mocha@npm:^9.1.0":
+  version: 9.1.0
+  resolution: "@types/mocha@npm:9.1.0"
+  checksum: 21e1000dafcfe387c6812be41c44a47b48c27a74d5a70c3d5ef1bb5c88eadadfc74dba06e93f160e7248c8a57b3977b590f82504c801c9927816ecd4668023c0
+  languageName: node
+  linkType: hard
+
 "@types/node@npm:*":
   version: 15.12.2
   resolution: "@types/node@npm:15.12.2"
@@ -378,17 +386,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^14.17.0":
-  version: 14.17.3
-  resolution: "@types/node@npm:14.17.3"
-  checksum: c24c1f222b83a4cba584ae1bce2ab262d48d9d502346d82dd261236d29ce11ad63c5a5b1bfc74e50eaae032384893d443297d4da758e1eb540d9bf2495d7814e
-  languageName: node
-  linkType: hard
-
 "@types/node@npm:^17.0.8":
   version: 17.0.8
   resolution: "@types/node@npm:17.0.8"
   checksum: f4cadeb9e602027520abc88c77142697e33cf6ac98bb02f8b595a398603cbd33df1f94d01c055c9f13cde0c8eaafc5e396ca72645458d42b4318b845bc7f1d0f
+  languageName: node
+  linkType: hard
+
+"@types/node@npm:latest":
+  version: 17.0.15
+  resolution: "@types/node@npm:17.0.15"
+  checksum: aa64ecf4fbcf9888e794dcdc20e98c49cdcb102b17e57c44ca56943904732d6cc250e766f8448a3cd71d6a40a4b597bd83c565e5bd9b982733fa3f9813d5c291
   languageName: node
   linkType: hard
 
@@ -968,7 +976,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"bufferutil@npm:^4.0.5":
+"bufferutil@npm:^4.0.6":
   version: 4.0.6
   resolution: "bufferutil@npm:4.0.6"
   dependencies:
@@ -2740,7 +2748,7 @@ fsevents@~2.3.1:
   languageName: node
   linkType: hard
 
-"json-pointer@npm:^0.6.0, json-pointer@npm:^0.6.1":
+"json-pointer@npm:^0.6.1":
   version: 0.6.1
   resolution: "json-pointer@npm:0.6.1"
   dependencies:
@@ -3240,6 +3248,13 @@ fsevents@~2.3.1:
   version: 1.0.0
   resolution: "next-tick@npm:1.0.0"
   checksum: 83fcb3d4f8d9380210b1c2b8a610463602d80283f0c0c8571c1688e1ad6cbf3a16b345f5bb7212617d4898bedcfa10dff327dc09ec20a112a5bf43a0271375fb
+  languageName: node
+  linkType: hard
+
+"node-abort-controller@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "node-abort-controller@npm:3.0.1"
+  checksum: 2b3d75c65249fea99e8ba22da3a8bc553f034f44dd12f5f4b38b520f718b01c88718c978f0c24c2a460fc01de9a80b567028f547b94440cb47adeacfeb82c2ee
   languageName: node
   linkType: hard
 
@@ -4730,7 +4745,7 @@ typescript@^4.3.2:
   languageName: node
   linkType: hard
 
-"utf-8-validate@npm:^5.0.7":
+"utf-8-validate@npm:^5.0.8":
   version: 5.0.8
   resolution: "utf-8-validate@npm:5.0.8"
   dependencies:
@@ -4882,7 +4897,7 @@ typescript@^4.3.2:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.4.0":
+"ws@npm:^8.4.2":
   version: 8.4.2
   resolution: "ws@npm:8.4.2"
   peerDependencies:

@@ -5,9 +5,9 @@
   "main": "dist/index.ts",
   "scripts": {
     "build": "tsc -b",
-    "build-watch": "tsc -b --watch",
+    "watch": "tsc -b --watch",
     "start": "node --enable-source-maps dist/index.js",
-    "test": "DEBUG=\"fl-sync*,${DEBUG}\" mocha 'test/scaleTest.js'"
+    "test": "mocha --grep docs.test"
   },
   "author": "Sam Noel <sam@qlever.io>",
   "license": "Apache-2.0",
@@ -20,10 +20,11 @@
   "dependencies": {
     "@oada/client": "^3.0.4",
     "@oada/jobs": "^3.0.0",
-    "@oada/list-lib": "^2.1.10",
+    "@oada/list-lib": "^2.2.0",
     "@oada/poll": "^0.0.1",
     "@oada/types": "^1.5.1",
     "@overleaf/o-error": "^3.3.1",
+    "@types/mocha": "^9.1.0",
     "adm-zip": "^0.5.3",
     "axios": "^0.21.1",
     "bluebird": "^3.7.2",
@@ -57,7 +58,7 @@
     "@tsconfig/node16": "^1.0.1",
     "@types/convict": "^6.0.2",
     "@types/convict-format-with-validator": "^6",
-    "@types/node": "^14.17.0",
+    "@types/node": "latest",
     "@yarnpkg/pnpify": "^3.0.0-rc.6",
     "bluebird": "^3.7.2",
     "chai": "^4.3.4",
@@ -71,6 +72,7 @@
   "resolutions": {
     "@oada/poll": "portal:/home/sanoel/poll",
     "@oada/client": "portal:/home/sanoel/client",
-    "@oada/jobs": "portal:/home/sanoel/jobs"
+    "@oada/jobs": "portal:/home/sanoel/jobs",
+    "@oada/list-lib": "portal:/home/sanoel/list-lib"
   }
 }
