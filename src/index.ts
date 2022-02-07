@@ -34,6 +34,7 @@ let poll = require('@oada/poll');
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
 const { onTargetUpdate, getLookup, jobHandler, startJobCreator } = require('./mirrorWatch');
+const { watchTrellisFLBusinesses } = require('./masterData')
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -46,14 +47,16 @@ const CONCURRENCY = config.get('trellis.concurrency');
 //const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 //const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
+let SERVICE_PATH = config.get('service.path');;
+let SERVICE_NAME = config.get('service.name');;
 
 const info = debug('fl-sync:info');
 const error = debug('fl-sync:error');
+tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 
 let AUTO_APPROVE_ASSESSMENTS;
 let TOKEN;
 
-let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let CONNECTION;
 
 /**
@@ -97,7 +100,7 @@ async function watchFlSyncConfig() {
   }).catch(err => {
     error(err);
   });
-  info('Watching bookmarks/services/fl-sync.');
+  info(`Watching ${SERVICE_PATH}`);
 }//watchFlSyncConfig
 
 /**
@@ -237,7 +240,8 @@ async function pollFl(lastPoll) {
             if (err.status !== 404) throw err;
             let _id = await CONNECTION.post({
               path: `/resources`,
-              data: {}
+              data: {},
+              contentType: tree.bookmarks.services[SERVICE_NAME].businesses['*']._type,
             }).then(r => r.headers['content-location'].replace(/^\//, ''))
 
             await CONNECTION.put({
@@ -302,6 +306,7 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
         if (sync) {
           let resp = await CONNECTION.post({
             path: `/resources`,
+            contentType: tree.bookmarks.services[SERVICE_NAME].businesses['*']._type,
             data: { 'food-logiq-mirror': item }
           });
           await CONNECTION.put({
@@ -348,7 +353,7 @@ async function getToken() {
 /**
  * initializes service
  */
-async function initialize() {
+export async function initialize() {
   try {
     info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.5]       >>>>>>>>>>`);
     TOKEN = await getToken();
@@ -368,13 +373,15 @@ async function initialize() {
     // Run populateIncomplete first so that the change feeds coming in will have
     // the necessary in-memory items for them to continue being processed.
     //await populateIncomplete()
-    await watchTargetJobs();
+//    await watchTargetJobs();
 //    await watchFlSyncConfig();
+    await watchTrellisFLBusinesses(CONNECTION);
 
     // Create the service
     const service = new Service({
       name: 'fl-sync', 
       oada: CONNECTION,
+      /*
       opts: {
         finishReporters: [
           {
@@ -384,6 +391,7 @@ async function initialize() {
           },
         ],
       }
+     */
     }); 
 
     // Set the job type handlers
@@ -430,6 +438,95 @@ async function initialize() {
   }
 }//initialize
 
+export async function test({polling, target, master, service, watchConfig}) {
+  try {
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.5]       >>>>>>>>>>`);
+    TOKEN = await getToken();
+    // Connect to oada
+    try {
+      var conn = await oada.connect({
+        domain: 'https://' + DOMAIN,
+        token: TOKEN,
+        concurrency: CONCURRENCY,
+      })
+      setConnection(conn);
+    } catch (err) {
+      error(`Initializing Trellis connection failed`);
+      error(err)
+      throw err;
+    }
+
+    // Run populateIncomplete first so that the change feeds coming in will have
+    // the necessary in-memory items for them to continue being processed.
+    //await populateIncomplete()
+
+    if (target === undefined || target) {
+      await watchTargetJobs();
+    }
+
+    if (watchConfig === undefined || watchConfig) {
+      await watchFlSyncConfig();
+    }
+
+    if (master === undefined || master) {
+      await watchTrellisFLBusinesses(CONNECTION);
+    }
+
+    // Create the service
+    if (service === undefined || service) {
+      const service = new Service({
+        name: SERVICE_NAME, 
+        oada: CONNECTION,
+      }); 
+
+      // Set the job type handlers
+      service.on('mirror-watch', config.get('timeouts.mirrorWatch'), jobHandler);
+
+      // Start the jobs watching service
+      const serviceP = service.start();
+
+      // Start the things watching to create jobs
+      const p = startJobCreator(CONNECTION);
+
+      // Catch errors
+      // eslint-disable-next-line github/no-then
+      await Promise.all([serviceP, p]).catch((cError) => {
+        error(cError);
+        // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
+        process.exit(1);
+      });
+    }
+
+
+
+    if (polling === undefined || polling) {
+      await poll.poll({
+        connection: CONNECTION,
+        basePath: SERVICE_PATH,
+        pollOnStartup: true,
+        pollFunc: pollFl,
+        interval: INTERVAL_MS,
+        name: 'food-logiq-poll',
+      });
+    }
+/*    await reports.interval({
+      connection: CONNECTION,
+      basePath: SERVICE_PATH,
+      interval: 3600*24*1000,
+      reportFunc: genReport,
+      interval: INTERVAL_MS,
+      name: 'fl-sync',
+    });
+    */
+//    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
+
+  } catch (err) {
+    error(err);
+    throw err;
+  }
+}//test
+
+
 process.on('uncaughtException', function(err) {
   error('Caught exception: ' + err);
 });
@@ -437,12 +534,13 @@ process.on('uncaughtException', function(err) {
 if (require.main === module) {
   initialize();
 } else {
-  console.log('Just importing fl-sync') 
+  info('Just importing fl-sync');
 }
 
 module.exports = {
   pollFl,
   initialize,
+  test,
   getAutoApprove,
   testing: {
     setConnection,

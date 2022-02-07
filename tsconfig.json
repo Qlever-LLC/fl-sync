@@ -1,7 +1,6 @@
 {
   "extends": "@tsconfig/node16",
   "compilerOptions": {
-    "allowJs": true,
     "removeComments": true,
     "importHelpers": true,
     "strict": true,
@@ -16,5 +15,8 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "test/**/*"
+  ]
 }

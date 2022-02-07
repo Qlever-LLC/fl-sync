@@ -25,6 +25,20 @@ convict.addFormats(convictMoment);
 
 
 const config = convict({
+  service: {
+    path: {
+      doc: 'Base path for the fl-sync service',
+      default: '/bookmarks/services/fl-sync',
+      env: 'SERVICE_PATH',
+      arg: 'service_path'
+    },
+    name: {
+      doc: 'Name of the service; used by jobs lib; helps configuring tests separately',
+      default: 'fl-sync',
+      env: 'SERVICE_NAME',
+      arg: 'service_name'
+    },
+  },
   delay: {
     doc: 'amount to delay between pages of documents',
     default: 0,
@@ -136,7 +150,19 @@ const config = convict({
           default: "Smithfield Foods",
           env: 'FL_OWNER_NAME'
         }
-      }
+      },
+    },
+    testSupplier: {
+      name: {
+        doc: 'Name of supplier used for testing',
+        default: "TrellisTest",
+        env: 'FL_SUPPLIER_NAME'
+      },
+      id: {
+        doc: 'The _id of supplier used for testing',
+        default: "61c22e047953d4000ee0363f",
+        env: 'FL_SUPPLIER_ID'
+      },
     },
     supportedTypes: {
       doc: "Array of supported FL document types",

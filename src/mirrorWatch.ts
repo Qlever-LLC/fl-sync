@@ -29,11 +29,13 @@ const info = debug('fl-sync:mirror-watch:info');
 const error = debug('fl-sync:mirror-watch:error');
 const trace = debug('fl-sync:mirror-watchtrace');
 
-let SERVICE_PATH = `/bookmarks/services/fl-sync`;
+let SERVICE_PATH = config.get('service.path');
+let SERVICE_NAME = config.get('service.name');
 let TP_MPATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
 let FL_SYNC_JOBS = new Map();// index of trellis pdf documents mapped to FL documents
 let TARGET_JOBS = new Map();// index of target jobs mapped to FL documents
 let docPromises = new Map();
+tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 let CONNECTION;
 
 /**
@@ -231,18 +233,21 @@ export const jobHandler: WorkerFunction = async (job: any, {oada, jobId: jobKey}
       return;
     }
 
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${bid}/${type}/${key}/_meta/services/fl-sync/jobs`,
+      data: {[jobId]: {_ref: `resources/${jobId}`}}
+    })
+
     let item = data && data['food-logiq-mirror'];
 
     let bus : any = await oada.get({
       path: `${SERVICE_PATH}/businesses/${bid}`
     }).then(r => r.data)
-      .catch(() => {
-        error(`TP masterid entry not found for business ${bid}`);
-        return;
-      });
+
     if (!bus || !bus.masterid) error(`No trading partner found for business ${bid}.`)
     if (!bus || !bus.masterid) return;
     let tp = bus.masterid;
+
 
     if (!tp) error(`No trading partner found for business ${bid}.`)
     if (!tp) return;
@@ -553,6 +558,27 @@ async function handlePendingDoc(item, bid, tp, bname, status, _rev, jobId) {
     await CONNECTION.put({
       path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
       data: { _id, _rev: 0 }
+    })
+
+    //Lazy create an index of trading partners' documents resources for monitoring.
+    await CONNECTION.head({
+      path: `${SERVICE_PATH}/monitors/tp-docs/${tp}`
+    }).catch(async (err) => {
+      if (err.status === 404) {
+        let tpDocsId = await CONNECTION.head({
+          path: `${TP_MPATH}/${tp}/shared/trellisfw/documents/${resId}`,
+        }).then(r => r.headers['content-location']!.replace(/^\/resources\//,''));
+
+        // Createa a versioned link to that trading-partner's shared documents
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/monitors/tp-docs/${tp}`,
+          tree,
+          data: {
+            _id: tpDocsId,
+            _rev: 0
+          }
+        })
+      } else throw err;
     })
 
     // Create a lookup in order to track target updates
@@ -952,7 +978,6 @@ async function queueJob(change) {
   let bid = pieces[1];
   let type = pieces[2];
   let key = pieces[3];
-  console.log(bid, type, key, change.body._rev);
 
   let data = await CONNECTION.get({
     path: `${SERVICE_PATH}/businesses/${bid}/${type}/${key}`
@@ -970,7 +995,7 @@ async function queueJob(change) {
       contentType: 'application/vnd.oada.job.1+json',
       data: {
         'type': 'mirror-watch',
-        'service': 'fl-sync',
+        'service': SERVICE_NAME,
         'config': {
           type,
           key,
@@ -986,7 +1011,7 @@ async function queueJob(change) {
 
     try {
       await CONNECTION.put({
-        path: `/bookmarks/services/fl-sync/jobs`,
+        path: `${SERVICE_PATH}/jobs`,
         tree,
         data: {
           [jobkey]: { _id: `resources/${jobkey}`, _rev: 0 },
@@ -995,7 +1020,6 @@ async function queueJob(change) {
       info('Posted job resource, jobkey = %s', jobkey);
       trace('Posted new fl-sync mirrored document job');
     } catch (cError: any) {
-      console.log(cError);
       throw oError.tag(
         cError as Error,
         'Failed to PUT job link under fl-sync job queue for job key ',
