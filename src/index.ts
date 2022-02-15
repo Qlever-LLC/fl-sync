@@ -33,7 +33,7 @@ let tree = require('./tree.js');
 let poll = require('@oada/poll');
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
-const { onTargetUpdate, getLookup, jobHandler, startJobCreator } = require('./mirrorWatch');
+const { onTargetUpdate, getLookup, handleAssessment, handlePendingDocument, startJobCreator } = require('./mirrorWatch');
 const { watchTrellisFLBusinesses } = require('./masterData')
 
 const DOMAIN = config.get('trellis.domain');
@@ -395,7 +395,8 @@ export async function initialize() {
     }); 
 
     // Set the job type handlers
-    service.on('mirror-watch', config.get('timeouts.mirrorWatch'), jobHandler);
+    service.on('document-mirrored', config.get('timeouts.mirrorWatch'), handlePendingDocument);
+    service.on('assessment-mirrored', config.get('timeouts.mirrorWatch'), handleAssessment);
 
     // Start the jobs watching service
     const serviceP = service.start();
@@ -480,7 +481,8 @@ export async function test({polling, target, master, service, watchConfig}) {
       }); 
 
       // Set the job type handlers
-      service.on('mirror-watch', config.get('timeouts.mirrorWatch'), jobHandler);
+      service.on('document-mirrored', config.get('timeouts.mirrorWatch'), handlePendingDocument);
+      service.on('assessment-mirrored', config.get('timeouts.mirrorWatch'), handleAssessment);
 
       // Start the jobs watching service
       const serviceP = service.start();

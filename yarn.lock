@@ -179,7 +179,7 @@ __metadata:
     "@oada/jobs": ^3.0.0
     "@oada/list-lib": ^2.2.0
     "@oada/poll": ^0.0.1
-    "@oada/types": ^1.5.1
+    "@oada/types": ^1.8.1
     "@overleaf/o-error": ^3.3.1
     "@tsconfig/node16": ^1.0.1
     "@types/convict": ^6.0.2
@@ -204,7 +204,7 @@ __metadata:
     js-sha256: ^0.9.0
     json-pointer: ^0.6.1
     jszip: ^3.6.0
-    ksuid: ^2.0.0
+    ksuid: ^3.0.0
     lodash: ^4.17.21
     mocha: ^7.2.0
     moment: ^2.29.1
@@ -2805,15 +2805,6 @@ fsevents@~2.3.1:
   version: 6.0.3
   resolution: "kind-of@npm:6.0.3"
   checksum: 3ab01e7b1d440b22fe4c31f23d8d38b4d9b91d9f291df683476576493d5dfd2e03848a8b05813dd0c3f0e835bc63f433007ddeceb71f05cb25c45ae1b19c6d3b
-  languageName: node
-  linkType: hard
-
-"ksuid@npm:^2.0.0":
-  version: 2.0.0
-  resolution: "ksuid@npm:2.0.0"
-  dependencies:
-    base-convert-int-array: ^1.0.1
-  checksum: 24d284688264ae6949353b04a5544431267dcdf79711ef31cd95f8d1712f2e5435b0dedd839daae7048bcf9157ca67b921d19287f539822bfd650b1ded3a12ad
   languageName: node
   linkType: hard
 

@@ -5,7 +5,7 @@ import SHA256 from "js-sha256";
 const { sha256 } = SHA256;
 const debug = require('debug');
 const ListWatch = oadalist.ListWatch;
-let trellisfw_tp_tree = require('./trellis_tp_tree');
+let tree = require('./trellis_tp_tree');
 import config from './config.masterdata';
 
 const SERVICE_NAME = config.get('service.name');
@@ -18,7 +18,7 @@ let TL_TP_PATH = TL_TP;
 const FL_MIRROR = `food-logiq-mirror`;
 
 let CONNECTION;
-trellisfw_tp_tree.bookmarks.services[SERVICE_NAME] = trellisfw_tp_tree.bookmarks.services['fl-sync'];
+tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 
 const info = debug('fl-sync:master-data:info');
 const error = debug('fl-sync:master-data:error');
@@ -113,7 +113,7 @@ async function addTP2Trellis(item: any, key: string) {
         await CONNECTION.put({
           path: `${TL_TP_PATH}${key}/bookmarks`,
           data: {},
-          tree: trellisfw_tp_tree
+          tree
         }).then(async (bookmarks_result: any) => {
           let _bookmarks_id: string = bookmarks_result["headers"] ? bookmarks_result["headers"]["content-location"] : "";
           let _string_content = _bookmarks_id.substring(1);
