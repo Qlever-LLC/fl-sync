@@ -173,6 +173,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     }
 
     // Create a new resource if necessary and link to it
+    // Doing a tree-put manually-ish
     if (!_id) {
       _id = `resources/${ksuid.randomSync().string}`;
       await CONNECTION.put({
@@ -377,6 +378,16 @@ export async function initialize() {
 //    await watchFlSyncConfig();
     await watchTrellisFLBusinesses(CONNECTION);
 
+    // Some queued jobs may depend on the poller to complete, so start it now. 
+    await poll.poll({
+      connection: CONNECTION,
+      basePath: SERVICE_PATH,
+      pollOnStartup: true,
+      pollFunc: pollFl,
+      interval: INTERVAL_MS,
+      name: 'food-logiq-poll',
+    });
+
     // Create the service
     const service = new Service({
       name: 'fl-sync', 
@@ -414,14 +425,6 @@ export async function initialize() {
       process.exit(1);
     });
 
-    await poll.poll({
-      connection: CONNECTION,
-      basePath: SERVICE_PATH,
-      pollOnStartup: true,
-      pollFunc: pollFl,
-      interval: INTERVAL_MS,
-      name: 'food-logiq-poll',
-    });
 /*    await reports.interval({
       connection: CONNECTION,
       basePath: SERVICE_PATH,
@@ -473,6 +476,18 @@ export async function test({polling, target, master, service, watchConfig}) {
       await watchTrellisFLBusinesses(CONNECTION);
     }
 
+    // Some queued jobs may depend on the poller to complete, so start it now. 
+    if (polling === undefined || polling) {
+      await poll.poll({
+        connection: CONNECTION,
+        basePath: SERVICE_PATH,
+        pollOnStartup: true,
+        pollFunc: pollFl,
+        interval: INTERVAL_MS,
+        name: 'food-logiq-poll',
+      });
+    }
+
     // Create the service
     if (service === undefined || service) {
       const service = new Service({
@@ -501,16 +516,6 @@ export async function test({polling, target, master, service, watchConfig}) {
 
 
 
-    if (polling === undefined || polling) {
-      await poll.poll({
-        connection: CONNECTION,
-        basePath: SERVICE_PATH,
-        pollOnStartup: true,
-        pollFunc: pollFl,
-        interval: INTERVAL_MS,
-        name: 'food-logiq-poll',
-      });
-    }
 /*    await reports.interval({
       connection: CONNECTION,
       basePath: SERVICE_PATH,
