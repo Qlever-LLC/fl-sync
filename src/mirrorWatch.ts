@@ -17,7 +17,6 @@ import type { WorkerFunction } from '@oada/jobs';
 import type { OADAClient } from '@oada/client';
 const {postUpdate} = require('@oada/jobs');
 const {ListWatch} = require('@oada/list-lib');
-import { is } from '@oada/types/oada/resource'
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
 const FL_DOMAIN = config.get('foodlogiq.domain');
@@ -42,6 +41,11 @@ mirrorTree.bookmarks.services[SERVICE_NAME] = mirrorTree.bookmarks.services['fl-
 let CONNECTION;
 //let flList = ['documents', 'products', 'locations', 'assessments'];
 
+function mostRecentKsuid(keys) {
+  return keys.map(k => ksuid.parse(k).timestamp)
+    .reduce((a, b) => a.compare(b) ? a : b).string
+}
+
 /**
  * searching and assigning target jobs to FL documents
  * @param {*} item 
@@ -64,8 +68,7 @@ async function getLookup(item: any, key: string) {
 
     let flJobKeys = Object.keys(data?.services?.['fl-sync']?.jobs || {})
 
-    let jobKey = flJobKeys.map(k => ksuid.parse(k).timestamp)
-      .reduce((a, b) => a.compare(b) ? a : b).string
+    let jobKey = mostRecentKsuid(flJobKeys);
 
     let jobId = data?.services?.['fl-sync']?.jobs?.[jobKey]!._id
       
@@ -79,10 +82,23 @@ async function getLookup(item: any, key: string) {
     }).then(r => r.data.config);
 
     // Store the job with the FL document
+    console.log('~~~~~~~~~~~~~~~~~~~~~~~')
+    console.log('~~~~~~~~~~~~~~~~~~~~~~~')
+    console.log('~~~~~~~~~~~~~~~~~~~~~~~')
+    console.log('~~~~~~~~~~~~~~~~~~~~~~~')
     await CONNECTION.put({
-      path: `${SERVICE_PATH}/businesses/${bid}/${type}/${flId}/_meta/services/target-helper/jobs/${key}`,
-      data: {_id: item._id}
+      path: `${SERVICE_PATH}/businesses/${bid}/${type}/${flId}/_meta`,
+      data: {
+        services: {
+          target: {
+            jobs: {
+              [key]: {_id: item._id}
+            }
+          }
+        }
+      }
     })
+   console.log('did it', {path: `${SERVICE_PATH}/businesses/${bid}/${type}/${flId}/_meta`})
 
   } catch (err) {
     error(`Error associating new target job to FL documents`)
@@ -118,6 +134,7 @@ async function onTargetUpdate(change, targetJobKey) {
         'in-progress'
       )
       await handleScrapedResult(targetJobKey)
+      delete targetJobToFlSyncJob[targetJobKey];
     } else if (status === 'failure') {
       await postUpdate(
         CONNECTION, 
@@ -130,6 +147,7 @@ async function onTargetUpdate(change, targetJobKey) {
         await rejectFlDoc(key, job.targetError);
       }
       resolveDocument(key);
+      delete targetJobToFlSyncJob[targetJobKey];
     }
       
     // Provide select update messages to FL
@@ -253,7 +271,7 @@ export const handleAssessment: WorkerFunction = async (job: any, {oada, jobId: j
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${key}/food-logiq-mirror`
     }).then(r => r.data)
 
-    if (!is(item)) return {};
+    if (Buffer.isBuffer(item) || Array.isArray(item) || item === undefined || item === null || typeof item !== 'object') return {};
 
     //Document the relationships here. Redundancy should not affect anything.
     await CONNECTION.put({
@@ -339,25 +357,26 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${key}`
     }).then(r => r!.data!['food-logiq-mirror'])
 
-    console.log('1');
-    if (!is(item)) return {};
+    if (Buffer.isBuffer(item) || Array.isArray(item) || item === undefined || item === null || typeof item !== 'object') {
+      return {};
+    }
 
     //1. Retrieve relevant job info and store a reference to the job in the fl doc
     let response = await oada.get({
       path: `${SERVICE_PATH}/jobs/${jobKey}`
     }).then(r => r.data)
 
-    if (!is(response)) throw new Error('Job was not a resource (had no _id)')
+    if (Buffer.isBuffer(response) || Array.isArray(response) || response === undefined || response === null || typeof response !== 'object') {
+      throw new Error('Job was not a resource (had no _id)')
+    }
 
     let jobId = response!._id
-    console.log('2');
 
     await CONNECTION.put({
       path: `${SERVICE_PATH}/businesses/${bid}/${type}/${key}/_meta/services/fl-sync/jobs`,
       data: {[jobKey]: {_ref: jobId}}
     })
 
-    console.log('3');
     // retrieve the attachments and unzip
     let file = await axios({
       method: 'get',
@@ -370,7 +389,6 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
 
     let files = Object.keys(zip.files)
 
-    console.log('4');
     //TODO: Make this a typed thing perhaps; e.g., maybe non-CoIs allow multiple pdfs
     if (files.length !== 1) {
       let message = 'Multiple files attached. Please upload a single PDF per Food LogiQ document.'
@@ -383,10 +401,15 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
           },
         }
       })
-      return rejectFlDoc(item!._id, message)
+      rejectFlDoc(item!._id, message)
+      return new Promise((resolve, reject) => {
+        docPromises.set(item._id, {
+          resolve,
+          reject
+        })
+      })
     }
 
-    console.log('5');
     let fKey = files[0];
     if (!fKey) throw new Error(`Failed to acquire file key while handling pending document`)
 
@@ -398,12 +421,10 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item!._id}/_meta/vdoc/pdf`,
     }).then(r => {
       return r.data[fKey!]._id
-    })
-    .catch((err) => {
+    }).catch((err) => {
       if (err.status !== 404) throw err;
     });
 
-    console.log('6');
     // If it doesn't exist, create a new PDF resource
     _id = _id || `resources/${ksuid.randomSync().string}`;
 
@@ -418,7 +439,6 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
       contentType: 'application/pdf',
     })
 
-    console.log('7');
     await CONNECTION.put({
       path: `${_id}/_meta`,
       //TODO: How should this be formatted?
@@ -451,7 +471,6 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
         authorization: `Bearer ${TRELLIS_TOKEN}`
       },
     });
-    console.log('8');
     await axios({
       method: 'put',
       url: `https://${DOMAIN}${SERVICE_PATH}/businesses/${bid}/documents/${item!._id}/_meta`,
@@ -493,8 +512,6 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
       }
     })
 
-
-    console.log('9');
     //Lazy create an index of trading partners' documents resources for monitoring.
     await CONNECTION.head({
       path: `${SERVICE_PATH}/monitors/tp-docs/${masterid}`
@@ -537,20 +554,21 @@ export const handlePendingDocument: WorkerFunction = async (job: any, {oada, job
  * @param {*} masterid 
  * @returns 
  */
-async function finishDoc(item, masterid, status) {
+async function finishDoc(item, bid, masterid, status) {
   info(`Finishing doc: [${item._id}] with status [${status}] `);
-  //1. Get reference of corresponding pending scraped pdf
-//  let job = _.find(Array.from(TARGET_JOBS.values()), ['flId', item._id])
-
-  let jobKey = await CONNECTION.get({
-    path: `${SERVICE_PATH}/businesses/${item.business._id}/documents/${item._id}/_meta/services/target-helper/jobs`,
-  }).then(r => Object.keys(r.data)[0]);
-
-  let result = await CONNECTION.get({
-    path: `${SERVICE_PATH}/businesses/${item.business._id}/documents/${item._id}/_meta/services/target-helper/jobs/${jobKey}`,
-  }).then(r => r.data.result)
 
   if (status === 'approved') {
+    //1. Get reference of corresponding pending scraped pdf
+    let keys = await CONNECTION.get({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs`,
+    }).then(r => Object.keys(r.data));
+
+    let jobKey = mostRecentKsuid(keys);
+
+    let result = await CONNECTION.get({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs/${jobKey}`,
+    }).then(r => r.data.result)
+
     //2. Move approved docs to trading partner /bookmarks
     info(`Moving approved document to [${TP_MPATH}/${masterid}/bookmarks/trellisfw/${result.type}/${result.key}]`);
     await CONNECTION.put({
@@ -796,14 +814,6 @@ async function handleScrapedResult(targetJobKey) {
  */
 async function rejectFlDoc(docId, message) {
   info(`Rejecting FL document [${docId}]. ${message}`);
-  //reject to FL
-  await axios({
-    method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/approvalStatus/rejected`,
-    headers: { Authorization: FL_TOKEN },
-    data: { status: "Rejected" }
-  });
-
 //Post message regarding error
   await axios({
     method: 'post',
@@ -821,6 +831,16 @@ async function rejectFlDoc(docId, message) {
     headers: { Authorization: FL_TOKEN },
     data: {}
   });
+
+  //reject to FL
+  await axios({
+    method: 'put',
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}/approvalStatus/rejected`,
+    headers: { Authorization: FL_TOKEN },
+    data: { status: "Rejected" }
+  });
+
+
 }//rejectFlDoc
 
 async function startJobCreator(oada: OADAClient) {
@@ -850,7 +870,7 @@ async function startJobCreator(oada: OADAClient) {
       itemsPath: `$.*.documents.*.food-logiq-mirror`,
       name: `assessment-mirrored`,
       onAddItem: queueJob,
-//      onChangeItem: runJobHandlerFromChange,
+      onChangeItem: queueJob,
       path: `${SERVICE_PATH}/businesses`,
       resume: true,
       tree: mirrorTree,
@@ -935,8 +955,7 @@ async function queueAssessmentJob(data, path) {
 
     } else if (approvalUser === FL_TRELLIS_USER) {
       // Approved or rejected by us. Finish up the automation
-      //return finishDoc(item, masterid, status);
-
+//      return finishDoc(item, masterid, status);
     } else {
 
       let msg = `Document not pending, approval status not set by Trellis. Skipping. Document: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
@@ -986,7 +1005,7 @@ async function queueJob(data: any, path: string) {
     }
     let status = item.shareSource && item.shareSource.approvalInfo.status;
     let approvalUser = pointer.has(item, `/shareSource/approvalInfo/setBy/_id`) ?  pointer.get(item, `/shareSource/approvalInfo/setBy/_id`) : undefined;
-    info(`approvalInfo user: [${approvalUser}]. Trellis user: [${FL_TRELLIS_USER}]`);
+    info(`approvalInfo user: [${approvalUser}]. Trellis user: [${FL_TRELLIS_USER}]. Status: [${status}].`);
 
     if (status === 'awaiting-review') {
 
@@ -1022,8 +1041,7 @@ async function queueJob(data: any, path: string) {
 
     } else if (approvalUser === FL_TRELLIS_USER) {
       // Approved or rejected by us. Finish up the automation
-      return finishDoc(item, masterid, status);
-
+      return finishDoc(item, bid, masterid, status);
     } else {
 
       let msg = `Document not pending, approval status not set by Trellis. Skipping. Document: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
