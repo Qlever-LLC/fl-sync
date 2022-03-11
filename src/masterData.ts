@@ -5,16 +5,15 @@ import SHA256 from "js-sha256";
 const { sha256 } = SHA256;
 const debug = require('debug');
 const ListWatch = oadalist.ListWatch;
-let tree = require('./trellis_tp_tree');
+let tree = require('./tree.masterData');
 import config from './config.masterdata';
 
 const SERVICE_NAME = config.get('service.name');
 const SERVICE_PATH = config.get('service.path');
 //const TL_TP: string = config.get('trellis.endpoints.service-tp');
-const TL_TP = `${SERVICE_PATH}/master-data/trading-partners`
+const TL_TP = `/bookmarks/trellisfw/trading-partners`;
 const TL_TP_MI: string = `${TL_TP}/masterid-index`;
 const TL_TP_EI = `${TL_TP}/expand-index`;
-let TL_TP_PATH = TL_TP;
 const FL_MIRROR = `food-logiq-mirror`;
 
 let CONNECTION;
@@ -39,6 +38,7 @@ async function watchTrellisFLBusinesses(conn) {
     path: `${SERVICE_PATH}/businesses`,
     name: `fl-sync-master-data-businesses`,
     conn,
+    tree,
     resume: true,
     onAddItem: addTP2Trellis
   });
@@ -65,6 +65,7 @@ async function addTP2Trellis(item: any, key: string) {
         info(`Getting ${_path} with delay.`);
         //FIXME: find a more robust way to retrieve business content
         let fl_mirror_content = item[FL_MIRROR];
+        let tries = 0;
         //retry until it gets a body with FL_MIRROR
         while (typeof fl_mirror_content === 'undefined') {
           await bPromise.delay(500);
@@ -73,7 +74,17 @@ async function addTP2Trellis(item: any, key: string) {
           }).then(async (result: any) => {
             fl_mirror_content = result.data[FL_MIRROR];
             if (typeof fl_mirror_content === 'undefined') {
-              info(`ListWatch did not return a complete object retrying ...`);
+              info(`ListWatch did not return a complete object. Retrying ...`);
+              if (tries > 10) {
+                info(`Giving up. No 'food-logiq-mirror' for business at ${item._id}.`);
+/*              await fetchAndSync({
+                  from:`${FL_DOMAIN/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/contacts/${}`,
+                  to: ``,
+                })*/
+               fl_mirror_content = false;
+               return 
+              }
+              tries++;
             } else {
               info(`Got a complete object.`);
               info(`assigning data after get.`);
@@ -94,6 +105,7 @@ async function addTP2Trellis(item: any, key: string) {
       // mirroring the business into trading partners
       //1. make the resource
       info("--> mirroring the business into trading partners.");
+      console.log('DATA', data);
       let resId = await CONNECTION.post({
         path: `/resources`,
         data: data,
@@ -105,13 +117,16 @@ async function addTP2Trellis(item: any, key: string) {
       });
       let _datum = { _id: resId, _rev: 0 };
       await CONNECTION.put({
-        path: `${TL_TP_PATH}${key}`,
-        data: _datum
+        path: `${TL_TP}`,
+        data: {
+          [key.replace(/^\//, '')]: _datum
+        },
+        tree
       }).then(async function () {
-        info("----> business mirrored. ", `${TL_TP_PATH}${key}`);
+        info("----> business mirrored. ", `${TL_TP}${key}`);
         // creating bookmarks endpoint under tp
         await CONNECTION.put({
-          path: `${TL_TP_PATH}${key}/bookmarks`,
+          path: `${TL_TP}${key}/bookmarks`,
           data: {},
           tree
         }).then(async (bookmarks_result: any) => {
@@ -134,7 +149,7 @@ async function addTP2Trellis(item: any, key: string) {
       info("--> updating the expand-idex ", expandData.masterid);
       let expandIndexRecord: IExpandIndex = {};
       expandIndexRecord[_key] = expandData;
-      await updateExpandIndex(expandIndexRecord);
+      await updateExpandIndex(expandData, _key);
 
       // updating the fl-sync/businesses/<bid> index
       info("--> updating masterid-index, masterid ", expandData.masterid);
@@ -210,11 +225,14 @@ function assignDataExpandIndex(data: TradingPartner, item: any) {//FIXME: NEED t
  * from the received FL business
  * @param expandIndexRecord expand index content
  */
-async function updateExpandIndex(expandIndexRecord: IExpandIndex) {
+async function updateExpandIndex(expandIndexRecord, key) {
   // expand index
   await CONNECTION.put({
-    path: TL_TP_EI,
-    data: expandIndexRecord
+    path: `${TL_TP_EI}`,
+    data: {
+      [key]: expandIndexRecord
+    },
+    tree
   }).then(() => {
     info("--> expand index updated. ");
   }).catch((e: any) => {
@@ -236,8 +254,12 @@ async function updateMasterId(path: string, masterid: string, resourceId: string
   //creating masterid-index
   let mi_datum = { _id: resourceId };
   await CONNECTION.put({
-    path: masterid_path,
-    data: mi_datum
+    path: TL_TP_MI,
+    //path: masterid_path,
+    data: {
+      [masterid]: mi_datum,
+    },
+    tree
   }).then(() => {
     info("--> trading-partners/masterid-index updated.");
   }).catch((e: any) => {
@@ -246,10 +268,10 @@ async function updateMasterId(path: string, masterid: string, resourceId: string
 
   // updating masterid under fl-sync/business/<bid>
   await CONNECTION.put({
-    path: path,
-    data: { masterid: masterid }
+    path,
+    data: { masterid: masterid },
   }).then(() => {
-    info("--> fl-sync/business/<bid>/masterid updated.");
+    info(`${SERVICE_PATH}/businesses/<bid> updated with masterid.`);
   }).catch((e: any) => {
     error("--> error when updating masterid element in fl-sync. ", e);
   });

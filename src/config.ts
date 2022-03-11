@@ -160,7 +160,8 @@ const config = convict({
       },
       id: {
         doc: 'The _id of supplier used for testing',
-        default: "61c22e047953d4000ee0363f",
+        default: "61f95cd2df6175000f371494",
+        //default: "61c22e047953d4000ee0363f",
         env: 'FL_SUPPLIER_ID'
       },
     },
