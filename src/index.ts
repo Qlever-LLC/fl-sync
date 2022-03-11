@@ -108,7 +108,7 @@ async function watchFlSyncConfig() {
  */
 // @ts-ignore
 async function watchTargetJobs() {
-  info(`Started ListWatch on jobs of the target service...`)
+  info(`Started ListWatch on target jobs...`)
   // @ts-ignore
   const watch = new ListWatch({
     path: `/bookmarks/services/target/jobs`,
@@ -177,11 +177,14 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     if (!_id) {
       _id = `resources/${ksuid.randomSync().string}`;
       await CONNECTION.put({
-        path,
+        path: `${SERVICE_PATH}/businesses/${bid}/${type}`,
         data: {
-          _id,
-          "_rev": 0
-        }
+          [item._id]: {
+            _id,
+            "_rev": 0
+          }
+        },
+        tree,
       });
     }
 
@@ -245,9 +248,12 @@ async function pollFl(lastPoll) {
               contentType: tree.bookmarks.services[SERVICE_NAME].businesses['*']._type,
             }).then(r => r.headers['content-location'].replace(/^\//, ''))
 
+            await Promise.delay(5000);
+
             await CONNECTION.put({
               path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
-              data: { _id, _rev: 0 }
+              data: { _id, _rev: 0 },
+              tree,
             })
           })
         })
@@ -343,7 +349,7 @@ function setAutoApprove(value) {
   AUTO_APPROVE_ASSESSMENTS = value;
 }
 
-function getAutoApprove() {
+export function getAutoApprove() {
   return AUTO_APPROVE_ASSESSMENTS
 }
 
@@ -374,8 +380,8 @@ export async function initialize() {
     // Run populateIncomplete first so that the change feeds coming in will have
     // the necessary in-memory items for them to continue being processed.
     //await populateIncomplete()
-//    await watchTargetJobs();
-//    await watchFlSyncConfig();
+    await watchTargetJobs();
+    await watchFlSyncConfig();
     await watchTrellisFLBusinesses(CONNECTION);
 
     // Some queued jobs may depend on the poller to complete, so start it now. 
@@ -512,6 +518,7 @@ export async function test({polling, target, master, service, watchConfig}) {
         // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
         process.exit(1);
       });
+      info(`Finished starting service: ${SERVICE_NAME}`);
     }
 
 
@@ -549,6 +556,7 @@ module.exports = {
   initialize,
   test,
   getAutoApprove,
+  fetchAndSync,
   testing: {
     setConnection,
     SERVICE_PATH,

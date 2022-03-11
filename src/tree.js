@@ -129,7 +129,8 @@ module.exports = {
         'monitors': {
           '_type': 'application/vnd.oada.service.1+json',
           '*': {
-            '_type': 'application/vnd.oada.service.1+json'
+            '_type': 'application/vnd.oada.service.1+json',
+            '*': {}
           }
         },
         'jobs': {
