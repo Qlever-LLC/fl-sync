@@ -380,6 +380,7 @@ export async function initialize() {
     // Run populateIncomplete first so that the change feeds coming in will have
     // the necessary in-memory items for them to continue being processed.
     //await populateIncomplete()
+    await watchTargetJobs();
     await watchFlSyncConfig();
     await watchTrellisFLBusinesses(CONNECTION);
 
@@ -409,8 +410,6 @@ export async function initialize() {
       }
      */
     }); 
-    
-    await watchTargetJobs();
 
     // Set the job type handlers
     service.on('document-mirrored', config.get('timeouts.mirrorWatch'), handlePendingDocument);
@@ -471,6 +470,10 @@ export async function test({polling, target, master, service, watchConfig}) {
     // the necessary in-memory items for them to continue being processed.
     //await populateIncomplete()
 
+    if (target === undefined || target) {
+      await watchTargetJobs();
+    }
+
     if (watchConfig === undefined || watchConfig) {
       await watchFlSyncConfig();
     }
@@ -518,9 +521,7 @@ export async function test({polling, target, master, service, watchConfig}) {
       info(`Finished starting service: ${SERVICE_NAME}`);
     }
 
-    if (target === undefined || target) {
-      await watchTargetJobs();
-    }
+
 
 /*    await reports.interval({
       connection: CONNECTION,
@@ -545,7 +546,13 @@ process.on('uncaughtException', function(err) {
 });
 
 if (require.main === module) {
-  initialize();
+  test({
+    polling: false,
+    target: false,
+    master: true,
+    service: false,
+    watchConfig: false 
+  })
 } else {
   info('Just importing fl-sync');
 }
