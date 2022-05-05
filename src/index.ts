@@ -26,13 +26,14 @@ import Promise from 'bluebird';
 import moment, {Moment} from 'moment';
 import _ from 'lodash';
 import oada from '@oada/client';
-import type { Change, JsonObject, OADAClient } from '@oada/client';
+import type { JsonObject, OADAClient } from '@oada/client';
 import type { Body } from '@oada/client/lib/client'
 import config from './config';
 import oadalist from '@oada/list-lib';
 const ListWatch = oadalist.ListWatch;
 import tree from './tree';
 import poll from '@oada/poll';
+import type {PollConfig} from '@oada/poll';
 import type {TreeKey} from '@oada/list-lib/lib/tree';
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
@@ -91,23 +92,22 @@ async function watchFlSyncConfig() {
     setAutoApprove(data['autoapprove-assessments'] ? true : false);
   }
   
-  await CONNECTION.watch({
+  let { changes } = await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
-    tree,
-    watchCallback: async (change: Change) => {
-      try {
-        if (_.has(change.body, 'autoapprove-assessments')) {
-          setAutoApprove(change.body['autoapprove-assessments'] ? true : false);
-        } 
-      } catch (err) {
-        error('mirror watchCallback error');
-        error(err);
-      }
-    }
-  }).catch(err => {
-    error(err);
-  });
+    type: 'single'
+  })
   info(`Watching ${SERVICE_PATH}`);
+
+  for await (const change of changes) {
+    try {
+      if (_.has(change.body, 'autoapprove-assessments')) {
+        setAutoApprove(change.body['autoapprove-assessments'] ? true : false);
+      }
+    } catch (err) {
+      error('mirror watchCallback error');
+      error(err);
+    }
+  }
 }//watchFlSyncConfig
 
 /**
@@ -398,7 +398,7 @@ export async function initialize() {
       pollFunc: pollFl,
       interval: INTERVAL_MS,
       name: 'food-logiq-poll',
-    });
+    } as PollConfig);
 
     // Create the service
     const service = new Service({

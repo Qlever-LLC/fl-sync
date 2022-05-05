@@ -21,7 +21,7 @@ import type { Job, WorkerFunction } from '@oada/jobs';
 import type { Change, JsonObject, OADAClient } from '@oada/client';
 import type { Body } from '@oada/client/lib/client';
 import {postUpdate, JobError} from '@oada/jobs';
-import {ListWatch} from '@oada/list-lib';
+import {ListWatch, Change as ListChange} from '@oada/list-lib';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -48,6 +48,7 @@ if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
 if (SERVICE_NAME && mirrorTree?.bookmarks?.services?.['fl-sync']) {
   mirrorTree.bookmarks.services[SERVICE_NAME] = mirrorTree.bookmarks.services['fl-sync'];
 }
+console.log(JobError)
 let CONNECTION : OADAClient;
 //let flList = ['documents', 'products', 'locations', 'assessments'];
 let multiFileOkay = [
@@ -900,7 +901,7 @@ export async function startJobCreator(oada: OADAClient) {
   }
 } //startJobCreator
 
-async function queueAssessmentJob(change: Change, path: string) {
+async function queueAssessmentJob(change: ListChange, path: string) {
   try {
     // 1. Gather fl indexing, mirror data, fl document lookup, etc.
     info(`queueAssessmentJob processing mirror change`);
@@ -1019,7 +1020,7 @@ async function queueAssessmentJob(change: Change, path: string) {
   }
 }
 
-async function queueDocumentJob(data: any, path: string) {
+async function queueDocumentJob(data: ListChange, path: string) {
   try {
     //1. Gather fl indexing, mirror data, and trellis master id
     info(`queueDocumentJob processing mirror change`);
@@ -1072,7 +1073,7 @@ async function queueDocumentJob(data: any, path: string) {
             bname: item.shareSource.sourceBusiness.name,
             name: item.name,
           },
-        },
+        } as unknown as Body,
       });
       const jobkey = headers['content-location']!.replace(
         /^\/resources\//,
