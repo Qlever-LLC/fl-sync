@@ -14,12 +14,10 @@
  */
 
 import convict from 'convict';
-import convictValidator from 'convict-format-with-validator';
 import { config as load } from 'dotenv';
 
 load();
 
-convict.addFormats(convictValidator);
 
 const config = convict({
   service: {

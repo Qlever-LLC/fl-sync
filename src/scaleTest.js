@@ -3027,6 +3027,26 @@ async function postTestDocs() {
     })
   })
 }
+async function lookForDocs() {
+  let result = await oada.get({
+    path: `/bookmarks/services/target-helper/jobs-failure`
+  }).then(r => r.data)
+
+
+  await Promise.each(Object.keys(result["day-index"]), async (key) => {
+    await Promise.each(Object.keys(result["day-index"][key]), async (docKey) => {
+      let data = await oada.get({
+        path: `/bookmarks/services/target-helper/jobs-failure/day-index/${key}/${docKey}`
+      }).then(r => r.data)
+      await Promise.each(Object.keys(data.updates), async (upKey) => {
+        if (Object.values(data.updates[upKey]).includes("") {
+          console.log(data.updates[upKey], data))
+        }
+      })
+    })
+  })
+
+}
 
 async function main() {
   setInterval(() => {}, 1000);
@@ -3051,7 +3071,8 @@ async function main() {
 //    await associateAssessments();
 //    await linkAssessments();
 //    await generateReport();
-    await postTestDocs();
+//    await postTestDocs();
+      await lookForDocs();
 //    await recursiveTreeWalk('/bookmarks', tree.bookmarks, {})
 //    await fixTradingPartners()
 //      await findFlDocumentProperties()

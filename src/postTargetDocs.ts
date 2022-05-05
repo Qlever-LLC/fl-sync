@@ -1,26 +1,29 @@
-const oada = require('@oada/client');
-console.log(oada);
+import oada from '@oada/client';
 import Promise from "bluebird";
 import axios from "axios";
+import type {JsonObject, OADAClient} from '@oada/client'
+import type {TreeKey} from '@oada/list-lib/lib/tree';
 
 // configuration details
-import config from "../dist/config.js";
+import config from "./config";
 
 const TOKEN = config.get('trellis.token');
 const DOMAIN = config.get('trellis.domain');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const CO_ID = config.get('foodlogiq.community.owner.id');
-let SERVICE_PATH = config.get('service.path');;
-let SERVICE_NAME = config.get('service.name');;
+let SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
+let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 
-let tree = require('./tree');
-tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
-const {postTpDocument} = require('./mirrorWatch')
+import tree from './tree';
+if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
+  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+}
+import {postTpDocument} from './mirrorWatch';
 //@ts-ignore
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
-let CONNECTION;
+let CONNECTION: OADAClient;
 
 async function main() {
   try {
@@ -147,13 +150,14 @@ async function main() {
       let mid = item.shareSource.membershipId;
 
       //3. Get the masterid
-      let {masterid} = await CONNECTION.get({
+      let response = await CONNECTION.get({
         path: `${SERVICE_PATH}/businesses/${bid}`,
-      }).then(r=>r.data)
+      }).then(r=>r.data as JsonObject)
       .catch(err => {
         if (err.status !== 404) throw err;
-        return {}
+        return {} as JsonObject
       })
+      let masterid: string = response.masterid as string;
       console.log('first attempt', SERVICE_PATH, {masterid, bid});
 
       if (!masterid) {
@@ -175,9 +179,10 @@ async function main() {
       }
 
       //3. Get the masterid
-      masterid = await CONNECTION.get({
+      let result = await CONNECTION.get({
         path: `${SERVICE_PATH}/businesses/${bid}`,
-      }).then(r=>r!.data!.masterid)
+      }).then(r=>r!.data! as JsonObject)
+      masterid = result.masterid as string;
       console.log({masterid});
 
       if (!masterid) throw Error(`No masterid for key ${key}`)
@@ -198,4 +203,3 @@ async function main() {
 }
 
 main();
-

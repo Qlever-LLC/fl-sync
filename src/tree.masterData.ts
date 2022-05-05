@@ -1,4 +1,5 @@
-module.exports = {
+import type {Tree} from '@oada/list-lib'
+export const tree : Tree = {
   "bookmarks": {
     "_type": "application/vnd.oada.bookmarks.1+json",
     "_rev": 0,
@@ -131,3 +132,5 @@ module.exports = {
     }
   }
 }
+
+export default tree;

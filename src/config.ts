@@ -14,15 +14,9 @@
  */
 
 import convict from 'convict';
-import convictMoment from 'convict-format-with-moment'
-import convictValidator from 'convict-format-with-validator';
 import { config as load } from 'dotenv';
 
 load();
-
-convict.addFormats(convictValidator);
-convict.addFormats(convictMoment);
-
 
 const config = convict({
   service: {
@@ -56,8 +50,8 @@ const config = convict({
     },
     token: {
       doc: 'OADA API token',
-      format: Array,
-      default: ['god-proxy'],
+      format: String,
+      default: 'god-proxy',
       env: 'TOKEN',
       arg: 'token',
     },

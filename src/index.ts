@@ -19,22 +19,25 @@
 if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { Service } from '@oada/jobs';
 
-const axios = require('axios');
-const ksuid = require('ksuid');
-const debug = require('debug');
-let Promise = require('bluebird');
-const moment = require('moment');
-const _ = require('lodash');
-const oada = require('@oada/client');
-let config = require('./config').default;
-const oadalist = require('@oada/list-lib');
+import axios, {AxiosRequestConfig} from 'axios';
+import ksuid from 'ksuid';
+import debug from 'debug';
+import Promise from 'bluebird';
+import moment, {Moment} from 'moment';
+import _ from 'lodash';
+import oada from '@oada/client';
+import type { Change, JsonObject, OADAClient } from '@oada/client';
+import type { Body } from '@oada/client/lib/client'
+import config from './config';
+import oadalist from '@oada/list-lib';
 const ListWatch = oadalist.ListWatch;
-let tree = require('./tree.js');
-let poll = require('@oada/poll');
+import tree from './tree';
+import poll from '@oada/poll';
+import type {TreeKey} from '@oada/list-lib/lib/tree';
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
-const { onTargetUpdate, getLookup, handleAssessment, handlePendingDocument, startJobCreator } = require('./mirrorWatch');
-const { watchTrellisFLBusinesses } = require('./masterData')
+import { FlObject, onTargetUpdate, getLookup, handleAssessment, handlePendingDocument, startJobCreator } from './mirrorWatch';
+import { watchTrellisFLBusinesses } from './masterData';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -47,17 +50,19 @@ const CONCURRENCY = config.get('trellis.concurrency');
 //const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 //const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; //FL polling interval
-let SERVICE_PATH = config.get('service.path');;
-let SERVICE_NAME = config.get('service.name');;
+let SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
+let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 
 const info = debug('fl-sync:info');
 const error = debug('fl-sync:error');
-tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
+  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+}
 
-let AUTO_APPROVE_ASSESSMENTS;
+let AUTO_APPROVE_ASSESSMENTS: boolean;
 let TOKEN;
 
-let CONNECTION;
+let CONNECTION: OADAClient;
 
 /**
  * watches FL config
@@ -66,8 +71,8 @@ let CONNECTION;
 async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `${SERVICE_PATH}`,
-  }).then(r => r.data)
-  .catch(async (err) => {
+  }).then(r => r.data as JsonObject)
+  .catch(async (err: any) => {
     if (err.status === 404) {
       await CONNECTION.put({
         path: `${SERVICE_PATH}`,
@@ -79,18 +84,20 @@ async function watchFlSyncConfig() {
         data: {},
         tree
       })
-      return {};
+      return {} as JsonObject;
     } else throw err;
   })
-  setAutoApprove(data['autoapprove-assessments']);
+  if (typeof data === 'object' && !Array.isArray(data) && !Buffer.isBuffer(data)) {
+    setAutoApprove(data['autoapprove-assessments'] ? true : false);
+  }
   
   await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
     tree,
-    watchCallback: async (change) => {
+    watchCallback: async (change: Change) => {
       try {
         if (_.has(change.body, 'autoapprove-assessments')) {
-          setAutoApprove(change.body['autoapprove-assessments']);
+          setAutoApprove(change.body['autoapprove-assessments'] ? true : false);
         } 
       } catch (err) {
         error('mirror watchCallback error');
@@ -116,6 +123,7 @@ async function watchTargetJobs() {
     conn: CONNECTION,
     resume: true,
     onAddItem: getLookup,
+    //@ts-ignore
     onChangeItem: onTargetUpdate
   })
 }//watchTargetJobs
@@ -124,11 +132,11 @@ async function watchTargetJobs() {
  * fetches community resources
  * @param {*} param0 pageIndex, type, date
  */
-async function fetchCommunityResources({ pageIndex, type, date }) {
+async function fetchCommunityResources({ type, date, pageIndex=undefined }: {type: string, date: string, pageIndex?: number}) {
   pageIndex = pageIndex || 0;
   let url = type === 'assessments' ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${date}..`
     : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&versionUpdated=${date}..`;
-  let request = {
+    let request: AxiosRequestConfig = {
     method: `get`,
     url,
     headers: { 'Authorization': FL_TOKEN },
@@ -139,7 +147,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
   let delay = 0;
 
   // Manually check for changes; Only update the resource if it has changed!
-  await Promise.map(response.data.pageItems, async (item) => {
+  await Promise.map(response.data.pageItems, async (item: FlObject) => {
     let sync;
     let bid;
     if (type === 'assessments') {
@@ -155,17 +163,17 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     let path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
     let _id;
     try {
-      let resp = await CONNECTION.get({ path })
+      let resp = await CONNECTION.get({ path }).then(r => r.data as JsonObject)
 
       // Check for changes to the resources
-      let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
+      let equals = _.isEqual(resp['food-logiq-mirror'], item)
       if (!equals) {
         info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
         delay += 20000;
         sync = true;
-        _id = resp.data._id;
+        _id = resp._id;
       }
-    } catch (err) {
+    } catch (err: any) {
       if (err.status !== 404) throw err;
       info(`Resource is not already on trellis. Syncing...`);
       sync = true;
@@ -192,7 +200,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
     if (sync) {
       await CONNECTION.put({
         path: `/${_id}`,
-        data: { 'food-logiq-mirror': item }
+        data: { 'food-logiq-mirror': item } as unknown as Body
       })
       info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
     }
@@ -209,7 +217,7 @@ async function fetchCommunityResources({ pageIndex, type, date }) {
 /**
  * gets resources
  */
-async function getResources(lastPoll) {
+async function getResources(lastPoll: Moment) {
   //Format date
   let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
 
@@ -226,7 +234,7 @@ async function getResources(lastPoll) {
 /**
  * The callback to be used in the poller. Gets lastPoll date
  */
-async function pollFl(lastPoll) {
+async function pollFl(lastPoll: Moment) {
   try {
     // Sync list of suppliers
     let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
@@ -234,8 +242,8 @@ async function pollFl(lastPoll) {
 
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
-      to: (i) => `${SERVICE_PATH}/businesses/${i.business._id}`,
-      forEach: async (i) => {
+      to: (i: {business: {_id: string}}) => `${SERVICE_PATH}/businesses/${i.business._id}`,
+      forEach: async (i: {business: {_id: string}}) => {
         // Ensure main endpoints
         await Promise.each(['products', 'locations', 'documents', 'assessments'], async (type) => {
           await CONNECTION.head({
@@ -245,8 +253,8 @@ async function pollFl(lastPoll) {
             let _id = await CONNECTION.post({
               path: `/resources`,
               data: {},
-              contentType: tree.bookmarks.services[SERVICE_NAME].businesses['*']._type,
-            }).then(r => r.headers['content-location'].replace(/^\//, ''))
+              contentType: tree?.bookmarks?.services?.[SERVICE_NAME]?.businesses?.['*']?._type,
+            }).then(r => r?.headers?.['content-location']?.replace(/^\//, ''))
 
             await Promise.delay(5000);
 
@@ -258,7 +266,6 @@ async function pollFl(lastPoll) {
           })
         })
       },
-      pageIndex: undefined
     })
     // Now fetch community resources
     info(`JUST_TPS set to ${!!JUST_TPS}`)
@@ -273,10 +280,10 @@ async function pollFl(lastPoll) {
  * @param {*} param0 
  * @returns 
  */
-async function fetchAndSync({ from, to, pageIndex, forEach }) {
+async function fetchAndSync({ from, to, pageIndex=undefined, forEach }: {from:string, to: string | Function, pageIndex?: number, forEach: Function}) {
   pageIndex = pageIndex || 0;
   try {
-    let request = {
+    let request : AxiosRequestConfig = {
       method: `get`,
       url: from,
       headers: { 'Authorization': FL_TOKEN },
@@ -286,21 +293,21 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
     let response = await axios(request);
 
     // Manually check for changes; Only update the resource if it has changed!
-    await Promise.map(response.data.pageItems, async (item) => {
+    await Promise.map(response.data.pageItems, async (item: FlObject) => {
       let sync;
       if (to) {
         let path = typeof (to) === 'function' ? await to(item) : `${to}/${item._id}`
         try {
-          let resp = await CONNECTION.get({ path })
+          let resp = await CONNECTION.get({ path }).then(r => r.data as JsonObject)
 
           // Check for changes to the resources
-          let equals = _.isEqual(resp.data['food-logiq-mirror'], item)
+          let equals = _.isEqual(resp['food-logiq-mirror'], item)
           if (equals) info(`Resource difference in FL item [${item._id}] not detected. Skipping...`);
           if (!equals) info(`Resource difference in FL item [${item._id}] detected. Syncing...`);
           if (!equals) {
             sync = true;
           }
-        } catch (err) {
+        } catch (err: any) {
           if (err.status === 404) {
             info(`Resource is not already on trellis. Syncing...`);
             sync = true;
@@ -313,13 +320,13 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
         if (sync) {
           let resp = await CONNECTION.post({
             path: `/resources`,
-            contentType: tree.bookmarks.services[SERVICE_NAME].businesses['*']._type,
-            data: { 'food-logiq-mirror': item }
+            contentType: tree?.bookmarks?.services?.[SERVICE_NAME]?.businesses?.['*']?._type,
+            data: { 'food-logiq-mirror': item } as unknown as Body
           });
           await CONNECTION.put({
             path,
             data: {
-              "_id": resp.headers['content-location'].replace(/^\//, ''),
+              "_id": resp?.headers?.['content-location']?.replace(/^\//, ''),
               "_rev": 0
             }
           });
@@ -334,17 +341,17 @@ async function fetchAndSync({ from, to, pageIndex, forEach }) {
       await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach })
     }
     return;
-  } catch (err) {
+  } catch (err: any) {
     info('getBusinesses Error', err.response ? err.response.status : 'Please check error logs');
     throw err;
   }
 }//fetchAndSync
 
-function setConnection(conn) {
+function setConnection(conn: OADAClient) {
   CONNECTION = conn;
 }
 
-function setAutoApprove(value) {
+function setAutoApprove(value: boolean) {
   info(`Autoapprove value is ${value}`)
   AUTO_APPROVE_ASSESSMENTS = value;
 }
@@ -449,7 +456,7 @@ export async function initialize() {
   }
 }//initialize
 
-export async function test({polling, target, master, service, watchConfig}) {
+export async function test({polling, target, master, service, watchConfig}: {polling: boolean, target: boolean, master: boolean, service: boolean, watchConfig: boolean}) {
   try {
     info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.5]       >>>>>>>>>>`);
     TOKEN = await getToken();

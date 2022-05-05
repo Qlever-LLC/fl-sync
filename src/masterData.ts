@@ -1,27 +1,31 @@
 import bPromise from "bluebird";
-const _ = require('lodash');
-const oadalist = require('@oada/list-lib');
+import _ from 'lodash';
+import oadalist from '@oada/list-lib';
 import SHA256 from "js-sha256";
-const { sha256 } = SHA256;
-const debug = require('debug');
-const ListWatch = oadalist.ListWatch;
-let tree = require('./tree.masterData');
+let { sha256 } = SHA256;
+import debug from 'debug';
+let ListWatch = oadalist.ListWatch;
+import tree from './tree.masterData';
 import config from './config.masterdata';
+import type {JsonObject, OADAClient} from '@oada/client';
+import type {TreeKey} from '@oada/list-lib/lib/tree'
 
-const SERVICE_NAME = config.get('service.name');
-const SERVICE_PATH = config.get('service.path');
-//const TL_TP: string = config.get('trellis.endpoints.service-tp');
-const TL_TP = `/bookmarks/trellisfw/trading-partners`;
-const TL_TP_MI: string = `${TL_TP}/masterid-index`;
-const TL_TP_EI = `${TL_TP}/expand-index`;
-const FL_MIRROR = `food-logiq-mirror`;
+const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
+// TL_TP: string = config.get('trellis.endpoints.service-tp');
+let TL_TP = `/bookmarks/trellisfw/trading-partners`;
+let TL_TP_MI: string = `${TL_TP}/masterid-index`;
+let TL_TP_EI = `${TL_TP}/expand-index`;
+let FL_MIRROR = `food-logiq-mirror`;
 
-let CONNECTION;
-tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+let CONNECTION: OADAClient;
+if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
+  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+}
 
-const info = debug('fl-sync:master-data:info');
-const error = debug('fl-sync:master-data:error');
-const trace = debug('fl-sync:master-data:trace');
+let info = debug('fl-sync:master-data:info');
+let error = debug('fl-sync:master-data:error');
+let trace = debug('fl-sync:master-data:trace');
 
 enum SOURCE_TYPE {
   Vendor = "vendor",
@@ -31,7 +35,7 @@ enum SOURCE_TYPE {
 /**
  * watches for changes in the fl-sync/businesses
  */
-async function watchTrellisFLBusinesses(conn) {
+export async function watchTrellisFLBusinesses(conn: OADAClient) {
   info(`Setting masterData ListWatch on FL Businesses`);
   setConnection(conn);
   new ListWatch({
@@ -225,7 +229,7 @@ function assignDataExpandIndex(data: TradingPartner, item: any) {//FIXME: NEED t
  * from the received FL business
  * @param expandIndexRecord expand index content
  */
-async function updateExpandIndex(expandIndexRecord, key) {
+async function updateExpandIndex(expandIndexRecord: JsonObject, key: string) {
   // expand index
   await CONNECTION.put({
     path: `${TL_TP_EI}`,
@@ -277,7 +281,7 @@ async function updateMasterId(path: string, masterid: string, resourceId: string
   });
 }//updateMasterId
 
-function setConnection(conn) {
+function setConnection(conn: OADAClient) {
   CONNECTION = conn;
 }
 
