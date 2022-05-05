@@ -613,10 +613,9 @@ function newCoiDoc() {
 
 
 
-module.exports = {
+export default {
   fakeFlBusiness,
   testNonCoiDoc,
   testCoiDoc,
   newCoiDoc,
-  newNonCoiDoc,
 }
