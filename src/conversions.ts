@@ -1,11 +1,13 @@
-export function fromOadaType(type: any) {
+import type {FlObject} from './mirrorWatch'
+
+export function fromOadaType(type: string) {
   let vals = Object.values(conversions)
 
   return vals.filter(v => v.urlName === type)[0] 
 }
 
-export async function flToTrellis(flDoc: any) {
-  let flDocType = flDoc.shareSource.type.name;
+export async function flToTrellis(flDoc: FlObject) {
+  let flDocType = flDoc.shareSource.type.name as keyof typeof conversions;
   console.log(flDocType);
   let document : any = {
     expire_date: flDoc!.expirationDate,

@@ -7,15 +7,38 @@
     "build": "tsc -b",
     "watch": "tsc -b --watch",
     "start": "node --enable-source-maps dist/index.js",
-    "test": "mocha --grep docs.test",
-    "test2": "mocha --grep postTpDocs.test"
+    "test": "c8 ava"
   },
+  "type": "module",
   "author": "Sam Noel <sam@qlever.io>",
   "license": "Apache-2.0",
-  "mocha": {
-    "require": "ts-node/register/transpile-only",
-    "extension": [
-      "ts"
+  "ava": {
+    "failFast": false,
+    "files": [
+      "**/*.test.ts"
+    ],
+    "typescript": {
+      "extensions": [
+        "ts"
+      ],
+      "rewritePaths": {
+        "src/": "dist/",
+        "test/": ".test/"
+      },
+      "compile": false
+    }
+  },
+  "c8": {
+    "reporter": [
+      "text",
+      "lcov"
+    ],
+    "all": true,
+    "src": "src",
+    "exclude": [
+      "*.d.ts",
+      ".pnp.*",
+      ".test"
     ]
   },
   "dependencies": {
@@ -25,13 +48,11 @@
     "@oada/poll": "^0.0.1",
     "@oada/types": "^1.8.1",
     "@overleaf/o-error": "^3.3.1",
-    "@types/mocha": "^9.1.0",
+    "@types/json-pointer": "^1.0.31",
     "adm-zip": "^0.5.3",
     "axios": "^0.21.1",
     "bluebird": "^3.7.2",
     "convict": "^6.1.0",
-    "convict-format-with-moment": "^6.2.0",
-    "convict-format-with-validator": "^6.0.1",
     "csvjson": "^5.1.0",
     "debug": "^4.3.1",
     "dotenv": "^10.0.0",
@@ -49,7 +70,7 @@
     "nodemon": "^2.0.7",
     "sha256": "^0.2.0",
     "string-sanitizer": "^2.0.2",
-    "tslib": "^2.2.0",
+    "tslib": "^2.4.0",
     "uuid": "^8.3.2",
     "websocket": "^1.0.34",
     "ws": "^7.4.6",
@@ -57,17 +78,21 @@
   },
   "devDependencies": {
     "@tsconfig/node16": "^1.0.1",
+    "@types/bluebird": "^3.5.36",
     "@types/convict": "^6.0.2",
-    "@types/convict-format-with-validator": "^6",
+    "@types/debug": "^4.1.7",
+    "@types/lodash": "^4.14.182",
     "@types/node": "latest",
     "@yarnpkg/pnpify": "^3.0.0-rc.6",
+    "@yarnpkg/sdks": "^3.0.0-rc.4",
+    "ava": "^4.2.0",
     "bluebird": "^3.7.2",
+    "c8": "^7.11.2",
     "chai": "^4.3.4",
     "chai-as-promised": "^7.1.1",
-    "mocha": "^9.2.2",
     "prettier": "^2.3.0",
     "ts-node": "^10.7.0",
-    "typescript": "^4.3.2"
+    "typescript": "latest"
   },
   "packageManager": "yarn@3.2.0",
   "resolutions": {

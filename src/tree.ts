@@ -1,3 +1,5 @@
+import type {Tree} from '@oada/list-lib'
+
 let docsTree = {
   '_type': 'application/vnd.oada.bookmarks.1+json',
   '_rev': 0,
@@ -15,8 +17,7 @@ let docsTree = {
     }
   }
 }
-
-module.exports = {
+export const tree : Tree = {
   'bookmarks': {
     '_type': 'application/vnd.oada.bookmarks.1+json',
     '_rev': 0,
@@ -127,4 +128,4 @@ module.exports = {
   }
 }
 
-
+export default tree;

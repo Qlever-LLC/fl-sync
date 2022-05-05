@@ -1,5 +1,6 @@
 import moment from 'moment';
-const debug = require('debug');
+import debug from 'debug';
+import type {TrellisCOI, FlObject} from './mirrorWatch'
 
 const info = debug('fl-sync:mirror-watch:info');
 const error = debug('fl-sync:mirror-watch:error');
@@ -7,11 +8,11 @@ const error = debug('fl-sync:mirror-watch:error');
 /**
  * validates documents that have not yet been approved
  * @param {*} trellisDoc 
- * @param {*} flDoc 
+ * @param {*} flMirror
  * @param {*} type 
  * @returns 
  */
-export async function validateResult(trellisDoc, flMirror, type) {
+export async function validateResult(trellisDoc: TrellisCOI, flMirror: FlObject, type: string) {
   info(`Validating pending doc [${trellisDoc._id}]`);
   let message;
   let status = true;
@@ -42,7 +43,7 @@ export async function validateResult(trellisDoc, flMirror, type) {
       default:
         break;
     }
-  } catch(err) {
+  } catch(err: any) {
     error('validateResult Errored: ', err);
     status = false;
     message = `validateResult Errored: ` + err.message;

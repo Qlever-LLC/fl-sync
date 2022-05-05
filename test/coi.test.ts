@@ -1,4 +1,4 @@
-import test from 'ava';
+import { expect } from 'chai';
 import Promise from 'bluebird';
 import { setTimeout } from 'timers/promises';
 import { connect, OADAClient } from '@oada/client';
@@ -6,7 +6,7 @@ import moment from 'moment';
 import axios from 'axios';
 
 import tree from '../src/tree';
-import {test as service} from '../src/index';
+import {test} from '../src/index';
 const { coi } = require('./documents/coi');
 
 import config from "../src/config";
@@ -22,8 +22,74 @@ const INTERVAL_MS = config.get('foodlogiq.interval')*1000;
 
 const jobwaittime = 10000; // ms to wait for job to complete, tune to your oada response time
 const pending = `${SERVICE_PATH}/jobs/pending`
+/*
+async function postDoc(data, oada) {
+  let fldata = await axios({
+    method: 'post',
+    url: `${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`,
+    data,
+    headers: {
+      "Authorization": `${FL_TOKEN}`,
+    }
+  }).then(r => r.data)
+  let flid = fldata._id;
 
-describe('End-to-end tests of fl-sync jobs', function() {
+  let _id = await oada.post({
+    path: '/resources',
+    contentType: "application/json",
+    data: {
+      'food-logiq-mirror': fldata
+    }
+  }).then(r => r.headers['content-location'].replace(/^\//, ''))
+
+  await oada.put({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flid}`,
+    data: {
+      _id,
+      _rev: 0
+    }
+  })
+
+  return flid;
+}
+*/
+
+async function postDoc(data, oada) {
+  let result = await oada.get({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`
+  }).then(r => r.data)
+  .catch(err => {
+    if (err.status === 404) {
+      return {};
+    } else throw err;
+  })
+  if (typeof result !== 'object') throw new Error('Bad data');
+  // @ts-ignore
+  let bef = Object.keys(result).filter(k => k.charAt(0) !== '_')
+  await axios({
+    method: 'post',
+    url: `${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`,
+    data,
+    headers: {
+      "Authorization": `${FL_TOKEN}`,
+    }
+  })
+  await setTimeout(INTERVAL_MS+1000)
+  let resp = await oada.get({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`
+  }).then(r => r.data)
+  if (typeof resp !== 'object') throw new Error('Bad data');
+  // @ts-ignore
+  let aft = Object.keys(resp).filter(k => k.charAt(0) !== '_')
+  // @ts-ignore
+  let flId = aft.filter(k => bef.indexOf(k) < 0)
+  // @ts-ignore
+  flId = flId[0];
+
+  return flId
+}
+
+describe('End-to-end tests of various FL documents: docs.test.js', function() {
   this.timeout(jobwaittime*10);
   let oada: OADAClient
 
@@ -125,12 +191,10 @@ describe('End-to-end tests of fl-sync jobs', function() {
   });
  */
 
- //Does not work. Must have attachments, but need to find "bad" attachments that cannot be retrieved
-  test('Should fail when attachments cannot be retrieved.', async (t) => {
+/* Does not work. Must have attachments, but need to find "bad" attachments that cannot be retrieved
+  it('The job should fail when attachments cannot be retrieved.', async () => {
     let data = coi;
-    data.attachments = [
-      data.attachments[0]
-    ];
+    data.attachments.pop();
     //Make the attachments unretrievable
 
     let flId = await postDoc(data, oada);
@@ -154,6 +218,7 @@ describe('End-to-end tests of fl-sync jobs', function() {
 
     expect(job.status).to.equal(200); 
   });
+ */
 
   /*
   // Really this tests startup conditions where the initial poll may include lots of 
@@ -287,40 +352,3 @@ describe('End-to-end tests of fl-sync jobs', function() {
   });
  */
 });
-
-async function postDoc(data, oada) {
-  let result = await oada.get({
-    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`
-  }).then(r => r.data)
-  .catch(err => {
-    if (err.status === 404) {
-      return {};
-    } else throw err;
-  })
-  if (typeof result !== 'object') throw new Error('Bad data');
-  // @ts-ignore
-  let bef = Object.keys(result).filter(k => k.charAt(0) !== '_')
-  await axios({
-    method: 'post',
-    url: `${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`,
-    data,
-    headers: {
-      "Authorization": `${FL_TOKEN}`,
-    }
-  })
-  await setTimeout(INTERVAL_MS+1000)
-  let resp = await oada.get({
-    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`
-  }).then(r => r.data)
-  if (typeof resp !== 'object') throw new Error('Bad data');
-  // @ts-ignore
-  let aft = Object.keys(resp).filter(k => k.charAt(0) !== '_')
-  // @ts-ignore
-  let flId = aft.filter(k => bef.indexOf(k) < 0)
-  // @ts-ignore
-  flId = flId[0];
-
-  return flId
-}
-
-
