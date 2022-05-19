@@ -200,7 +200,7 @@ async function handleTargetStatus(change: Change, key: string, targetJobKey: str
       'in-progress'
     )
     await handleScrapedResult(targetJobKey)
-    targetToFlSyncJobs.delete(targetJobKey);
+    //targetToFlSyncJobs.delete(targetJobKey);
   } else if (status === 'failure') {
     await postUpdate(
       CONNECTION,
@@ -355,7 +355,7 @@ export const handleAssessment: WorkerFunction = async (job: any, {oada, jobId: j
       // No auto-approve/reject set; leave it in limbo
     }
     return new Promise((resolve, reject) => {
-      promises.set(item._id, {
+      promises.set(jobId, {
         resolve,
         reject
       })
@@ -575,7 +575,7 @@ export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, job
     })
 
     return new Promise((resolve, reject) => {
-      promises.set(item._id, {
+      promises.set(jobId, {
         resolve,
         reject
       })
@@ -620,7 +620,16 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
     if (!jobs || !isObj(jobs)) throw new Error('Bad _meta target jobs during finishDoc');
     let jobKey = mostRecentKsuid(Object.keys(jobs));
     if (!jobKey || !jobs) throw new Error('Most recent KSUID Key had no link _id');
-    let jobId = jobs[jobKey]!._id;
+    //let jobId = jobs[jobKey]!._id;
+    console.log({jobs}, targetToFlSyncJobs.entries())
+
+    // Get FL-Sync job id then tidy targetToFlSyncJobs and resolve job promise
+    if (!targetToFlSyncJobs.has(jobKey)) {
+      throw new Error(`targetJobKey ${jobKey} does not exist on Map targetToFlSyncJobs at handleScrapedResult`);
+    }
+    //@ts-ignore
+    let {jobId} = targetToFlSyncJobs.get(jobKey);
+    targetToFlSyncJobs.delete(jobKey);
 
     let { data } = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs/${jobKey}`,
@@ -633,7 +642,7 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
     if (!key) return;
 
     //2. Move approved docs to trading partner /bookmarks
-    info(`Moving approved document to [${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/${type}/${key}]`);
+    info(`Moving approved document to [${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`);
     await CONNECTION.put({
       path: `${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}`,
       data: {},
@@ -660,6 +669,7 @@ function resolvePromise(jobId: string, msg?: string | Error | JobError) {
   info(`Removing ${jobId} from fl-sync job-promises index`);
   trace(`All promises: ${promises}`);
   let prom = promises.get(jobId)
+  console.log({promises, prom})
   if (msg) {
     prom.reject(msg)
   } else {
@@ -711,7 +721,7 @@ interface EmployersLiability {
  * @param {*} updateFlId
  * @returns
  */
-async function constructCOIAssessment(flId: string, name: string, bid: string, bname: string, result: TrellisCOI, updateFlId: string) {
+async function constructCOIAssessment(flId: string, name: string, bid: string, bname: string, result: TrellisCOI, updateFlId?: string | void) {
   let policies = Object.values(result.policies);
   let cgl  = (_.find(policies, ['type', 'Commercial General Liability']) || {}) as GeneralLiability;
   let general = parseInt(cgl.each_occurrence || '0');
@@ -830,15 +840,11 @@ async function handleScrapedResult(targetJobKey: string) {
       if (assessmentId) info(`Assessment with id [${assessmentId}] already exists for document _id [${flId}].`)
       if (!assessmentId) info(`Assessment does not yet exist for document _id [${flId}.`)
 
-    console.log("TYPE", type)
-
-      if (type === 'Certificate of Insurance' && assessmentId) {
-        console.log('constructing COI')
+//      if (type === 'Certificate of Insurance' && assessmentId) {
         let assess = await constructCOIAssessment(flId, name, bid, bname, result, assessmentId);
         assessmentId = assessmentId || assess.data._id;
-        console.log('constructing COI done', assessmentId)
         info(`Spawned assessment [${assessmentId}] for business id [${bid}]`);
-      }
+//      }
 
       await postUpdate(
         CONNECTION,
