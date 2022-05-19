@@ -68,7 +68,7 @@ test.before(async () => {
     service: true,
     watchConfig: true
   })
-  await setTimeout(15000/2)
+  await setTimeout(5000)
 });
 
 test.skip('Should fail and warn suppliers when multiple PDFs are attached on COI documents.', async (t) => {
@@ -157,6 +157,7 @@ test.skip(`Should fail on Target failure due to not text pdf, needs OCR`, async 
 })
 
 test(`Should approve a valid COI document.`, async (t) => {
+  t.timeout(300000)
   let data = coi;
   data.attachments.pop();
   let flId = await postDoc(data, oada);
