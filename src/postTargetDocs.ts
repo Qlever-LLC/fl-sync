@@ -5,7 +5,7 @@ import type {JsonObject, OADAClient} from '@oada/client'
 import type {TreeKey} from '@oada/list-lib/lib/tree';
 
 // configuration details
-import config from "./config";
+import config from "./config.js";
 
 const TOKEN = config.get('trellis.token');
 const DOMAIN = config.get('trellis.domain');
@@ -15,7 +15,7 @@ const CO_ID = config.get('foodlogiq.community.owner.id');
 let SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 
-import tree from './tree';
+import tree from './tree.js';
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 }

@@ -1,6 +1,6 @@
 import moment from 'moment';
 import debug from 'debug';
-import type {TrellisCOI, FlObject} from './mirrorWatch'
+import type {TrellisCOI, FlObject} from './mirrorWatch.js'
 
 const info = debug('fl-sync:mirror-watch:info');
 const error = debug('fl-sync:mirror-watch:error');
@@ -52,6 +52,6 @@ export async function validateResult(trellisDoc: TrellisCOI, flMirror: FlObject,
 }//validateResult
 
 
-module.exports = {
+export default {
   validateResult,
 }

@@ -14,6 +14,10 @@
  */
 
 import convict from 'convict';
+import {url} from 'convict-format-with-validator';
+import {duration} from 'convict-format-with-moment';
+convict.addFormat(url)
+convict.addFormat(duration)
 import { config as load } from 'dotenv';
 
 load();

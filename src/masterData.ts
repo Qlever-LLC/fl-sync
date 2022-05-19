@@ -5,8 +5,8 @@ import SHA256 from "js-sha256";
 let { sha256 } = SHA256;
 import debug from 'debug';
 let ListWatch = oadalist.ListWatch;
-import tree from './tree.masterData';
-import config from './config.masterdata';
+import tree from './tree.masterData.js';
+import config from './config.masterdata.js';
 import type {JsonObject, OADAClient} from '@oada/client';
 import type {TreeKey} from '@oada/list-lib/lib/tree'
 
@@ -385,7 +385,3 @@ let trellisTPTemplate: TradingPartner = {
   email: "", // both
   phone: "" //both,
 };
-
-module.exports = {
-  watchTrellisFLBusinesses
-}

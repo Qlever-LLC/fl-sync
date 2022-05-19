@@ -1,0 +1,76 @@
+import test from 'ava';
+import Promise from 'bluebird';
+import { setTimeout } from 'timers/promises';
+import { connect, OADAClient } from '@oada/client';
+import type { Body } from '@oada/client/lib/client';
+import moment from 'moment';
+import tree from '../dist/tree.js';
+import {initialize, getAutoApprove} from '../dist/index.js';
+import config from "../dist/config.js";
+const TOKEN = process.env.TOKEN || '';// || config.get('trellis.token') || '';
+const DOMAIN = config.get('trellis.domain') || '';
+import type {TreeKey} from '@oada/list-lib/lib/tree';
+let SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
+let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']){
+  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+}
+let oada: OADAClient
+
+test.before(async () => {
+  oada = await connect({domain: DOMAIN, token: TOKEN});
+  oada.put({
+    path: `${SERVICE_PATH}/_meta/oada-poll/food-logiq-poll`,
+    //tree,
+    data: { lastPoll: moment().subtract(1, 'minutes').utc().format()}
+  })
+  // Blow away the existing jobs queue
+  let jobKeys = await oada.get({
+    path: `${SERVICE_PATH}/jobs/pending`
+  }).then(r => Object.keys(r!.data || {}).filter(key => key.charAt(0) !== '_'))
+  .catch(err => {
+    if (err.status !== 404) throw err;
+    return [];
+  })
+  await Promise.map(jobKeys, async (jobKey) => {
+    await oada.delete({
+      path: `${SERVICE_PATH}/jobs/pending/${jobKey}`
+    })
+  })
+
+  //Blow away the existing coi docs created
+  let keys = await oada.get({
+    path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois`
+  }).then(r => Object.keys(r!.data || {}).filter(key => key.charAt(0) !== '_'))
+  .catch(err => {
+    if (err.status !== 404) throw err;
+    return [];
+  })
+  await Promise.map(keys, async (key) => {
+    await oada.delete({
+      path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois/${key}`
+    })
+  })
+
+  initialize({
+    watchConfig: true
+  })
+  await setTimeout(15000/2)
+});
+
+test('Should recognize a change to autoapprove assessments.', async (t) => {
+  await oada.put({
+    path: `${SERVICE_PATH}/autoapprove-assessments`,
+    data: true
+  })
+  let result = getAutoApprove();
+  t.is(result, true);
+
+  await oada.put({
+    path: `${SERVICE_PATH}/autoapprove-assessments`,
+    data: false
+  })
+  result = getAutoApprove();
+  t.is(result, false);
+
+});
