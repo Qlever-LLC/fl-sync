@@ -18,6 +18,7 @@
 // Load config first so it can set up env
 if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { Service } from '@oada/jobs';
+import esmain from 'es-main';
 
 import axios, {AxiosRequestConfig} from 'axios';
 import ksuid from 'ksuid';
@@ -25,20 +26,18 @@ import debug from 'debug';
 import Promise from 'bluebird';
 import moment, {Moment} from 'moment';
 import _ from 'lodash';
-import oada from '@oada/client';
-import type { JsonObject, OADAClient } from '@oada/client';
+import { Change, JsonObject, connect, OADAClient } from '@oada/client';
 import type { Body } from '@oada/client/lib/client'
-import config from './config';
+import config from './config.js';
 import oadalist from '@oada/list-lib';
 const ListWatch = oadalist.ListWatch;
-import tree from './tree';
+import tree from './tree.js';
 import poll from '@oada/poll';
-import type {PollConfig} from '@oada/poll';
 import type {TreeKey} from '@oada/list-lib/lib/tree';
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
-import { FlObject, onTargetUpdate, getLookup, handleAssessment, handlePendingDocument, startJobCreator } from './mirrorWatch';
-import { watchTrellisFLBusinesses } from './masterData';
+import { FlObject, onTargetChange, getLookup, handleAssessment, handlePendingDocument, startJobCreator } from './mirrorWatch.js';
+import { watchTrellisFLBusinesses } from './masterData.js';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -55,6 +54,7 @@ let SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 
 const info = debug('fl-sync:info');
+const trace = debug('fl-sync:trace');
 const error = debug('fl-sync:error');
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
@@ -64,6 +64,19 @@ let AUTO_APPROVE_ASSESSMENTS: boolean;
 let TOKEN;
 
 let CONNECTION: OADAClient;
+
+async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
+  for await (const change of changes) {
+    try {
+      if (_.has(change.body, 'autoapprove-assessments')) {
+        setAutoApprove(change.body['autoapprove-assessments'] ? true : false);
+      }
+    } catch (err) {
+      error('mirror watchCallback error');
+      error(err);
+    }
+  }
+}
 
 /**
  * watches FL config
@@ -96,18 +109,12 @@ async function watchFlSyncConfig() {
     path: `${SERVICE_PATH}`,
     type: 'single'
   })
-  info(`Watching ${SERVICE_PATH}`);
 
-  for await (const change of changes) {
-    try {
-      if (_.has(change.body, 'autoapprove-assessments')) {
-        setAutoApprove(change.body['autoapprove-assessments'] ? true : false);
-      }
-    } catch (err) {
-      error('mirror watchCallback error');
-      error(err);
-    }
-  }
+  handleConfigChanges(changes)
+  info(`Watching ${SERVICE_PATH} for changes to the config`);
+
+
+  console.log('here')
 }//watchFlSyncConfig
 
 /**
@@ -124,7 +131,7 @@ async function watchTargetJobs() {
     resume: true,
     onAddItem: getLookup,
     //@ts-ignore
-    onChangeItem: onTargetUpdate
+    onChangeItem: onTargetChange
   })
 }//watchTargetJobs
 
@@ -223,22 +230,22 @@ async function getResources(lastPoll: Moment) {
 
   // Get pending resources
   await Promise.each(['products', 'locations', 'documents'], async (type) => {
-    info(`Fetching community ${type}`);
+    trace(`Fetching community ${type}`);
     await fetchCommunityResources({ type, date, pageIndex: undefined })
   })
   // Now get assessments (slightly different syntax)
-  info(`Fetching community assessments`);
+  trace(`Fetching community assessments`);
   await fetchCommunityResources({ type: 'assessments', date, pageIndex:undefined })
 }
 
 /**
  * The callback to be used in the poller. Gets lastPoll date
  */
-async function pollFl(lastPoll: Moment) {
+export async function pollFl(lastPoll: Moment) {
   try {
     // Sync list of suppliers
     let date = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format()
-    info(`Fetching FL community members with date: [${date}]`)
+    trace(`Fetching FL community members with date: [${date}]`)
 
     await fetchAndSync({
       from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
@@ -268,7 +275,7 @@ async function pollFl(lastPoll: Moment) {
       },
     })
     // Now fetch community resources
-    info(`JUST_TPS set to ${!!JUST_TPS}`)
+    trace(`JUST_TPS set to ${!!JUST_TPS}`)
     if (!JUST_TPS) await getResources(lastPoll);
   } catch (err) {
     throw err;
@@ -364,105 +371,25 @@ async function getToken() {
   return TRELLIS_TOKEN;
 }
 
-/**
- * initializes service
- */
-export async function initialize() {
+export async function initialize({
+  polling=false,
+  target=false,
+  master=false,
+  service=false,
+  watchConfig=false
+}: {
+  polling?: boolean,
+  target?: boolean,
+  master?: boolean,
+  service?: boolean,
+  watchConfig?: boolean
+}) {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.5]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.7]       >>>>>>>>>>`);
     TOKEN = await getToken();
     // Connect to oada
     try {
-      var conn = await oada.connect({
-        domain: 'https://' + DOMAIN,
-        token: TOKEN,
-        concurrency: CONCURRENCY,
-      })
-      setConnection(conn);
-    } catch (err) {
-      error(`Initializing Trellis connection failed`);
-      error(err)
-      throw err;
-    }
-    // Run populateIncomplete first so that the change feeds coming in will have
-    // the necessary in-memory items for them to continue being processed.
-    //await populateIncomplete()
-    await watchFlSyncConfig();
-    await watchTrellisFLBusinesses(CONNECTION);
-
-    // Some queued jobs may depend on the poller to complete, so start it now. 
-    await poll.poll({
-      connection: CONNECTION,
-      basePath: SERVICE_PATH,
-      pollOnStartup: true,
-      pollFunc: pollFl,
-      interval: INTERVAL_MS,
-      name: 'food-logiq-poll',
-    } as PollConfig);
-
-    // Create the service
-    const service = new Service({
-      name: 'fl-sync', 
-      oada: CONNECTION,
-      /*
-      opts: {
-        finishReporters: [
-          {
-            type: 'slack',
-            status: 'failure',
-            posturl: config.get('slack.posturl'),
-          },
-        ],
-      }
-     */
-    }); 
-    
-    await watchTargetJobs();
-
-    // Set the job type handlers
-    service.on('document-mirrored', config.get('timeouts.mirrorWatch'), handlePendingDocument);
-    service.on('assessment-mirrored', config.get('timeouts.mirrorWatch'), handleAssessment);
-
-    // Start the jobs watching service
-    const serviceP = service.start();
-
-    // Start the things watching to create jobs
-    const p = startJobCreator(CONNECTION);
-
-    info('Initializing fl-sync service. v1.2.6');
-
-    // Catch errors
-    // eslint-disable-next-line github/no-then
-    await Promise.all([serviceP, p]).catch((cError) => {
-      error(cError);
-      // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
-      process.exit(1);
-    });
-
-/*    await reports.interval({
-      connection: CONNECTION,
-      basePath: SERVICE_PATH,
-      interval: 3600*24*1000,
-      reportFunc: genReport,
-      interval: INTERVAL_MS,
-      name: 'fl-sync',
-    });
-    */
-//    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
-
-  } catch (err) {
-    error(err);
-    throw err;
-  }
-}//initialize
-
-export async function test({polling, target, master, service, watchConfig}: {polling: boolean, target: boolean, master: boolean, service: boolean, watchConfig: boolean}) {
-  try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.5]       >>>>>>>>>>`);
-    TOKEN = await getToken();
-    // Connect to oada
-    try {
-      var conn = await oada.connect({
+      var conn = await connect({
         domain: 'https://' + DOMAIN,
         token: TOKEN,
         concurrency: CONCURRENCY,
@@ -544,28 +471,21 @@ export async function test({polling, target, master, service, watchConfig}: {pol
     error(err);
     throw err;
   }
-}//test
+}//initialize
 
 
 process.on('uncaughtException', function(err) {
   error('Caught exception: ' + err);
 });
 
-if (require.main === module) {
-  initialize();
+if (esmain(import.meta)) {
+  initialize({
+    polling: true,
+    watchConfig: true,
+    master: true,
+    target: true,
+    service: true
+  })
 } else {
   info('Just importing fl-sync');
-}
-
-module.exports = {
-  pollFl,
-  initialize,
-  test,
-  getAutoApprove,
-  fetchAndSync,
-  testing: {
-    setConnection,
-    SERVICE_PATH,
-    tree,
-  }
 }
