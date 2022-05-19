@@ -113,6 +113,6 @@ async function emailReport(config, email, file, date) {
   })
 }
 
-module.exports = {
+export {
   interval 
 }

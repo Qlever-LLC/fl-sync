@@ -1,4 +1,4 @@
-import type {FlObject} from './mirrorWatch'
+import type {FlObject} from './mirrorWatch.js'
 
 export function fromOadaType(type: string) {
   let vals = Object.values(conversions)

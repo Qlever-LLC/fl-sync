@@ -1,6 +1,6 @@
-const debug = require('debug');
-import type {FlAssessment} from './mirrorWatch'
-const _ = require('lodash');
+import debug from 'debug';
+import type {FlAssessment} from './mirrorWatch.js'
+import _ from 'lodash';
 
 const info = debug('fl-sync:mirror-watch:info');
 

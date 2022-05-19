@@ -8,15 +8,15 @@ import Promise from 'bluebird';
 import _  from 'lodash';
 import pointer from 'json-pointer';
 import jszip from 'jszip';
-import config from './config';
-import tree from './tree';
+import config from './config.js';
+import tree from './tree.js';
 import type {TreeKey} from '@oada/list-lib/lib/tree'
-import {validateResult} from './docTypeValidation';
-import mirrorTree from './tree.mirrorWatch';
-import checkAssessment from './checkAssessments';
-import * as indexStuff from './index';
-import {fromOadaType, flToTrellis} from './conversions';
-import { linkAssessmentToDocument, spawnAssessment } from './assessments';
+import {validateResult} from './docTypeValidation.js';
+import mirrorTree from './tree.mirrorWatch.js';
+import checkAssessment from './checkAssessments.js';
+import * as indexStuff from './index.js';
+import {fromOadaType, flToTrellis} from './conversions.js';
+import { linkAssessmentToDocument, spawnAssessment } from './assessments.js';
 import type { Job, WorkerFunction } from '@oada/jobs';
 import type { Change, JsonObject, OADAClient } from '@oada/client';
 import type { Body } from '@oada/client/lib/client';
@@ -41,6 +41,24 @@ let pending = `${SERVICE_PATH}/jobs/pending`;
 let MASTERID_INDEX_PATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
 let targetToFlSyncJobs = new Map<string, {jobKey: string, jobId: string}>();
 let assessmentToFlId = new Map<string, {jobId: string, mirrorid: string, flId: string}>();
+let targetErrors = {
+  "target-multiple-docs-combined": {
+    pattern: /This is a multi-.* File/i,
+    reject: true,
+    jobError: 'target-multiple-docs-combined',
+  },
+  'target-validation': {
+    pattern: /(Validation|Valiadation) Failed/i,
+    reject: false,
+    jobError: 'target-validation',
+  },
+  'target-unrecognized': {
+    pattern: /File format was not recognized/i,
+    reject: false,
+    jobError: 'target-unrecognized',
+  }
+}
+//let targetErrorTypes = {"multi-COI": "multi-coi"}
 let promises = new Map();
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
@@ -48,7 +66,6 @@ if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
 if (SERVICE_NAME && mirrorTree?.bookmarks?.services?.['fl-sync']) {
   mirrorTree.bookmarks.services[SERVICE_NAME] = mirrorTree.bookmarks.services['fl-sync'];
 }
-console.log(JobError)
 let CONNECTION : OADAClient;
 //let flList = ['documents', 'products', 'locations', 'assessments'];
 let multiFileOkay = [
@@ -142,9 +159,10 @@ export async function getLookup(item: any, key: string) {
  * @param {*} targetJobKey
  * @returns 
  */
-export async function onTargetUpdate(change: Change, targetJobKey: string) {
+export async function onTargetChange(change: Change, targetJobKey: string) {
   trace(`Recieved update for job [${targetJobKey}]`);
   try {
+    // Gather the job information between target and fl-sync
     targetJobKey = targetJobKey.replace(/^\//, '');
     let job = await CONNECTION.get({
       path: `/resources/${targetJobKey}/config`
@@ -159,70 +177,94 @@ export async function onTargetUpdate(change: Change, targetJobKey: string) {
       path: `/${jobId}/config/key`
     }).then(r => r.data as string)
 
-    // Handle finished target results 
-    let status = pointer.has(change, `/body/status`) ? pointer.get(change, `/body/status`) : undefined;
-    if (status === 'success') {
-      await postUpdate(
-        CONNECTION, 
-        jobId, 
-        'Target extraction completed. Handling result...',
-        'in-progress'
-      )
-      await handleScrapedResult(targetJobKey)
-      targetToFlSyncJobs.delete(targetJobKey);
-    } else if (status === 'failure') {
-      await postUpdate(
-        CONNECTION, 
-        jobId, 
-        'Target extraction failed',
-        'in-progress'
-      )
-      // Only reject certain target failures. Others we'll need to review!
-      if (typeof job.targetError === 'string') {
-        if (job.targetError?.includes('multi-COI')) {
-          await rejectFlDoc(key, job.targetError);
-        }
-        resolvePromise(key, false);
-        targetToFlSyncJobs.delete(targetJobKey);
-      }
-    }
-      
-    // Provide select update messages to FL
-    await Promise.each(Object.values(change && change.body && change.body.updates || {}), async (val: {status: string, information: string}) => {
+    // Handle final statuses
+    await handleTargetStatus(change, key, targetJobKey, jobId, job)
 
-      let details;
-      switch (val.status) {
-        case 'started':
-          break;
-        case 'error':
-          details = val.information;
-          break;
-        case 'identified':
-          break;
-        case 'success':
-          break;
-        default:
-          break;
-      }
-      if (details) {
-        info(`Posting new update to FL docId ${key}: ${details}`);
-        await axios({
-          method: 'post',
-          url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/capa`,
-          headers: { Authorization: FL_TOKEN },
-          data: {
-            details,
-            type: "change_request",
-          }
-        })
-      }
-    })
+    //Handle updates
+    await handleTargetUpdates(change, key);
+
   } catch (err) {
-    error('onTargetUpdate error: ');
+    error('onTargetChange error: ');
     error(err);
     throw err;
   }
-}//onTargetUpdate
+}//onTargetChange
+
+async function handleTargetStatus(change: Change, key: string, targetJobKey: string, jobId: string, job: JsonObject) {
+  let status = pointer.has(change, `/body/status`) ? pointer.get(change, `/body/status`) : undefined;
+  if (status === 'success') {
+    await postUpdate(
+      CONNECTION,
+      jobId,
+      'Target extraction completed. Handling result...',
+      'in-progress'
+    )
+    await handleScrapedResult(targetJobKey)
+    targetToFlSyncJobs.delete(targetJobKey);
+  } else if (status === 'failure') {
+    await postUpdate(
+      CONNECTION,
+      jobId,
+      'Target extraction failed',
+      'in-progress'
+    )
+
+    if (!isObj(job) || !job.updates) throw new Error("Job is not an object)")
+    //1. Find the update with the error message
+    let jobError;
+    let errMsg = (Object.values(job.updates).find(obj => obj.status === 'error'))!.information
+    console.log('failed status, was error', errMsg, job)
+    //2. Determine whether to reject the document based on target error type; others we'll need to review
+    //3. Determine error indexing within fl-sync
+    if (typeof errMsg === 'string') {
+      let reject = false;
+      Object.values(targetErrors).forEach(tErr => {
+        if (tErr.pattern.test(errMsg)) {
+          jobError = tErr.jobError;
+          reject = tErr.reject === true;
+        }
+      })
+      info(`Target job ${targetJobKey} errored. reject: ${reject}; fl-sync job error ${jobError}`)
+
+      if (reject) await rejectFlDoc(key, errMsg);
+      if (jobError) resolvePromise(jobId, new JobError(errMsg, jobError));
+    }
+    if (!jobError) resolvePromise(jobId, new JobError(errMsg, 'target-other'));
+    targetToFlSyncJobs.delete(targetJobKey);
+  }
+}
+
+async function handleTargetUpdates(change: Change, key: string) {
+  await Promise.each(Object.values(change && change.body && change.body.updates || {}), async (val: {status: string, information: string}) => {
+
+    let details;
+    switch (val.status) {
+      case 'started':
+        break;
+      case 'error':
+        details = val.information;
+        break;
+      case 'identified':
+        break;
+      case 'success':
+        break;
+      default:
+        break;
+    }
+    if (details) {
+      info(`Posting new update to FL docId ${key}: ${details}`);
+      await axios({
+        method: 'post',
+        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/capa`,
+        headers: { Authorization: FL_TOKEN },
+        data: {
+          details,
+          type: "change_request",
+        }
+      })
+    }
+  })
+}
 
 /**
  * approves fl document
@@ -251,11 +293,15 @@ export const handleAssessment: WorkerFunction = async (job: any, {oada, jobId: j
     let jobId = `resources/${jobKey}`;
     let {bid, key, flDocJobId } = job.config;
     let flDocJobKey = flDocJobId.replace(/^\//, '');
-    let item = await oada.get({
-      path: `${SERVICE_PATH}/businesses/${bid}/assessments/${key}/food-logiq-mirror`
-    }).then(r => r.data as unknown as FlAssessment)
+    let itemData = await oada.get({
+      path: `${SERVICE_PATH}/businesses/${bid}/assessments/${key}`
+    }).then(r => r.data as JsonObject)
+    if (!isObj(itemData)) {
+      throw new Error(`Could not retrieve 'food-logiq-mirror' from request data.`)
+    }
+    let item = itemData['food-logiq-mirror'] as unknown as FlAssessment;
 
-    if (Buffer.isBuffer(item) || Array.isArray(item) || item === undefined || item === null || typeof item !== 'object') return {};
+    if (!item || !isObj(item)) return {};
 
     // 1. Create a job entry for the assessment
     await CONNECTION.put({
@@ -336,7 +382,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
     .then(r => r.data)
     .catch(err => {
       if (err.status === 404) {
-        throw new Error(attachmentsErrorMsg)
+        throw new JobError(attachmentsErrorMsg, 'bad-fl-attachments')
       } else throw err;
     })
 
@@ -345,7 +391,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
   let files = Object.keys(zip.files)
 
   if (files.length !== 1) {
-    throw new Error(multipleFilesErrorMsg)
+    throw new JobError(multipleFilesErrorMsg, 'multi-files-attached')
     if (!multiFileOkay.includes(type)) {
     }
   }
@@ -458,101 +504,75 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
  * @param {*} oada
  */
 export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, jobId: jobKey}: {oada: OADAClient, jobId: string}) => {
+  let item: FlObject;
+  let { bid, key, masterid } = job.config as unknown as JobConfig;
+  let jobId: string = job.oadaId;
   try {
-    let {bid, key, masterid } = job.config as unknown as JobConfig;
     info(`handlePendingDocument processing pending FL document [${key}]`);
 
-    let data = await oada.get({
-      path: `${SERVICE_PATH}/businesses/${bid}/documents/${key}/food-logiq-mirror`
+    let itemData = await oada.get({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${key}`
     }).then(r => r.data as JsonObject);
-
-    let item = data as unknown as FlObject;
-
-    if (Buffer.isBuffer(item) || Array.isArray(item) || item === undefined || item === null || typeof item !== 'object') {
-      return {};
+    if (!isObj(itemData)) {
+      throw new Error(`Could not retrieve 'food-logiq-mirror' from request data.`)
     }
+    item = itemData['food-logiq-mirror'] as unknown as FlObject;
 
-    //1. Retrieve relevant job info and store a reference to the job in the fl doc
-    let response = await oada.get({
-      path: `${pending}/${jobKey}`
-    }).then(r => r.data)
+    if (!item || !isObj(item)) return {};
 
-    if (Buffer.isBuffer(response) || Array.isArray(response) || response === undefined || response === null || typeof response !== 'object') {
-      throw new Error('Job was not a resource (had no _id)')
-    }
-
-    let jobId = response!._id
-
-//    throw new JobError("SOME FAILURE TEST", 'test');
-    try {
-      let {fKey, urlName, docKey} = await postTpDocument({bid, oada, item, masterid});
-
-      // Create reference from the pdf to the fl-sync job
-      await CONNECTION.put({
-        path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fKey}/_meta`,
-        data: { 
-          services: {
-            'fl-sync': {
-              jobs: {
-                [jobKey]: { _id: jobId }
-              }
-            }
-          }
+    let {fKey, urlName, docKey, docType} = await postTpDocument({bid, oada, item, masterid})
+    await postUpdate(
+      CONNECTION,
+      jobId,
+      `Document [key:${docKey}, type: ${docType}] posted to trading partner docs.`,
+      'in-progress'
+    )
+    await CONNECTION.put({
+      path: `${jobId}`,
+      data: {
+        trellisDoc: {
+          key: docKey,
+          type: docType
         }
-      })
-      trace(`Creating link to fl-sync job in meta of ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fKey}/_meta`);
-
-      //Lazy create an index of trading partners' documents resources for monitoring.
-      await CONNECTION.head({
-        path: `${SERVICE_PATH}/monitors/tp-docs/${masterid}`
-      }).catch(async (err) => {
-        if (err.status === 404) {
-          let tpDocsId = await CONNECTION.head({
-            path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents`,
-          }).then(r => r.headers['content-location']!.replace(/^\//,''));
-          // Create a versioned link to that trading-partner's shared documents
-          await CONNECTION.put({
-            path: `${SERVICE_PATH}/monitors/tp-docs`,
-            tree,
-            data: {
-              [masterid]: {
-              _id: tpDocsId,
-              _rev: 0
-              }
-            }
-          })
-        } else throw err;
-      })
-    } catch(er: any) {
-      // Some errors should be passed to Food Logiq; others left in limbo
-      switch(er.message) {
-        case multipleFilesErrorMsg:
-          break;
-        case attachmentsErrorMsg:
-          return {}
-          break;
-        default:
-          //Don't do anything; 
-          throw er;
       }
-      await CONNECTION.put({
-        path: `/${jobId}`,
-        data: {
-          fl_data_validation: {
-            status: false,
-            message: er.message
+    })
+
+    // Create reference from the pdf to the fl-sync job
+    await CONNECTION.put({
+      path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fKey}/_meta`,
+      data: {
+        services: {
+          'fl-sync': {
+            jobs: {
+              [jobKey]: { _id: jobId }
+            }
           }
         }
-      })
+      }
+    })
+    trace(`Creating link to fl-sync job in meta of ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fKey}/_meta`);
 
-      rejectFlDoc(item!._id, er.message)
-      return new Promise((resolve, reject) => {
-        promises.set(item._id, {
-          resolve,
-          reject
+    //Lazy create an index of trading partners' documents resources for monitoring.
+    await CONNECTION.head({
+      path: `${SERVICE_PATH}/monitors/tp-docs/${masterid}`
+    }).catch(async (err) => {
+      if (err.status === 404) {
+        let tpDocsId = await CONNECTION.head({
+          path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents`,
+        }).then(r => r.headers['content-location']!.replace(/^\//,''));
+        // Create a versioned link to that trading-partner's shared documents
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/monitors/tp-docs`,
+          tree,
+          data: {
+            [masterid]: {
+            _id: tpDocsId,
+            _rev: 0
+            }
+          }
         })
-      })
-    }
+      } else throw err;
+    })
 
     return new Promise((resolve, reject) => {
       promises.set(item._id, {
@@ -560,12 +580,26 @@ export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, job
         reject
       })
     })
-  } catch (err) {
+  } catch (err: any) {
     error(`handlePendingDocument errored`);
     error(err);
+    if ([multipleFilesErrorMsg, attachmentsErrorMsg].includes(err.message)) {
+      await CONNECTION.put({
+        path: `/${jobId}`,
+        data: {
+          fl_data_validation: {
+          status: false,
+          message: err.message
+          }
+        }
+      })
+      await rejectFlDoc(item!._id, err.message)
+      // Now let it continue below and throw; no promise gets made, but the job is failed now
+    }
     throw err;
   }
 }//handlePendingDoc
+
 
 /**
  * Move approved documents into final location. Triggered by document re-mirror.
@@ -575,15 +609,18 @@ export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, job
  * @returns 
  */
 async function finishDoc(item: FlObject, bid: string, masterid: string, status: string) {
-  info(`Finishing doc: [${item._id}] with status [${status}] `);
 
   if (status === 'approved') {
+    info(`Finishing doc: [${item._id}] with status [${status}] `);
     //1. Get reference of corresponding pending scraped pdf
-    let keys = await CONNECTION.get({
+    let jobs = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs`,
-    }).then(r => Object.keys(r.data as JsonObject));
+    }).then(r => r.data as unknown as Links);
 
-    let jobKey = mostRecentKsuid(keys);
+    if (!jobs || !isObj(jobs)) throw new Error('Bad _meta target jobs during finishDoc');
+    let jobKey = mostRecentKsuid(Object.keys(jobs));
+    if (!jobKey || !jobs) throw new Error('Most recent KSUID Key had no link _id');
+    let jobId = jobs[jobKey]!._id;
 
     let { data } = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs/${jobKey}`,
@@ -606,31 +643,32 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
       path: `${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
       data: { _id: result[type][key]._id },
     })
-    resolvePromise(item._id as string, false)
+    resolvePromise(jobId)
   } else {
-    resolvePromise(item._id as string, true)
-    throw new Error(`Document had status [${status}]`);
+    //Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
+    info(`Document [${item._id}] with status [${status}]. finishDoc not doing anything else. `);
   }
 }//finishDoc
 
 /**
  * resolves promises such that jobs get succeeded
- * @param {*} flId - the food logiq _id of the promise entry
- * @param {*} reject - whether or not to reject; otherwise it'll resolve
+ * @param {*} jobId - the _id of the job tied to the promise entry
+ * @param {*} msg - the
  * @return 
  */
-async function resolvePromise(flId: string, reject?: boolean) {
-  info(`Removing ${flId} from fl-sync job-promises index`);
+function resolvePromise(jobId: string, msg?: string | Error | JobError) {
+  info(`Removing ${jobId} from fl-sync job-promises index`);
   trace(`All promises: ${promises}`);
-  let prom = promises.get(flId)
-  if (reject) {
-    prom.reject(flId)
+  let prom = promises.get(jobId)
+  if (msg) {
+    prom.reject(msg)
   } else {
-    prom.resolve(flId)
+    prom.resolve(jobId)
   }
-  promises.delete(flId);
+  promises.delete(jobId);
   return;
 }
+
 export interface TrellisCOI {
   _id: string
   policies: {
@@ -732,7 +770,7 @@ async function handleScrapedResult(targetJobKey: string) {
     let key = Object.keys(targetResult[type] || {})[0];
     if (!key) return;
     let targetResultItem = targetResult?.[type] as JsonObject;
-    if (type && key && targetResultItem?.[key] && typeof targetResultItem?.[key] === 'object' && !Buffer.isBuffer(targetResultItem?.[key]) && !Array.isArray(targetResultItem?.[key])) {
+    if (type && key && targetResultItem?.[key] && isObj(targetResultItem?.[key])) {
       let targetRes = targetResultItem?.[key] as JsonObject;
       info(`Job result: [type: ${type}, key: ${key}, _id: ${targetRes?._id}]`);
     }
@@ -748,9 +786,13 @@ async function handleScrapedResult(targetJobKey: string) {
      let {key: flId, name, bid, mirrorid, masterid, bname} = configData as unknown as JobConfig;
 
     // 3. Fetch and validate the fl-mirror against the result
-    let flMirror = await CONNECTION.get({
-      path: `/${mirrorid}/food-logiq-mirror`
-    }).then(r => r.data as unknown as FlObject);
+    let flMirrorData = await CONNECTION.get({
+      path: `/${mirrorid}`
+    }).then(r => r.data as JsonObject);
+    if (!isObj(flMirrorData)) {
+      throw new Error(`Could not retrieve 'food-logiq-mirror' from request data.`)
+    }
+    let flMirror = flMirrorData['food-logiq-mirror'] as unknown as FlObject;
 
     let validationResult = await validateResult(result, flMirror, type);
 
@@ -771,7 +813,8 @@ async function handleScrapedResult(targetJobKey: string) {
         'in-progress'
       )
       await rejectFlDoc(flId, validationResult?.message)
-      throw new Error(validationResult!.message)
+      return; // The promise will get resolved on receiving the Reject status document
+      //throw new Error(validationResult!.message)
     }
 
     // 4b. Validation success. Generate the assessment and link things up.
@@ -787,9 +830,13 @@ async function handleScrapedResult(targetJobKey: string) {
       if (assessmentId) info(`Assessment with id [${assessmentId}] already exists for document _id [${flId}].`)
       if (!assessmentId) info(`Assessment does not yet exist for document _id [${flId}.`)
 
+    console.log("TYPE", type)
+
       if (type === 'Certificate of Insurance' && assessmentId) {
+        console.log('constructing COI')
         let assess = await constructCOIAssessment(flId, name, bid, bname, result, assessmentId);
         assessmentId = assessmentId || assess.data._id;
+        console.log('constructing COI done', assessmentId)
         info(`Spawned assessment [${assessmentId}] for business id [${bid}]`);
       }
 
@@ -909,9 +956,13 @@ async function queueAssessmentJob(change: ListChange, path: string) {
     let bid = pieces[0];
     let key = pieces[2] as string;
 
-    let {data: item} = await CONNECTION.get({
-      path: `${SERVICE_PATH}/businesses/${bid}/assessments/${key}/food-logiq-mirror`
-    }) as unknown as {data: FlObject};
+    let itemData = await CONNECTION.get({
+      path: `${SERVICE_PATH}/businesses/${bid}/assessments/${key}`
+    }).then(r => r.data as JsonObject);
+    if (!isObj(itemData)) {
+      throw new Error(`Could not retrieve 'food-logiq-mirror' from request data.`)
+    }
+    let item = itemData['food-logiq-mirror'] as unknown as FlObject;
 
 
     let { jobId } = assessmentToFlId.get(key)!;
@@ -920,7 +971,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       path: `/${jobId}/config`
     }) as unknown as {data: JobConfig}
 
-    if (typeof data !== 'object' || Buffer.isBuffer(data) || Array.isArray(data)) {
+    if (!isObj(data)) {
       throw new Error('Unexpected job config data')
     }
     let {key: flDocId, type: flDocType} = data;
@@ -994,7 +1045,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
     //} else if (status === 'Approved' && approvalUser === FL_TRELLIS_USER) {
     } else if (status === 'Approved') {
       //2b. Clean up and remove after approval
-      resolvePromise(item._id, false);
+      resolvePromise(jobId);
       assessmentToFlId.delete(item._id);
       // approve any linked jobs
       return approveFlDoc(flDocId);
@@ -1002,7 +1053,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
     } else if (item!.state === 'Rejected') {
       //2b. Notify, clean up, and remove after rejection
       let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
-      resolvePromise(item._id, true);
+      resolvePromise(jobId, message);
       assessmentToFlId.delete(item._id);
       return rejectFlDoc(flDocId, message);
     } else {
@@ -1018,7 +1069,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       change.resource_id
     );
   }
-}
+}//queueAssessmentJob
 
 async function queueDocumentJob(data: ListChange, path: string) {
   try {
@@ -1040,9 +1091,6 @@ async function queueDocumentJob(data: ListChange, path: string) {
     if (!bus || !bus.masterid) error(`No trading partner found for business ${bid}.`)
     if (!bus || !bus.masterid) return;
     let {masterid} = bus;
-
-    if (!masterid) error(`No trading partner found for business ${bid}.`)
-    if (!masterid) return;
     info(`Found trading partner masterid [${masterid}] for FL business ${bid}`)
 
     let item = fullData['food-logiq-mirror'] as unknown as FlObject;
@@ -1207,18 +1255,19 @@ export interface FlObject {
   expirationDate: string
 }
 
+interface Link {
+  _id: string;
+  _rev?: number | string
+}
 
+interface Links {
+  [key: string]: Link
+}
+
+export function isObj(thing: any) {
+  return (typeof thing === 'object' && !Buffer.isBuffer(thing) && !Array.isArray(thing))
+}
 
 function setConnection(conn: OADAClient) {
   CONNECTION = conn;
-}
-
-export default {
-  onTargetUpdate,
-  getLookup,
-  checkAssessment,
-  startJobCreator,
-  handlePendingDocument,
-  handleAssessment,
-  postTpDocument
 }

@@ -1,5 +1,5 @@
 import ksuid from 'ksuid';
-import tree from './tree';
+import tree from './tree.js';
 import type {OADAClient} from '@oada/client'
 
 async function fakeFlBusiness(con: OADAClient) {
