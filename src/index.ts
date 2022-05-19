@@ -482,7 +482,7 @@ if (esmain(import.meta)) {
   initialize({
     polling: true,
     watchConfig: true,
-    master: true,
+    master: false,
     target: true,
     service: true
   })

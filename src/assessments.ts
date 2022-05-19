@@ -73,7 +73,7 @@ interface AssessmentContent {
   umbrella: number;
   employer: number;
   worker: boolean;
-  updateFlId: string;
+  updateFlId?: string | void;
 }
 
 interface AnswerContent {
