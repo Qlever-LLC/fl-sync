@@ -1,6 +1,6 @@
-import config from './config';
+import config from './config.js';
 import type {JsonObject} from '@oada/client'
-import type {FlAssessment} from './mirrorWatch'
+import type {FlAssessment} from './mirrorWatch.js'
 import axios from 'axios';
 import _ from 'lodash';
 const CO_ID = config.get('foodlogiq.community.owner.id');
@@ -232,8 +232,6 @@ async function updateAssessment(path: string, data: FlAssessment) {
 
 
 
-module.exports = {
-  linkAssessmentToDocument,
+export {
   assessment_template,
-  spawnAssessment,
 }

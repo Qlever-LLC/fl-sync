@@ -1,10 +1,10 @@
-const config = require('../../src/config').default;
+import config from '../../dist/config.js';
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const COMMUNITY_NAME = config.get('foodlogiq.community.name');
 
-let coi = {
+export const coi = {
   "products": [],
   "locations": [],
   "contentType": "document",
@@ -174,6 +174,6 @@ let coi = {
   ]
 }
 
-module.exports = {
+export default {
   coi
 }

@@ -729,6 +729,6 @@ function pushReportItem(report, item, passFail, reason, remedy, newItems) {
   }
 }
 
-module.exports = {
+export {
   generateReport,
 }

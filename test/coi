@@ -1,27 +1,30 @@
-import { expect } from 'chai';
+import test from 'ava';
 import Promise from 'bluebird';
 import { setTimeout } from 'timers/promises';
-import { connect, OADAClient } from '@oada/client';
+import { connect, OADAClient, JsonObject } from '@oada/client';
+import type {Body} from '@oada/client/lib/client';
 import moment from 'moment';
 import axios from 'axios';
 
-import tree from '../src/tree';
-import {test} from '../src/index';
-const { coi } = require('./documents/coi');
+import tree from '../dist/tree.js';
+import {initialize as service} from '../dist/index.js';
+//import { coi } from './documents/coi';
 
-import config from "../src/config";
+import config from "../dist/config.js";
 const FL_TOKEN = config.get('foodlogiq.token') || '';
 const FL_DOMAIN = config.get('foodlogiq.domain') || '';
 const SUPPLIER = config.get('foodlogiq.testSupplier.id')
 const TOKEN = process.env.TOKEN || '';// || config.get('trellis.token') || '';
 const DOMAIN = config.get('trellis.domain') || '';
-let SERVICE_PATH = config.get('service.path') || '';
-let SERVICE_NAME = config.get('service.name') || '';
-tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 const INTERVAL_MS = config.get('foodlogiq.interval')*1000;
+import type {TreeKey} from '@oada/list-lib/lib/tree';
+let SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
+let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']){
+  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+}
 
-const jobwaittime = 10000; // ms to wait for job to complete, tune to your oada response time
-const pending = `${SERVICE_PATH}/jobs/pending`
+//const pending = `${SERVICE_PATH}/jobs/pending`
 /*
 async function postDoc(data, oada) {
   let fldata = await axios({
@@ -54,10 +57,10 @@ async function postDoc(data, oada) {
 }
 */
 
-async function postDoc(data, oada) {
+async function postDoc(data: Body, oada: OADAClient) {
   let result = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`
-  }).then(r => r.data)
+  }).then(r => r.data as JsonObject)
   .catch(err => {
     if (err.status === 404) {
       return {};
@@ -88,12 +91,10 @@ async function postDoc(data, oada) {
 
   return flId
 }
-
-describe('End-to-end tests of various FL documents: docs.test.js', function() {
-  this.timeout(jobwaittime*10);
+console.log(postDoc);
   let oada: OADAClient
 
-  before(async () => {
+  test.before(async () => {
     oada = await connect({domain: DOMAIN, token: TOKEN});
     oada.put({
       path: `${SERVICE_PATH}/_meta/oada-poll/food-logiq-poll`,
@@ -128,7 +129,7 @@ describe('End-to-end tests of various FL documents: docs.test.js', function() {
       })
     })
 
-    test({
+    service({
       polling: true,
       target: true,
       master: false,
@@ -138,7 +139,7 @@ describe('End-to-end tests of various FL documents: docs.test.js', function() {
     await setTimeout(15000/2)
   });
 
-  after(async () => {
+  test.after(async () => {
     /*
     let data = await oada.get({
       path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
@@ -351,4 +352,3 @@ describe('End-to-end tests of various FL documents: docs.test.js', function() {
     expect(result?.services?.['fl-sync']?.jobs).to.equal(undefined); 
   });
  */
-});
