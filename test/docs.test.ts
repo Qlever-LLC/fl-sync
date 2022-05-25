@@ -26,7 +26,8 @@ const INTERVAL_MS = config.get('foodlogiq.interval')*1000;
 //const pending = `${SERVICE_PATH}/jobs/pending`
 let oada: OADAClient
 
-test.before(async () => {
+test.before(async (t) => {
+  t.timeout(60000);
   oada = await connect({domain: DOMAIN, token: TOKEN});
   oada.put({
     path: `${SERVICE_PATH}/_meta/oada-poll/food-logiq-poll`,
@@ -61,120 +62,119 @@ test.before(async () => {
     })
   })
 
-  service({
+  await service({
     polling: true,
     target: true,
     master: false,
     service: true,
     watchConfig: true
   })
-  await setTimeout(5000)
 });
 
 test.skip('Should fail and warn suppliers when multiple PDFs are attached on COI documents.', async (t) => {
+  t.timeout(200000);
   let data = coi;
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "multi-files-attached");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
 //TODO: Find an example of this and get the flId
 test.skip('Should allow suppliers to upload multiple files attached on some doc types.', async (t) => {
+  t.timeout(200000);
   let data = await getFlDoc("");
+  //TODO: This needs to be addressed when I get to it; rerunFlDoc is for failures
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "multi-files-attached");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
 test.skip(`Should fail on Target fail due to multiple COIs in one pdf`, async (t) => {
-  let _id = "resources/6284fa41f9c461000ffd19ce";
+  t.timeout(200000);
+  let _id = "resources/205t2wh2G1a9UzEtxaPh0cDANr1";
   let data = await getFlDoc(_id);
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "target-multiple-docs-combined");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
 //Keep this one skipped until I can make attachments "bad"
+//TODO: Find an example of this
 test.skip('Should fail when attachments cannot be retrieved.', async (t) => {
+  t.timeout(200000);
   let data = coi;
   data.attachments = [
     data.attachments[0]!
   ];
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "bad-fl-attachments");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have been added
   t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
+//TODO: The old examples of this no longer throw that particular error.
+//Target may have fixed the issue and may no longer throw that error.
 test.skip(`Should fail on Target validation failure (COI)`, async (t) => {
-  let _id = "resources/205t2sVsqFaMSZTcQLb5oTI2yFl";
+  t.timeout(200000);
+  let _id = "resources/20xekuS2XiDWIQJBJfqau7tHTxF";
   let data = await getFlDoc(_id);
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "target-validation");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
+//TODO: Determine whether certain validation pieces regarding COI holder field are checked;
 test.skip(`Should fail on Target validation failure (COI) - specific holder checks???`, async (t) => {
+  t.timeout(200000);
   let _id = "resources/205t2sVsqFaMSZTcQLb5oTI2yFl";
   let data = await getFlDoc(_id);
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "target-validation");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
 test.skip(`Should fail on Target fail on unrecognized format`, async (t) => {
+  t.timeout(200000);
   let _id = "resources/205z6XnG6iPcyw04yYLMSPkRSUr";
   let data = await getFlDoc(_id);
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "target-unrecognized");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
-//Wierd one, not sure if target still errors in this way;
-test.skip(`Should fail on Target failure to identify doc`, async (t) => {
+//This now gets recognized as a nutrition information document
+test(`Should fail on Target failure to identify doc`, async (t) => {
+  t.timeout(200000);
   let _id = "resources/26ZgYWfzAvX87PR8Y9JKXium7mm";
   let data = await getFlDoc(_id);
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "target-unrecognized");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 })
 
 //File is not a Textual PDF,requires OCR to be processed
+//These are now hanging. Inquire...
 test.skip(`Should fail on Target failure due to not text pdf, needs OCR`, async (t) => {
+  t.timeout(200000);
   let _id = "resources/206fbmvoqSwsgeclcHpTceT10kU";
   let data = await getFlDoc(_id);
   let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "target-unrecognized");
   t.assert(jobKeys[jobKey])
-  //Only the one job should have failed
   t.is(Object.keys(jobKeys).length, keyCount+1);
 })
 
-test(`Should approve a valid COI document.`, async (t) => {
+test.skip(`Should approve a valid COI document.`, async (t) => {
   t.timeout(300000)
   let data = coi;
   data.attachments.pop();
-  let flId = await postDoc(data, oada);
-  await setTimeout(60000)
-
-  let jobId = await oada.get({
-    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta/services/fl-sync/jobs`
-  }).then(r => {
-    if (r && typeof r.data === 'object') {
-      // @ts-ignore
-      return Object.keys(r.data)[0]
-    } else return undefined;
-  })
-  let jobKey = jobId!.replace(/^resources\//, '');
+  let {jobKey} = await postAndPause(data, oada);
+  await setTimeout(100000)
+  console.log("CONTINUING", `${SERVICE_PATH}/jobs/success/day-index/${moment().format('YYYY-MM-DD')}/${jobKey}`);
 
   let job = await oada.get({
-    path: `${SERVICE_PATH}/jobs/success/${moment().format('YYYY-MM-DD')}/${jobKey}`
+    path: `${SERVICE_PATH}/jobs/success/day-index/${moment().format('YYYY-MM-DD')}/${jobKey}`
+  }).catch(err => {
+    console.log(err);
+    return {status: 0}
   })
 
   t.is(job.status, 200);
@@ -197,7 +197,7 @@ test.skip(`Should reject a COI with expirations that do not match the user-enter
   let jobKey = jobId!.replace(/^resources\//, '');
 
   let job = await oada.get({
-    path: `${SERVICE_PATH}/jobs/success/${moment().format('YYYY-MM-DD')}/${jobKey}`
+    path: `${SERVICE_PATH}/jobs/success/day-index/${moment().format('YYYY-MM-DD')}/${jobKey}`
   })
   t.is(job.status, 200);
 
@@ -226,7 +226,7 @@ test.skip(`Should reject a COI with insufficient policy coverage.`, async (t) =>
   let jobKey = jobId!.replace(/^resources\//, '');
 
   let job = await oada.get({
-    path: `${SERVICE_PATH}/jobs/failure/fl-validation/${moment().format('YYYY-MM-DD')}/${jobKey}`
+    path: `${SERVICE_PATH}/jobs/failure/fl-validation/day-index/${moment().format('YYYY-MM-DD')}/${jobKey}`
   })
   t.is(job.status, 200);
 
@@ -377,7 +377,7 @@ async function postDoc(data: Body, oada: OADAClient) {
       "Authorization": `${FL_TOKEN}`,
     }
   })
-  await setTimeout(INTERVAL_MS+1000)
+  await setTimeout(INTERVAL_MS+5000)
   let resp = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`
   }).then(r => r.data)
@@ -393,20 +393,16 @@ async function postDoc(data: Body, oada: OADAClient) {
 }
 
 async function getFlDoc(_id: string) {
-  return oada.get({
+  let resp = await oada.get({
     path: `/${_id}`
   }).then(r => r.data as JsonObject)
+  if (!resp["food-logiq-mirror"]) throw new Error("food-logiq-mirror")
+  return trellisMirrorToFlInput(resp["food-logiq-mirror"]) as unknown as Body;
 }
 
-async function rerunFlDoc(data: JsonObject, failType: string) {
-  let jobsResultPath = `${SERVICE_PATH}/jobs/failure/${failType}/day-index/${moment().format('YYYY-MM-DD')}`
-
-  let keyCount = await oada.get({
-    path: jobsResultPath
-  }).then(r => Object.keys(r.data as JsonObject).length)
-
+async function postAndPause(data: Body, oada: OADAClient) {
   let flId = await postDoc(data, oada);
-  await setTimeout(25000)
+  await setTimeout(15000)
 
   let jobId = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta/services/fl-sync/jobs`
@@ -419,9 +415,57 @@ async function rerunFlDoc(data: JsonObject, failType: string) {
   let jobKey = jobId!.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id')
 
+  return {jobKey, jobId, flId}
+}
+
+async function rerunFlDoc(data: Body, failType: string) {
+  let jobsResultPath = `${SERVICE_PATH}/jobs/failure/${failType}/day-index/${moment().format('YYYY-MM-DD')}`
+
+  let keyCount = await oada.get({
+    path: jobsResultPath
+  }).then(r => Object.keys(r.data as JsonObject).length)
+  .catch(err => {
+    if (err.status === 404) {
+      return 4; //number of internal _-prefixed keys of an empty resource
+    } else throw err;
+  })
+
+  let {flId, jobId, jobKey} = await postAndPause(data, oada);
+  await setTimeout(40000);
+
   let jobKeys = await oada.get({
     path: jobsResultPath
   }).then(r => r.data as JsonObject)
 
   return {jobKeys, jobKey, flId, jobId, keyCount}
 }
+
+async function trellisMirrorToFlInput(data: any) {
+  let newData = coi as unknown as FlBody;
+
+  newData.shareRecipients = [data.shareSource];
+  newData.attachments = data.attachments;
+
+  return newData as FlBody
+}
+
+interface FlBody extends FlObject {
+  products: [];
+  locations: [];
+  attachments: {};
+  shareRecipients: [{
+    type: {};
+    community: {};
+    shareSpecificAttributes: {};
+  }];
+}
+
+/*
+interface TrellisFlMirror extends FlObject {
+  attachments: {};
+  community: {};
+  shareSource: {
+    community: {};
+  };
+}
+*/

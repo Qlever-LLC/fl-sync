@@ -1,19 +1,20 @@
 import test from 'ava';
 import Promise from 'bluebird';
 import { setTimeout } from 'timers/promises';
-import { JsonObject, connect, OADAClient } from '@oada/client';
+import { connect, OADAClient } from '@oada/client';
 import type { Body } from '@oada/client/lib/client';
 import moment from 'moment';
 import axios from 'axios';
 import tree from '../dist/tree.js';
 import {initialize as service} from '../dist/index.js';
-import {isObj, FlObject} from '../dist/mirrorWatch.js';
+import {types as flDocTypes} from './documents/s3Infos.js'
 import { coi } from './documents/coi.js';
 import config from "../dist/config.js";
 //import {makeTargetJob, sendUpdate} from './dummyTarget.js'
 const FL_TOKEN = config.get('foodlogiq.token') || '';
 const FL_DOMAIN = config.get('foodlogiq.domain') || '';
 const SUPPLIER = config.get('foodlogiq.testSupplier.id')
+const SF = config.get('foodlogiq.community.owner.id');
 const TOKEN = process.env.TOKEN || '';// || config.get('trellis.token') || '';
 const DOMAIN = config.get('trellis.domain') || '';
 import type {TreeKey} from '@oada/list-lib/lib/tree';
@@ -22,13 +23,14 @@ let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']){
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 }
-import {types} from './documents/s3Infos.js';
-console.log(types);
 const INTERVAL_MS = config.get('foodlogiq.interval')*1000;
 //const pending = `${SERVICE_PATH}/jobs/pending`
 let oada: OADAClient
+let doctypes : any;
 
-test.before(async () => {
+test.before(async (t) => {
+  t.timeout(60000);
+  doctypes = await fetchFlDocTypes();
   oada = await connect({domain: DOMAIN, token: TOKEN});
   oada.put({
     path: `${SERVICE_PATH}/_meta/oada-poll/food-logiq-poll`,
@@ -63,38 +65,58 @@ test.before(async () => {
     })
   })
 
-  service({
+  await service({
     polling: true,
     target: true,
     master: false,
     service: true,
     watchConfig: true
   })
-  await setTimeout(15000/2)
 });
 
-test.skip(`Should approve a valid COI document.`, async (t) => {
-  let data = coi;
-  data.attachments.pop();
-  let flId = await postDoc(data, oada);
-  await setTimeout(100000)
-
-  let jobId = await oada.get({
-    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta/services/fl-sync/jobs`
-  }).then(r => {
-    if (r && typeof r.data === 'object') {
-      // @ts-ignore
-      return Object.keys(r.data)[0]
-    } else return undefined;
-  })
-  let jobKey = jobId!.replace(/^resources\//, '');
-
+test('Run new doc types', async (t) => {
+  t.timeout(200000);
+  //1. grab the document from FL
+  let jobKey = await testFlDoc("100g Nutritional Information");
   let job = await oada.get({
-    path: `${SERVICE_PATH}/jobs/success/${moment().format('YYYY-MM-DD')}/${jobKey}`
+    path: `${SERVICE_PATH}/jobs/success/day-index/${moment().format('YYYY-MM-DD')}/${jobKey}`
+  }).catch(err => {
+    console.log(err);
+    return {status: 0}
   })
 
   t.is(job.status, 200);
+
 });
+
+async function testFlDoc(docType: keyof typeof flDocTypes) {
+  let data = coi;
+  data.name = `Automated Test ${docType}`;
+  // Modify attachments to use the ones from s3Infos
+  let key = Object.keys(flDocTypes[docType])[0];
+  //@ts-ignore
+  data.attachments = [flDocTypes[docType][key]];
+  //@ts-ignore
+  data.shareRecipients[0].type = doctypes[docType];
+
+  let {jobKey} = await postAndPause(data, oada);
+  await setTimeout(100000);
+
+  return jobKey
+}
+
+async function fetchFlDocTypes() {
+  let response = await axios({
+    method: 'get',
+    url: `${FL_DOMAIN}/businesses/${SF}/documenttypes`,
+    headers: {
+      "Authorization": `${FL_TOKEN}`,
+    }
+  }).then(r => r.data)
+  //@ts-ignore
+  let doctypes = Object.fromEntries(response.pageItems.map(i => [i.name, i]))
+  return doctypes;
+}
 
 async function postDoc(data: Body, oada: OADAClient) {
   let result = await oada.get({
@@ -116,7 +138,7 @@ async function postDoc(data: Body, oada: OADAClient) {
       "Authorization": `${FL_TOKEN}`,
     }
   })
-  await setTimeout(INTERVAL_MS+1000)
+  await setTimeout(INTERVAL_MS+5000)
   let resp = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`
   }).then(r => r.data)
@@ -131,21 +153,19 @@ async function postDoc(data: Body, oada: OADAClient) {
   return flId
 }
 
+/*
 async function getFlDoc(_id: string) {
-  return oada.get({
+  let resp = await oada.get({
     path: `/${_id}`
   }).then(r => r.data as JsonObject)
+  if (!resp["food-logiq-mirror"]) throw new Error("food-logiq-mirror")
+  return trellisMirrorToFlInput(resp["food-logiq-mirror"]) as unknown as Body;
 }
+*/
 
-async function rerunFlDoc(data: JsonObject, failType: string) {
-  let jobsResultPath = `${SERVICE_PATH}/jobs/failure/${failType}/day-index/${moment().format('YYYY-MM-DD')}`
-
-  let keyCount = await oada.get({
-    path: jobsResultPath
-  }).then(r => Object.keys(r.data as JsonObject).length)
-
+async function postAndPause(data: Body, oada: OADAClient) {
   let flId = await postDoc(data, oada);
-  await setTimeout(25000)
+  await setTimeout(15000)
 
   let jobId = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta/services/fl-sync/jobs`
@@ -158,9 +178,59 @@ async function rerunFlDoc(data: JsonObject, failType: string) {
   let jobKey = jobId!.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id')
 
+  return {jobKey, jobId, flId}
+}
+
+/*
+async function rerunFlDoc(data: Body, failType: string) {
+  let jobsResultPath = `${SERVICE_PATH}/jobs/failure/${failType}/day-index/${moment().format('YYYY-MM-DD')}`
+
+  let keyCount = await oada.get({
+    path: jobsResultPath
+  }).then(r => Object.keys(r.data as JsonObject).length)
+  .catch(err => {
+    if (err.status === 404) {
+      return 4; //number of internal _-prefixed keys of an empty resource
+    } else throw err;
+  })
+
+  let {flId, jobId, jobKey} = await postAndPause(data, oada);
+  await setTimeout(40000);
+
   let jobKeys = await oada.get({
     path: jobsResultPath
   }).then(r => r.data as JsonObject)
 
   return {jobKeys, jobKey, flId, jobId, keyCount}
 }
+
+async function trellisMirrorToFlInput(data: any) {
+  let newData = coi as unknown as FlBody;
+
+  newData.shareRecipients = [data.shareSource];
+  newData.attachments = data.attachments;
+
+  return newData as FlBody
+}
+
+interface FlBody extends FlObject {
+  products: [];
+  locations: [];
+  attachments: {};
+  shareRecipients: [{
+    type: {};
+    community: {};
+    shareSpecificAttributes: {};
+  }];
+}
+*/
+
+/*
+interface TrellisFlMirror extends FlObject {
+  attachments: {};
+  community: {};
+  shareSource: {
+    community: {};
+  };
+}
+*/
