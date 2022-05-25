@@ -8,15 +8,14 @@ export function fromOadaType(type: string) {
 
 export async function flToTrellis(flDoc: FlObject) {
   let flDocType = flDoc.shareSource.type.name as keyof typeof conversions;
-  console.log(flDocType);
   let document : any = {
-    expire_date: flDoc!.expirationDate,
     effective_date: flDoc!.shareSource!.shareSpecificAttributes!.effectiveDate,
   }
 
   switch(flDocType) {
 
     case "Certificate of Insurance":
+      document.expire_date = flDoc!.expirationDate;
       document.holder = {
         name: flDoc!.shareSource!.sourceBusiness!.name,
         location: {
@@ -28,6 +27,9 @@ export async function flToTrellis(flDoc: FlObject) {
         }
       }
       break;
+    case "100g Nutritional Information":
+      break;
+
 
     default:
       break;
@@ -82,7 +84,7 @@ let conversions = {
   },
   '100g Nutritional Information': {
     name: '100g Nutritional Information',
-    urlName: 'nutritional-information',
+    urlName: '100g-nutritional-information',
     type: 'application/vnd.trellisfw.nutritional-information.1+json',
     alternativeNames: [
       'Nutrition Information',

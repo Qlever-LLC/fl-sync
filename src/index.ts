@@ -21,7 +21,7 @@ import { Service } from '@oada/jobs';
 import esmain from 'es-main';
 
 import axios, {AxiosRequestConfig} from 'axios';
-import ksuid from 'ksuid';
+//import ksuid from 'ksuid';
 import debug from 'debug';
 import Promise from 'bluebird';
 import moment, {Moment} from 'moment';
@@ -112,9 +112,6 @@ async function watchFlSyncConfig() {
 
   handleConfigChanges(changes)
   info(`Watching ${SERVICE_PATH} for changes to the config`);
-
-
-  console.log('here')
 }//watchFlSyncConfig
 
 /**
@@ -168,7 +165,7 @@ async function fetchCommunityResources({ type, date, pageIndex=undefined }: {typ
       return;
     }
     let path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
-    let _id;
+//    let _id;
     try {
       let resp = await CONNECTION.get({ path }).then(r => r.data as JsonObject)
 
@@ -178,7 +175,7 @@ async function fetchCommunityResources({ type, date, pageIndex=undefined }: {typ
         info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
         delay += 20000;
         sync = true;
-        _id = resp._id;
+//        _id = resp._id;
       }
     } catch (err: any) {
       if (err.status !== 404) throw err;
@@ -189,7 +186,8 @@ async function fetchCommunityResources({ type, date, pageIndex=undefined }: {typ
 
     // Create a new resource if necessary and link to it
     // Doing a tree-put manually-ish
-    if (!_id) {
+    // 5-20-2022 - no longer needed due to fixed tree put
+    /*if (!_id) {
       _id = `resources/${ksuid.randomSync().string}`;
       await CONNECTION.put({
         path: `${SERVICE_PATH}/businesses/${bid}/${type}`,
@@ -200,14 +198,17 @@ async function fetchCommunityResources({ type, date, pageIndex=undefined }: {typ
           }
         },
         tree,
-      });
-    }
+      }).catch((err) => {
+      })
+      }
+      */
 
     // Now, sync
     if (sync) {
       await CONNECTION.put({
-        path: `/${_id}`,
-        data: { 'food-logiq-mirror': item } as unknown as Body
+        path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
+        data: {'food-logiq-mirror': item } as unknown as Body,
+        tree
       })
       info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
     }
@@ -465,7 +466,8 @@ export async function initialize({
       name: 'fl-sync',
     });
     */
-//    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
+    //    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
+    info('Initialize complete. Service running...')
 
   } catch (err) {
     error(err);
