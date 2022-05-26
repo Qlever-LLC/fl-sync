@@ -11,7 +11,7 @@ import jszip from 'jszip';
 import config from './config.js';
 import tree from './tree.js';
 import md5 from 'md5';
-import type {TreeKey} from '@oada/list-lib/lib/tree'
+import type {TreeKey} from '@oada/list-lib/dist/tree.js'
 import {validateResult} from './docTypeValidation.js';
 import mirrorTree from './tree.mirrorWatch.js';
 import checkAssessment from './checkAssessments.js';
@@ -96,9 +96,9 @@ function mostRecentKsuid(keys: Array<string>) {
 
 /**
  * searching and assigning target jobs to FL documents
- * @param {*} item 
- * @param {*} key 
- * @returns 
+ * @param {*} item
+ * @param {*} key
+ * @returns
  */
 // eslint-disable-next-line @typescript-eslint/no-shadow
 export async function getLookup(item: any, key: string) {
@@ -125,7 +125,7 @@ export async function getLookup(item: any, key: string) {
     let {data: { bid, key: docKey }} = await CONNECTION.get({
       path: `/${jobId}/config`
     }) as {data: JsonObject};
-      
+
     targetToFlSyncJobs.set(key, {jobKey, jobId})
 
     await CONNECTION.put({
@@ -140,7 +140,7 @@ export async function getLookup(item: any, key: string) {
         }
       }
     })
-    
+
     await CONNECTION.put({
       path: `/${jobId}/target-jobs`,
       data: {
@@ -158,7 +158,7 @@ export async function getLookup(item: any, key: string) {
  * handling an update from target
  * @param {*} change
  * @param {*} targetJobKey
- * @returns 
+ * @returns
  */
 export async function onTargetChange(change: Change, targetJobKey: string) {
   trace(`Recieved update for job [${targetJobKey}]`);
@@ -275,7 +275,7 @@ async function handleTargetUpdates(change: Change, key: string) {
 
 /**
  * approves fl document
- * @param {*} docId 
+ * @param {*} docId
  */
 async function approveFlDoc(docId: string) {
   info(`Approving associated FL Doc ${docId}`);
@@ -290,8 +290,8 @@ async function approveFlDoc(docId: string) {
 }//approveFlDoc
 
 /**
- * handles queued assessment-type jobs. Assessments should be treated as separate from the 
-   documents as much as possible. 
+ * handles queued assessment-type jobs. Assessments should be treated as separate from the
+   documents as much as possible.
  */
 //@ts-ignore
 export const handleAssessment: WorkerFunction = async (job: any, {oada, jobId: jobKey}) => {
@@ -458,7 +458,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
         pdf: 0 // wipes out {key1: {}, key2: {}, etc.}
       }
     },
-    headers: { 
+    headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${TRELLIS_TOKEN}`
     },
@@ -473,7 +473,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
         }
       }
     },
-    headers: { 
+    headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${TRELLIS_TOKEN}`
     },
@@ -614,10 +614,10 @@ export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, job
 
 /**
  * Move approved documents into final location. Triggered by document re-mirror.
- * @param {*} item 
- * @param {*} bid 
- * @param {*} masterid 
- * @returns 
+ * @param {*} item
+ * @param {*} bid
+ * @param {*} masterid
+ * @returns
  */
 async function finishDoc(item: FlObject, bid: string, masterid: string, status: string) {
 
@@ -673,7 +673,7 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
  * resolves flSyncJobs such that jobs get succeeded
  * @param {*} jobId - the _id of the job tied to the promise entry
  * @param {*} msg - the
- * @return 
+ * @return
  */
 function endJob(jobId: string, msg?: string | Error | JobError) {
   info(`Removing ${jobId} from fl-sync job-flSyncJobs index`);
