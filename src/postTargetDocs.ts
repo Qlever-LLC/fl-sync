@@ -2,7 +2,7 @@ import oada from '@oada/client';
 import Promise from "bluebird";
 import axios from "axios";
 import type {JsonObject, OADAClient} from '@oada/client'
-import type {TreeKey} from '@oada/list-lib/lib/tree';
+import type {TreeKey} from '@oada/list-lib/dist/tree.js';
 
 // configuration details
 import config from "./config.js";
