@@ -8,7 +8,7 @@ let ListWatch = oadalist.ListWatch;
 import tree from './tree.masterData.js';
 import config from './config.masterdata.js';
 import type {JsonObject, OADAClient} from '@oada/client';
-import type {TreeKey} from '@oada/list-lib/lib/tree'
+import type {TreeKey} from '@oada/list-lib/dist/tree.js'
 
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
@@ -51,8 +51,8 @@ export async function watchTrellisFLBusinesses(conn: OADAClient) {
 /**
  * adds a trading-partner to the trellisfw when
  * a new business is found under services/fl-sync/businesses
- * @param {*} item 
- * @param {*} key 
+ * @param {*} item
+ * @param {*} key
  */
 async function addTP2Trellis(item: any, key: string) {
   info(`New FL business detected [${item._id}]. Mapping to trellis trading partner.`);
@@ -86,7 +86,7 @@ async function addTP2Trellis(item: any, key: string) {
                   to: ``,
                 })*/
                fl_mirror_content = false;
-               return 
+               return
               }
               tries++;
             } else {
@@ -172,8 +172,8 @@ async function addTP2Trellis(item: any, key: string) {
 /**
  * assigns item data (new business) into the trading partner template
  * @param {*} data: TradingPartner
- * @param {*} item 
- * @returns 
+ * @param {*} item
+ * @returns
  */
 function assignData(data: TradingPartner, item: any) {//FIXME: NEED type for item
   try {
@@ -200,7 +200,7 @@ function assignData(data: TradingPartner, item: any) {//FIXME: NEED type for ite
 /**
  * builds expand index entry
  * @param data TradingPartner
- * @returns 
+ * @returns
  */
 function assignDataExpandIndex(data: TradingPartner, item: any) {//FIXME: NEED type for item
   let _expandIndexData: ExpandIndexRecord = _.cloneDeep(expandIndexTemplate);
@@ -245,7 +245,7 @@ async function updateExpandIndex(expandIndexRecord: JsonObject, key: string) {
 }//updateExpandIndex
 
 /**
- * Updates the masterid property in the 
+ * Updates the masterid property in the
  * fl-sync/business/<bid> endpoint
  * @param masterid string that contains internalid from FL or
  * random string created by sap-sync
