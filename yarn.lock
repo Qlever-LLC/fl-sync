@@ -348,9 +348,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/client@npm:^4.0.1, @oada/client@npm:^4.0.2":
+  version: 4.0.2
+  resolution: "@oada/client@npm:4.0.2"
   dependencies:
     "@oada/types": ^2.0.1
     abort-controller: ^3.0.0
@@ -373,14 +373,15 @@ __metadata:
     supports-color: ^9.2.2
     tslib: ^2.4.0
     utf-8-validate: ^5.0.9
-    ws: ^8.5.0
+    ws: ^8.6.0
     xksuid: "https://github.com/qlever-llc/xksuid.git#commit=5b2761792b1b1b59ea71ab48df1252fcb851e502"
+  checksum: d05f7f2bf1672ff7bd3daafbf51fd9be84197795c89b6ba0d525be71f0516978a1801e4f171226dc9f9652d06cae3e911ad3207c7b14093dab17c023c2c4ad78
   languageName: node
-  linkType: soft
+  linkType: hard
 
-"@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/jobs@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "@oada/jobs@npm:4.0.0"
   dependencies:
     "@oada/client": ^4.0.1
     "@oada/oadaify": ^1.0.1
@@ -399,23 +400,25 @@ __metadata:
     tslib: ^2.4.0
   bin:
     oada-jobs: ./src/cli.mjs
+  checksum: 6badd474ab79bc714cb7f5bef20c1e4c8933c2d7725dfd0bfb8d3e719f35236079263519c5b7b12ed84437c2d30eaa84acea50018a8edfe55c49c0f73dc39b69
   languageName: node
-  linkType: soft
+  linkType: hard
 
-"@oada/list-lib@portal:/home/sanoel/list-lib::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/list-lib@portal:/home/sanoel/list-lib::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/list-lib@npm:^3.0.6":
+  version: 3.0.6
+  resolution: "@oada/list-lib@npm:3.0.6"
   dependencies:
-    "@oada/client": ^3.0.3
-    "@oada/types": ^1.7.0
+    "@oada/client": ^4.0.2
+    "@oada/types": ^2.0.1
     clone-deep: ^4.0.1
-    debug: ^4.3.3
+    debug: ^4.3.4
     isomorphic-timers-promises: ^1.0.1
-    json-pointer: ^0.6.1
+    json-pointer: ^0.6.2
     jsonpath-plus: ^6.0.1
-    tslib: ^2.3.1
+    tslib: ^2.4.0
+  checksum: be777ad342a3f73014acff0ac6a4de8dfcea879944ca57df912effe85bcbf8bd9f78908270bb56a9f60b361ab4bbef2844f2e546b14db276ce31803eb32efe1a
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@oada/oadaify@npm:^1.0.1":
   version: 1.0.1
@@ -426,18 +429,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/poll@portal:/home/sanoel/poll::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/poll@portal:/home/sanoel/poll::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/poll@npm:^0.0.2":
+  version: 0.0.2
+  resolution: "@oada/poll@npm:0.0.2"
   dependencies:
     "@oada/client": ^4.0.1
     debug: ^4.3.3
     moment: ^2.29.3
     tslib: ^2.4.0
+  checksum: ab8a24b12c010f486fd9843e0bc5e7c7ac2c37212a373bf66d34cfc1e36be59fbcca95a268a370be711912b086655d68908322852f56456e7e67308d5aa521ca
   languageName: node
-  linkType: soft
+  linkType: hard
 
-"@oada/types@npm:^1.7.0, @oada/types@npm:^1.8.1":
+"@oada/types@npm:^1.8.1":
   version: 1.8.1
   resolution: "@oada/types@npm:1.8.1"
   dependencies:
@@ -480,10 +484,10 @@ __metadata:
   resolution: "@qlever-llc/fl-sync@workspace:."
   dependencies:
     "@ava/typescript": ^3.0.1
-    "@oada/client": ^3.0.4
-    "@oada/jobs": ^3.0.2
-    "@oada/list-lib": ^2.2.0
-    "@oada/poll": ^0.0.1
+    "@oada/client": ^4.0.2
+    "@oada/jobs": ^4.0.0
+    "@oada/list-lib": ^3.0.6
+    "@oada/poll": ^0.0.2
     "@oada/types": ^1.8.1
     "@overleaf/o-error": ^3.3.1
     "@tsconfig/node16": ^1.0.1
@@ -493,6 +497,7 @@ __metadata:
     "@types/debug": ^4.1.7
     "@types/json-pointer": ^1.0.31
     "@types/lodash": ^4.14.182
+    "@types/md5": ^2
     "@types/mssql": ^7.1.5
     "@types/node": latest
     "@yarnpkg/pnpify": ^3.0.0-rc.6
@@ -519,6 +524,7 @@ __metadata:
     jszip: ^3.6.0
     ksuid: ^3.0.0
     lodash: ^4.17.21
+    md5: ^2.3.0
     moment: ^2.29.1
     momentjs: ^2.0.0
     mssql: ^8.1.0
@@ -744,6 +750,13 @@ __metadata:
   version: 4.14.182
   resolution: "@types/lodash@npm:4.14.182"
   checksum: 7dd137aa9dbabd632408bd37009d984655164fa1ecc3f2b6eb94afe35bf0a5852cbab6183148d883e9c73a958b7fec9a9bcf7c8e45d41195add6a18c34958209
+  languageName: node
+  linkType: hard
+
+"@types/md5@npm:^2":
+  version: 2.3.2
+  resolution: "@types/md5@npm:2.3.2"
+  checksum: ce59779c5aa9bcafe6e089f7a0be2f25fb4661d437809dd7e895e13e9369855aeee8521a0a954bb38468cd8ed2d7c84d5dbb3ba37544f5a11c8a199e5a8561b6
   languageName: node
   linkType: hard
 
@@ -1812,6 +1825,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"charenc@npm:0.0.2":
+  version: 0.0.2
+  resolution: "charenc@npm:0.0.2"
+  checksum: 81dcadbe57e861d527faf6dd3855dc857395a1c4d6781f4847288ab23cffb7b3ee80d57c15bba7252ffe3e5e8019db767757ee7975663ad2ca0939bb8fcaf2e5
+  languageName: node
+  linkType: hard
+
 "check-error@npm:^1.0.2":
   version: 1.0.2
   resolution: "check-error@npm:1.0.2"
@@ -2240,6 +2260,13 @@ __metadata:
     shebang-command: ^2.0.0
     which: ^2.0.1
   checksum: 671cc7c7288c3a8406f3c69a3ae2fc85555c04169e9d611def9a675635472614f1c0ed0ef80955d5b6d4e724f6ced67f0ad1bb006c2ea643488fcfef994d7f52
+  languageName: node
+  linkType: hard
+
+"crypt@npm:0.0.2":
+  version: 0.0.2
+  resolution: "crypt@npm:0.0.2"
+  checksum: baf4c7bbe05df656ec230018af8cf7dbe8c14b36b98726939cef008d473f6fe7a4fad906cfea4062c93af516f1550a3f43ceb4d6615329612c6511378ed9fe34
   languageName: node
   linkType: hard
 
@@ -3585,6 +3612,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"is-buffer@npm:~1.1.6":
+  version: 1.1.6
+  resolution: "is-buffer@npm:1.1.6"
+  checksum: 4a186d995d8bbf9153b4bd9ff9fd04ae75068fe695d29025d25e592d9488911eeece84eefbd8fa41b8ddcc0711058a71d4c466dcf6f1f6e1d83830052d8ca707
+  languageName: node
+  linkType: hard
+
 "is-callable@npm:^1.1.4, is-callable@npm:^1.2.4":
   version: 1.2.4
   resolution: "is-callable@npm:1.2.4"
@@ -3996,6 +4030,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"json-pointer@npm:^0.6.2":
+  version: 0.6.2
+  resolution: "json-pointer@npm:0.6.2"
+  dependencies:
+    foreach: ^2.0.4
+  checksum: 668143014b16d7f90e6f0e6c2d756b00b799424f58d750794a79a24cbce595855b224f7861986aaff719579558fbab81fb83c7371f5e24aded9dc33b3838de30
+  languageName: node
+  linkType: hard
+
 "json-schema-traverse@npm:^1.0.0":
   version: 1.0.0
   resolution: "json-schema-traverse@npm:1.0.0"
@@ -4345,6 +4388,17 @@ __metadata:
   dependencies:
     blueimp-md5: ^2.10.0
   checksum: 6799a19e8bdd3e0c2861b94c1d4d858a89220488d7885c1fa236797e367d0c2e5f2b789e05309307083503f85be3603a9686a5915568a473137d6b4117419cc2
+  languageName: node
+  linkType: hard
+
+"md5@npm:^2.3.0":
+  version: 2.3.0
+  resolution: "md5@npm:2.3.0"
+  dependencies:
+    charenc: 0.0.2
+    crypt: 0.0.2
+    is-buffer: ~1.1.6
+  checksum: a63cacf4018dc9dee08c36e6f924a64ced735b37826116c905717c41cebeb41a522f7a526ba6ad578f9c80f02cb365033ccd67fe186ffbcc1a1faeb75daa9b6e
   languageName: node
   linkType: hard
 
@@ -6293,13 +6347,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tslib@npm:^2.3.1":
-  version: 2.3.1
-  resolution: "tslib@npm:2.3.1"
-  checksum: de17a98d4614481f7fcb5cd53ffc1aaf8654313be0291e1bfaee4b4bb31a20494b7d218ff2e15017883e8ea9626599b3b0e0229c18383ba9dce89da2adf15cb9
-  languageName: node
-  linkType: hard
-
 "tunnel@npm:^0.0.6":
   version: 0.0.6
   resolution: "tunnel@npm:0.0.6"
@@ -6679,9 +6726,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.5.0":
-  version: 8.5.0
-  resolution: "ws@npm:8.5.0"
+"ws@npm:^8.6.0":
+  version: 8.6.0
+  resolution: "ws@npm:8.6.0"
   peerDependencies:
     bufferutil: ^4.0.1
     utf-8-validate: ^5.0.2
@@ -6690,7 +6737,7 @@ __metadata:
       optional: true
     utf-8-validate:
       optional: true
-  checksum: 76f2f90e40344bf18fd544194e7067812fb1372b2a37865678d8f12afe4b478ff2ebc0c7c0aff82cd5e6b66fc43d889eec0f1865c2365d8f7a66d92da7744a77
+  checksum: e2fca82059f1e087d0c78e2f37135e1b8332bc804fce46f83c2db1cb8571685abf9d2c99b964bab3752536ad90b99b46fb8d1428899aed3e560684ab4641bffd
   languageName: node
   linkType: hard
 
