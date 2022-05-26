@@ -45,7 +45,7 @@
     "@oada/client": "^4.0.2",
     "@oada/jobs": "^4.0.0",
     "@oada/list-lib": "^3.0.6",
-    "@oada/poll": "^0.0.2",
+    "@oada/poll": "^0.0.3",
     "@oada/types": "^1.8.1",
     "@overleaf/o-error": "^3.3.1",
     "@types/json-pointer": "^1.0.31",

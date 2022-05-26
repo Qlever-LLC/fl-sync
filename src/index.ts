@@ -33,7 +33,7 @@ import oadalist from '@oada/list-lib';
 const ListWatch = oadalist.ListWatch;
 import tree from './tree.js';
 import poll from '@oada/poll';
-import type {TreeKey} from '@oada/list-lib/lib/tree';
+import type {TreeKey} from '@oada/list-lib/dist/tree.js';
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
 import { FlObject, onTargetChange, getLookup, handleAssessment, handlePendingDocument, startJobCreator } from './mirrorWatch.js';
@@ -104,7 +104,7 @@ async function watchFlSyncConfig() {
   if (typeof data === 'object' && !Array.isArray(data) && !Buffer.isBuffer(data)) {
     setAutoApprove(data['autoapprove-assessments'] ? true : false);
   }
-  
+
   let { changes } = await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
     type: 'single'
@@ -285,8 +285,8 @@ export async function pollFl(lastPoll: Moment) {
 
 /**
  * fetches and synchronizes
- * @param {*} param0 
- * @returns 
+ * @param {*} param0
+ * @returns
  */
 async function fetchAndSync({ from, to, pageIndex=undefined, forEach }: {from:string, to: string | Function, pageIndex?: number, forEach: Function}) {
   pageIndex = pageIndex || 0;
@@ -414,7 +414,7 @@ export async function initialize({
       await watchTrellisFLBusinesses(CONNECTION);
     }
 
-    // Some queued jobs may depend on the poller to complete, so start it now. 
+    // Some queued jobs may depend on the poller to complete, so start it now.
     if (polling === undefined || polling) {
       await poll.poll({
         connection: CONNECTION,
@@ -429,9 +429,9 @@ export async function initialize({
     // Create the service
     if (service === undefined || service) {
       const service = new Service({
-        name: SERVICE_NAME, 
+        name: SERVICE_NAME,
         oada: CONNECTION,
-      }); 
+      });
 
       // Set the job type handlers
       service.on('document-mirrored', config.get('timeouts.mirrorWatch'), handlePendingDocument);
