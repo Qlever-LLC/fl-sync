@@ -142,7 +142,7 @@ test.skip(`Should fail on Target fail on unrecognized format`, async (t) => {
 });
 
 //This now gets recognized as a nutrition information document
-test(`Should fail on Target failure to identify doc`, async (t) => {
+test.skip(`Should fail on Target failure to identify doc`, async (t) => {
   t.timeout(200000);
   let _id = "resources/26ZgYWfzAvX87PR8Y9JKXium7mm";
   let data = await getFlDoc(_id);
@@ -181,25 +181,12 @@ test.skip(`Should approve a valid COI document.`, async (t) => {
 });
 
 test.skip(`Should reject a COI with expirations that do not match the user-entered date.`, async (t) => {
-  let _id = "";
+  t.timeout(300000)
+  let _id = "resources/29gNgxGtGRIQhOW087Kf7yfbWnC";
   let data = await getFlDoc(_id);
-  let flId = await postDoc(data, oada);
-  await setTimeout(100000)
-
-  let jobId = await oada.get({
-    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta/services/fl-sync/jobs`
-  }).then(r => {
-    if (r && typeof r.data === 'object') {
-      // @ts-ignore
-      return Object.keys(r.data)[0]
-    } else return undefined;
-  })
-  let jobKey = jobId!.replace(/^resources\//, '');
-
-  let job = await oada.get({
-    path: `${SERVICE_PATH}/jobs/success/day-index/${moment().format('YYYY-MM-DD')}/${jobKey}`
-  })
-  t.is(job.status, 200);
+  let {flId, jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "document-validation");
+  t.assert(jobKeys[jobKey])
+  t.is(Object.keys(jobKeys).length, keyCount+1);
 
   let doc = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`
@@ -210,26 +197,12 @@ test.skip(`Should reject a COI with expirations that do not match the user-enter
 });
 
 test.skip(`Should reject a COI with insufficient policy coverage.`, async (t) => {
-  let _id = "";
+  t.timeout(300000)
+  let _id = "resources/29gLjzngLbcCVUMbBf3PjO6UMg0";
   let data = await getFlDoc(_id);
-  let flId = await postDoc(data, oada);
-  await setTimeout(100000)
-
-  let jobId = await oada.get({
-    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta/services/fl-sync/jobs`
-  }).then(r => {
-    if (r && typeof r.data === 'object') {
-      // @ts-ignore
-      return Object.keys(r.data)[0]
-    } else return undefined;
-  })
-  let jobKey = jobId!.replace(/^resources\//, '');
-
-  let job = await oada.get({
-    path: `${SERVICE_PATH}/jobs/failure/fl-validation/day-index/${moment().format('YYYY-MM-DD')}/${jobKey}`
-  })
-  t.is(job.status, 200);
-
+  let {jobKeys, jobKey, keyCount} = await rerunFlDoc(data, "associated-assessment-rejected");
+  t.assert(jobKeys[jobKey])
+  t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
 test.skip(`Shouldn't queue a job if already approved by non-trellis user.`, async (t) => {
