@@ -1067,10 +1067,17 @@ async function queueAssessmentJob(change: ListChange, path: string) {
     //} else if (item!.state === 'Rejected' && approvalUser === FL_TRELLIS_USER) {
     } else if (item!.state === 'Rejected') {
       //2b. Notify, clean up, and remove after rejection
+      //TODO: Work on new message. This message doesn't really explain what caused the
+      // assessment to be rejected in the first place. I.e., was it policy coverage of a particular type?
+      // How ought we carry the information regarding why it was rejected forward
+      // to now where we see the rejected assessment arrive?
       let message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`
+      //Reject the assessment job;
       endJob(item._id as string, message);
       assessmentToFlId.delete(item._id);
-      return rejectFlDoc(flDocId, message);
+      // Reject the FL Document with a supplier message; Reject the document fl-sync job
+      rejectFlDoc(flDocId, message);
+      endJob(flDocId, new JobError(message, "associated-assessment-rejected"));
     } else {
       //2c. Job not handled by trellis system. Leave
       let msg = `Assessment not pending, approval status not set by Trellis. Skipping. Assessment: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
