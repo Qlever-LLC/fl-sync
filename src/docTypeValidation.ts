@@ -24,10 +24,10 @@ const error = debug('fl-sync:mirror-watch:error');
  * @returns 
  */
 export async function validateResult(trellisDoc: any, flMirror: FlObject, type: string) {
-  info(`Validating pending doc [${trellisDoc._id}]`);
+  info(`Validating pending doc [${trellisDoc._id}]; type: [${type}]`);
   try {
-    let flType = fromOadaType(type) as unknown as keyof typeof validation;
-    if (!validation[flType]) throw new Error(`Validation of FL Type ${flType} unsupported`);
+    let flType = (fromOadaType(type))!.name as unknown as keyof typeof validation;
+    if (!flType || !validation[flType]) throw new Error(`Validation of FL Type ${flType} unsupported`);
     return validation[flType](trellisDoc, flMirror);
     } catch(err: any) {
     error('validateResult Errored: ', err);
