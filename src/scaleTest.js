@@ -1,3 +1,4 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED=0;
 import chai from "chai";
 import csvjson from 'csvjson'
 import fs from 'fs';
@@ -10,6 +11,7 @@ import axios from "axios";
 import ksuid from "ksuid";
 const oada = require('@oada/client');
 const _ = require('lodash');
+const sanitizer = require('string-sanitizer');
 
 const trace = debug('fl-sync:trace');
 const info = debug('fl-sync:info');
@@ -38,8 +40,7 @@ const flSync = require('./index.js')
 const userId = "5e27480dd85523000155f6db";
 const curReport = `/bookmarks/services/fl-sync/reports/day-index/2021-09-29/1ypFKs8LWHvqDh8YwKT54DQ9A3x`
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
-
+let SERVICE_PATH = `/bookmarks/services/fl-sync`;
 let TPs;
 let con;
 let TP_QUANTITY = 1000;
@@ -50,6 +51,154 @@ let headers = {
   "Authorization": `${FL_TOKEN}`,
   "Content-type": "application/json"
 };
+let shareRecipients = [
+  {
+    "community": {
+      "business": {
+        "_id": "5acf7c2cfd7fa00001ce518d",
+        "name": "Smithfield Foods",
+        "heroURL": "",
+        "iconURL": "https://flq-connect-production.s3.amazonaws.com/6094569c2985a700013e8a7d",
+        "address": {
+          "addressLineOne": "401 North Church Street",
+          "addressLineTwo": "",
+          "addressLineThree": "",
+          "city": "Smithfield",
+          "region": "VA",
+          "country": "US",
+          "postalCode": "23430",
+          "latLng": {
+            "latitude": 36.9904087,
+            "longitude": -76.6305249
+          }
+        },
+        "website": "http://www.smithfieldfoods.com/",
+        "email": "cpantaleo@smithfield.com",
+        "phone": "(757) 365-3529"
+      },
+      "address": {
+        "addressLineOne": "",
+        "addressLineTwo": "",
+        "addressLineThree": "",
+        "city": "",
+        "region": "",
+        "country": "",
+        "postalCode": "",
+        "latLng": {
+          "latitude": 0,
+          "longitude": 0
+        }
+      },
+      "_id": "5fff03e0458562000f4586e9",
+      "createdAt": "2021-03-04T20:44:22.823Z",
+      "updatedAt": "2021-05-06T20:47:06.69Z",
+      "name": "Smithfield Foods",
+      "communityType": "member",
+      "suppliersCanLink": false,
+      "supplierCanLinkLocations": false,
+      "suppliersCanLinkLocationsOfType": [],
+      "email": "implementation@foodlogiq.com",
+      "website": "",
+      "phone": "",
+      "membershipType": "Suppliers",
+      "iconURL": "https://flq-connect-production.s3.amazonaws.com/609455ca3c810e0001a08779",
+      "heroURL": "https://flq-connect-production.s3.amazonaws.com/60414295f6747a00017cd84c",
+      "feedPosts": null,
+      "videoLinks": null,
+      "links": null,
+      "replyToEmail": "implementation@foodlogiq.com",
+      "welcomeMessage": {
+        "modalTitle": "Welcome",
+        "bodyTitle": "Welcome to Smithfield Foods’ Supplier Portal",
+        "bodyMessage": "Smithfield Foods has created this community for you to share information about your company, people, products, and food safety programs, and to provide a convenient location for us to communicate with our supplier partners like you.\nIf you have questions at any time about the program your supplier manager will act as your main contact."
+      },
+      "onboardingInstructions": {
+        "instructions": "<h3></h3><h3><u></u></h3><h3><u>Welcome to Smithfield&#8217;s Supplier Portal</u></h3><p><b></b></p><p class=\"MsoPlainText\">Smithfield invites you to partner on a best in class Supplier Community Compliance Management System.</p><p class=\"MsoPlainText\">Customers are expressing an increasing amount of concern about Food Safety, Quality, Sustainability, and Transparency regarding the food we produce.&#160; We count on our supplier community to provide the required documentation to establish this confidence in our food products and supply chain.&#160; Managing all of this information has become challenging as you well know, so Smithfield is engaging our suppliers to create a modern, efficient, and flexible community system to address these concerns both now and in the future as needs change.</p><p class=\"MsoPlainText\">FoodLogiQ Connect will become an important means of evaluating our supplier community and your company's individual performance.</p><p></p><p><b><u>&#8203;</u></b></p><h4><u><b>Getting Started</b></u></h4><p>To start, you'll be asked to collect and enter information about your business. You'll be guided&#160;along the way, and if you have any questions, Smithfield and FoodLogiQ will be available for assistance.</p><p><b><u>Available Resources</u></b><br></p><p><a href=\"https://connect.foodlogiq.com/view/60de21d29c09d3000ef2fef0\" target=\"\">Supplier Management Webinar Recording&#8203;</a></p><p><a href=\"https://connect.foodlogiq.com/view/60ad3f07f0ba6a000ef4fff6\" target=\"_blank\">Supplier Management Webinar Slide Deck</a></p><h4><u><b>Need Help with Onboarding?</b></u><u></u></h4><ul type=\"disc\">  <ul type=\"circle\">   <li><a href=\"https://knowledge.foodlogiq.com/hc/en-us/articles/115002966367-Supplier-Onboarding-Dashboard\" target=\"_blank\"><u>Supplier       Onboarding Dashboard</u></a></li>   <li><u><a href=\"https://knowledge.foodlogiq.com/hc/en-us/articles/360007944214-User-Management#inviting\">Inviting       Users</a></u></li>   <li><u><a href=\"https://knowledge.foodlogiq.com/hc/en-us/articles/115002675667\">Adding       Locations</a></u></li>   <li><u><a href=\"https://knowledge.foodlogiq.com/hc/en-us/articles/115002673667\">Adding       Products</a></u></li>   <li><a href=\"https://knowledge.foodlogiq.com/hc/en-us/articles/360026405313-Viewing-and-Completing-Workflow-Assignments\"><u>Viewing       and Completing Workflow Assignments</u></a></li>   <li><u><a href=\"https://knowledge.foodlogiq.com/hc/en-us/articles/115007674647\" target=\"_blank\">What Do I Do with Expired Documents?</a></u></li>  </ul> </ul><h4><u><br></u></h4><h4><u><b>Questions?</b></u></h4><p>If you have any Technical Issues with FoodLogiQ, please contact FoodLogiQ support at <a href=\"mailto:support@foodlogiq.com\"><u>support@foodlogiq.com</u></a>.</p><p></p><p>If you have any questions regarding Smithfield&#8217;s Supplier Approval Program or it&#8217;s requirements, please contact Christopher Pantaleo at <a href=\"mailto:fsqasupplier@smithfield.com\"><u>fsqasupplier@smithfield.com</u></a>.</p><p></p><p><u href=\"mailto:fsqasupplier@smithfield.com\"></u></p><p></p>"
+      }
+    },
+    "type": {
+      "_id": "60653e5e18706f0011074ec8",
+      "createdAt": "2021-04-01T03:30:38.377Z",
+      "updatedAt": "2021-06-06T21:51:03.079Z",
+      "business": {
+        "_id": "5acf7c2cfd7fa00001ce518d",
+        "name": "Smithfield Foods Corp.",
+        "heroURL": "",
+        "iconURL": "https://flq-connect-production.s3.amazonaws.com/6047bc14eaaf2e00014f4af1",
+        "address": {
+          "addressLineOne": "401 North Church Street",
+          "addressLineTwo": "",
+          "addressLineThree": "",
+          "city": "Smithfield",
+          "region": "VA",
+          "country": "US",
+          "postalCode": "23430",
+          "latLng": {
+            "latitude": 36.9904087,
+            "longitude": -76.6305249
+          }
+        },
+        "website": "http://www.smithfieldfoods.com/",
+        "email": "cpantaleo@smithfield.com",
+        "phone": "(757) 365-3529"
+      },
+      "name": "Certificate of Insurance",
+      "template": {
+        "S3Name": "60935ec3e8541c00121e8a1a",
+        "fileName": "Vendor Insurance Requirement Guide.pdf",
+        "BucketName": "flq-connect-production",
+        "updatedAt": "2021-05-06T03:13:07.358Z"
+      },
+      "attributes": [
+        {
+          "fieldType": "date",
+          "storedAs": "effectiveDate",
+          "commonName": "Effective Date",
+          "required": true,
+          "options": null,
+          "multiple": false,
+          "includeOtherOpt": false,
+          "isCustom": false,
+          "fieldOne": null,
+          "fieldTwo": null
+        }
+      ],
+      "helpText": "Please upload a Certificate of Insurance (COI) that meets the requirements listed in the Vendor Insurance Requirement Guide (refer to attachment).",
+      "associateWith": "",
+      "category": "Legal",
+      "defaultAttributes": {
+        "expirationDate": true
+      },
+      "is3rdPartyAudit": false,
+      "scopes": [],
+      "certificationBodies": [],
+      "whoToNotify": {
+        "rolesToNotify": [
+          {
+            "_id": "6081f0f618706f000fc81896",
+            "name": "FSQA Compliance Manager"
+          }
+        ],
+        "notifyBuyer": false,
+        "notifyAdministrator": false
+      },
+      "whoCanEdit": {
+        "administratorCanEdit": false,
+        "rolesCanEdit": []
+      },
+      "requirement": "",
+      "community": {
+        "_id": "5fff03e0458562000f4586e9",
+        "name": "Smithfield Foods",
+        "iconURL": "https://flq-connect-production.s3.amazonaws.com/609455ca3c810e0001a08779",
+        "replyToEmail": "implementation@foodlogiq.com"
+      }
+    },
+    "shareSpecificAttributes": {
+      "effectiveDate": "2021-05-21T16:00:00.000Z"
+    }
+  }
+]
 
 async function makeFlBusiness() {
   try {
@@ -2464,11 +2613,443 @@ async function stageAsns() {
   })
 }
 
+async function recursiveTreeWalk(path, subTree, data) {
+  console.log('processing', path);
+  // If either subTree or data does not exist, there's mismatch between
+  // the provided tree and the actual data stored on the server
+  if (!subTree || !data) {
+    console.log('path mismatch');
+    throw new Error("Path mismatch.");
+  }
+
+  // if the object is a link to another resource (i.e., contains "_type"),
+  // then perform GET
+  if (subTree["_type"]) {
+    try {
+      data = (await axios({
+        method: 'get',
+        url: `https://${DOMAIN}`+path,
+        headers: {
+          Authorization: `Bearer ${TOKEN}`
+        }
+      })).data || {};
+      //con.get({ path })).data || {};
+    } catch(err) {
+      console.log(path, 'failed');
+      console.log(err);
+      data = {};
+    }
+  }
+
+  // TODO: should this error?
+  if (Buffer.isBuffer(data)) {
+    return;
+  }
+
+  if (!data._id) {
+    console.log('Path isnt a resource here', path, subTree);
+    /*
+    let _id = await con.post({
+      path: `/resources`,
+      data,
+      contentType: subTree._type
+    }).then(r => r.headers['content-location'].replace(/^\//, ''))
+    let d = {_id}
+    if (subTree["_rev"]) d._rev = 0;
+    await con.put({
+      path,
+      data: d
+    })
+    */
+  }
+
+  // select children to traverse
+  const children = [];
+  let keys = [];
+  // Handle all tree-specified keys
+  for (const key of Object.keys(subTree || {})) {
+    if (key !== '*' && typeof data[key] === "object") {
+      if (key !== "_meta") {
+        keys.push(key);
+        children.push({ treeKey: key, dataKey: key });
+      }
+    }
+  }
+
+  // If * in the subtree, handle all _remaining_ keys separately
+  if (subTree["*"]) {
+    // If "*" is specified in the tree provided by the user,
+    // get all children from the server
+    for (const key of Object.keys(data)) {
+      if (typeof data[key] === "object" && !keys.includes(key)) {
+        if (key !== "_meta") {
+          children.push({ treeKey: "*", dataKey: key });
+        }
+      }
+    }
+    
+  }
+
+  // initiate recursive calls
+  return Promise.each(children, async (item) => {
+    const childPath = path + "/" + item.dataKey;
+    if (data) {
+      try {
+      const res = await recursiveTreeWalk(
+        childPath,
+        subTree[item.treeKey],
+        data[item.dataKey]
+      );
+      } catch(err) {
+        console.log('ERROR ERROR ERROR');
+        console.log(err);
+      }
+    }
+  });
+}
 
 
+async function fixTradingPartners() {
+  let buses = (await axios({
+    method: 'get',
+    url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses`,
+    headers: {
+      Authorization: `Bearer ${TOKEN}`
+    }
+  })).data;
 
+  let keys = Object.keys(buses).filter(k => k.charAt(0) !== '_')
+
+  await Promise.each(keys, async (key) => {
+    let bus = (await axios({
+      method: 'get',
+      url: `https://${DOMAIN}/bookmarks/services/fl-sync/businesses/${key}`,
+      headers: {
+        Authorization: `Bearer ${TOKEN}`
+      }
+    })).data;
+    console.log(key, bus.masterid);
+
+    if (bus.masterid) {
+      try {
+        let tp = (await axios({
+          method: 'get',
+          url: `https://${DOMAIN}/bookmarks/trellisfw/trading-partners/${key}`,
+          headers: {
+            Authorization: `Bearer ${TOKEN}`
+          }
+        })).data;
+        console.log('put', bus.masterid)
+
+        await axios({
+          method: 'put',
+          url: `https://${DOMAIN}/bookmarks/trellisfw/trading-partners/${key}`,
+          headers: {
+            Authorization: `Bearer ${TOKEN}`
+          },
+          data: { masterid: bus.masterid}
+        });
+
+      } catch(err) {
+        
+      }
+    }
+  })
+}
+
+function flDocTypeToTrellisType(string) {
+
+  let conversions = {
+    'ACH Form': 'ach-forms',
+    'Certificate of Insurance': 'cois',
+    'Pure Food Guaranty and Indemnification Agreement (LOG)': 'pure-food-guaranties',
+    'W-9': 'w-9s',
+    '100g Nutritional Information': '100g-nutritional-information',
+    'Allergen Statement': 'allergen-statements',
+    'Bioengineered (BE) Ingredient Statement': 'be-ingredient-statements',
+    'California Prop 65 Statement': 'california-prop-65-statements',
+    'Country of Origin Statement': 'country-of-origin-statements',
+    'Gluten Statement': 'gluten-statements',
+    'Ingredient Breakdown Range %': 'ingredient-breakdown-ranges',
+    'Product Label': 'product-labels',
+    'Product Specification': 'product-specifications',
+    'Safety Data Sheet (SDS)': 'sdss',
+    'Natural Statement': 'natural-statements',
+    'GFSI Certificate': 'fsqa-certificates',
+    'Non-Ambulatory (3D/4D) Animal Statement': 'nonambulatory-3d4d-animal-statement',
+    'Specified Risk Materials (SRM) Audit': 'srm-audits',
+    'E.Coli 0157:H7 Intervention Audit': 'ecoli-audits',
+    'Animal Welfare Audit': 'animal-welfare-audits',
+    'Specified Risk Materials (SRM) Statement': 'srm-statements',
+    'Humane Harvest Statement': 'humane-harvest-statements',
+    'National Residue Program (NRP) Statement': 'nrp-statements',
+    'Lot Code Explanation': 'lot-code-explanations',
+    'APHIS Statement': 'aphis-statements',
+    'Foreign Material Control Plan': 'foreign-material-control-plans',
+    'Bisphenol A (BPA) Statement': 'bpa-statements',
+    'GFSI Audit': 'fsqa-audits',
+    'HACCP Plan / Flow Chart': 'haccp-plan--flow-charts',
+    'Co-Packer FSQA Questionnaire (GFSI Certified)': 'copacker-fsqa-questionnaires',
+    'Co-Pack Confidentiality Agreement Form': 'copack-confidentiality-agreement-forms',
+    'Third Party Food Safety GMP Audit Corrective Actions': 'tpfs-gmp-corrective-actions',
+    'W-8': 'w-8s',
+    'Third Party Food Safety GMP Audit': 'fsqa-audits',
+    'Animal Welfare Corrective Actions': 'animal-welfare-corrective-actions',
+    'Third Party Food Safety GMP Certificate': 'tpfs-gmp-certificates',
+    'Small Business Administration (SBA) Form': 'sba-forms',
+    'WIRE Form': 'wire-forms',
+    'E.Coli 0157:H7 Intervention Statement': 'ecoli-statements',
+    'Business License': 'business-licenses',
+    'Rate Sheet': 'rate-sheets',
+    'Master Service Agreement (MSA)': 'msas',
+  }
+  //RemoveWhiteSpaces
+  if (conversions[string]) return conversions[string]
+
+  let out = sanitizer.sanitize.addDash(string).toLowerCase()
+  out = out.replace(/-$/, '');
+
+  console.log('out', 'IN:', string,'; Out:', out);
+  return out;
+}
+
+async function moveFlDocsIntoTrellis() {
+  let docTypes = {};
+  let docText = '';
+
+  let buses = (await con.get({
+    path: `${SERVICE_PATH}/businesses`
+  })).data;
+  let keys = Object.keys(buses).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async bid => {
+    let docs = await axios({
+      method: 'get',
+      url: `https://${DOMAIN}${SERVICE_PATH}/businesses/${bid}/documents`,
+      headers: {
+        Authorization: `Bearer ${TOKEN}`
+      },
+    }).then(r => r.data)
+    .catch(err => {
+    })
+
+    if (!docs) console.log('error 1');
+    if (!docs) return
+
+    let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+
+    await Promise.each(k, async docid => {
+      let doc = await con.get({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${docid}`
+      }).then(r => r.data)
+      .catch(err => {
+        console.log('error 2');
+      })
+      
+      let docType = pointer.has(doc, `/food-logiq-mirror/shareSource/type/name`) ? doc['food-logiq-mirror'].shareSource.type.name : undefined;
+      
+      if (docType) {
+        if (!docTypes[docType]) {
+          docTypes[docType] = docType[docType] || { count: 0};
+          docTypes[docType].trellisName = flDocTypeToTrellisType(docType);
+        }
+        // Go fetch the FL info about this document type
+        docTypes[docType].count++;
+      }
+    })
+  })
+  console.log(docTypes);
+}
+
+
+async function findFlDocumentProperties() {
+  let docTypes = {};
+  let docText = '';
+
+  let buses = (await con.get({
+    path: `${SERVICE_PATH}/businesses`
+  })).data;
+  let keys = Object.keys(buses).filter(key => key.charAt(0) !== '_')
+
+  await Promise.each(keys, async bid => {
+    let docs = await axios({
+      method: 'get',
+      url: `https://${DOMAIN}${SERVICE_PATH}/businesses/${bid}/documents`,
+      headers: {
+        Authorization: `Bearer ${TOKEN}`
+      },
+    }).then(r => r.data)
+    .catch(err => {
+    })
+
+    if (!docs) console.log('error 1');
+    if (!docs) return
+
+    let k = Object.keys(docs || {}).filter(key => key.charAt(0) !== '_')
+
+    await Promise.each(k, async docid => {
+      let doc = await con.get({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${docid}`
+      }).then(r => r.data)
+      .catch(err => {
+        console.log('error 2');
+      })
+      
+      let docType = pointer.has(doc, `/food-logiq-mirror/shareSource/type/name`) ? doc['food-logiq-mirror'].shareSource.type.name : undefined;
+      
+      if (docType && !docTypes[docType]) {
+        // Go fetch the FL info about this document type
+        docTypes[docType] = docType[docType] || 0;
+        docTypes[docType]++;
+        let filterKeys = ['ExpirationEmailSentAt', '_id', 'archivedInCommunity', 'attachments', 'auditAttributes', 'business', 'contentType', 'isArchived', 'links', 'shareRecipients', 'shareSource', 'tags', 'versionInfo', 'originalName'];
+        let docKeys = Object.keys(doc['food-logiq-mirror']).filter(key => !filterKeys.includes(key))
+        let customKeys = pointer.has(doc, `/food-logiq-mirror/shareSource/shareSpecificAttributes`) ? Object.keys(pointer.get(doc, `/food-logiq-mirror/shareSource/shareSpecificAttributes`)) : undefined;
+        let allKeys = docKeys.concat(customKeys)
+        docTypes[docType] = allKeys;
+        let dt = Object.keys(docTypes).map(dkey => {
+          let txt = dkey+'\r\n\t'+(docTypes[dkey].join('\r\n\t'))
+          return txt
+        }).join('\r\n')
+      }
+    })
+  })
+}
+
+async function postTestDocs() {
+  let testDocs = {
+    b2: {
+      "bid": "60d2184baeb961000ea58b3d",
+      "key": "60da118aaeb961000ee24a0e"
+    },
+    b3: {
+      "bid": "6123d741aa22e6000fcc2e32",
+      "key": "615db38dfa892f000ff6f6dc"
+    },
+    b4: {
+      "bid": "60d1e42baeb961000ea575ae",
+      "key": "6177bcacc69b88000ea01b5f"
+    },
+    b5: {
+      "bid": "60ba1feaf0ba6a000ec42199",
+      "key": "615e3cb69a8b81000fb55a76"
+    },
+    b6: {
+      "bid": "6170375e8f6b1a000ec9f41f",
+      "key": "6172c1a6c69b88000e8fa33b"
+    },
+    c2: {
+      "bid": "6123d741aa22e6000fcc2e32",
+      "key": "61687d698f6b1a000f356acb"
+    },
+    /* OCR not supported on dev
+    d2a: {
+      "bid": "60d1e5a778bfbb000e311f15",
+      "key": "60da227eaeb961000ee2505a",
+      "job": "1zMppguMjDFWBZ55hsNkWJM6tCU"
+    },
+    */
+    d2b: {
+      "bid": "60d1fae8a49a43000ec30e56",
+      "key": "60d21c44a49a43000ec31c19",
+      "job": "1zMqvjKJmV1Ev670PYcgCCpOq6t"
+    },
+    d2c: {
+      "bid": "60d1ff249c09d3000f6dff15",
+      "key": "6123e5e2c6480f000ecce926",
+      "job": "1zE8HVeZK6n72JN1o20aqzfzdcC"
+    },
+    d2d: {
+      "bid": "60d207bcaeb961000ea5849c",
+      "key": "60d9e145a49a43000ec46c41",
+      "job": "1zE8V3o3UvxQ6LvUw0Ef8ImOS3u"
+    },
+    d2e: {
+      "bid": "60d202e2a49a43000ec311c9",
+      "key": "611d3d8b5949e3000e1e4a7d",
+      "job": "1zMr7E6zykhgp3STB6W5PPGVXVv"
+    },
+    f2: {
+      "bid": "60d2061278bfbb000e312b55",
+      "key": "612f8513cb4c4d000e6faf01"
+    },
+    f3: {
+      "bid": "60d21c1a9c09d3000f6e0a2d",
+      "key": "613228c30a2537000eeaff11"
+    },
+    g2: {
+      "bid": "55db1dd3abc8920001000105",
+      "key": "60e5e66fa49a43000e6eede9"
+    },
+    g3: {
+      "bid": "60d1e10d78bfbb000e311d4f",
+      "key": "6123e664002f06000e01b9e4"
+    },
+  };
+  let keys = [
+    '_id',
+    'business',
+    'originalName',
+    'isArchived',
+    'shareSource',
+    'versionInfo',
+    'tags',
+    'links',
+    'auditAttributes',
+    'ExpirationEmailSentAt',
+    'archivedInCommunity'
+  ]
+  await Promise.each(Object.keys(testDocs), async (caseType) => {
+    let obj = testDocs[caseType];
+    let doc = await axios({
+      method: 'get',
+      headers,
+      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${obj.key}`
+    }).then(r => r.data)
+    .catch(err => {
+      return
+    })
+    if (!doc) return
+
+    doc.shareRecipients = shareRecipients;
+    doc.shareRecipients[0].shareSpecificAttributes = doc.shareSource.shareSpecificAttributes;
+    Object.keys(doc).forEach((key) => {
+      if (keys.includes(key)) {
+        delete doc[key]
+      }
+    })
+    let result = await axios({
+      method: 'post',
+      headers,
+      url: `https://sandbox-api.foodlogiq.com/v2/businesses/61c22e047953d4000ee0363f/documents`,
+      data: doc
+    }).catch(err => {
+      console.log(err);
+    })
+  })
+}
+async function lookForDocs() {
+  let result = await oada.get({
+    path: `/bookmarks/services/target-helper/jobs-failure`
+  }).then(r => r.data)
+
+
+  await Promise.each(Object.keys(result["day-index"]), async (key) => {
+    await Promise.each(Object.keys(result["day-index"][key]), async (docKey) => {
+      let data = await oada.get({
+        path: `/bookmarks/services/target-helper/jobs-failure/day-index/${key}/${docKey}`
+      }).then(r => r.data)
+      await Promise.each(Object.keys(data.updates), async (upKey) => {
+        if (Object.values(data.updates[upKey]).includes("") {
+          console.log(data.updates[upKey], data))
+        }
+      })
+    })
+  })
+
+}
 
 async function main() {
+  setInterval(() => {}, 1000);
   con = await oada.connect({
     domain: 'https://'+DOMAIN,
     token: 'Bearer '+TOKEN,
@@ -2489,7 +3070,13 @@ async function main() {
 //    await traceCois();
 //    await associateAssessments();
 //    await linkAssessments();
-    await generateReport();
+//    await generateReport();
+//    await postTestDocs();
+      await lookForDocs();
+//    await recursiveTreeWalk('/bookmarks', tree.bookmarks, {})
+//    await fixTradingPartners()
+//      await findFlDocumentProperties()
+//      await moveFlDocsIntoTrellis();
 //    await stageAsns();
 //    await handleReport();
 //    await reprocessReport();
