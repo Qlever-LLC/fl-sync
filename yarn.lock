@@ -404,9 +404,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/list-lib@npm:^3.0.6":
-  version: 3.0.6
-  resolution: "@oada/list-lib@npm:3.0.6"
+"@oada/list-lib@npm:3.0.8":
+  version: 3.0.8
+  resolution: "@oada/list-lib@npm:3.0.8"
   dependencies:
     "@oada/client": ^4.0.2
     "@oada/types": ^2.0.1
@@ -416,7 +416,7 @@ __metadata:
     json-pointer: ^0.6.2
     jsonpath-plus: ^6.0.1
     tslib: ^2.4.0
-  checksum: be777ad342a3f73014acff0ac6a4de8dfcea879944ca57df912effe85bcbf8bd9f78908270bb56a9f60b361ab4bbef2844f2e546b14db276ce31803eb32efe1a
+  checksum: 0f5a4e15f9d302d997270ac5ee025a8a31e732bd6eb7efe62cdfc8dcbf680da2711746a817c5f121d22fc126604c68c381b8badecc9c449d27192e81fd7bbc19
   languageName: node
   linkType: hard
 
@@ -486,7 +486,7 @@ __metadata:
     "@ava/typescript": ^3.0.1
     "@oada/client": ^4.0.2
     "@oada/jobs": ^4.0.0
-    "@oada/list-lib": ^3.0.6
+    "@oada/list-lib": 3.0.8
     "@oada/poll": ^0.0.3
     "@oada/types": ^1.8.1
     "@overleaf/o-error": ^3.3.1
