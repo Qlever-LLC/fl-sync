@@ -29,14 +29,13 @@ import _ from 'lodash';
 import { Change, JsonObject, connect, OADAClient } from '@oada/client';
 import type { Body } from '@oada/client/lib/client'
 import config from './config.js';
-import oadalist from '@oada/list-lib';
-const ListWatch = oadalist.ListWatch;
+import {ListWatch} from '@oada/list-lib';
 import tree from './tree.js';
 import poll from '@oada/poll';
 import type {TreeKey} from '@oada/list-lib/dist/tree.js';
 //let reports = require('./reports.js');
 //let genReport = require('./generateReport.js');
-import { FlObject, onTargetChange, getLookup, handleAssessment, handlePendingDocument, startJobCreator } from './mirrorWatch.js';
+import { FlObject, onTargetChange, getLookup, handleAssessmentJob, handleDocumentJob, startJobCreator } from './mirrorWatch.js';
 import { watchTrellisFLBusinesses } from './masterData.js';
 
 const DOMAIN = config.get('trellis.domain');
@@ -64,6 +63,7 @@ let AUTO_APPROVE_ASSESSMENTS: boolean;
 let TOKEN;
 
 let CONNECTION: OADAClient;
+//let SOMEGLOBALCOUNT = 0;
 
 async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
   for await (const change of changes) {
@@ -82,7 +82,7 @@ async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
  * watches FL config
  */
   // @ts-ignore
-async function watchFlSyncConfig() {
+export async function watchFlSyncConfig() {
   let data = await CONNECTION.get({
     path: `${SERVICE_PATH}`,
   }).then(r => r.data as JsonObject)
@@ -132,11 +132,77 @@ async function watchTargetJobs() {
   })
 }//watchTargetJobs
 
+
+export async function handleItem(type: string, item: FlObject) {
+  let bid;
+  try {
+    let sync;
+    if (type === 'assessments') {
+      bid = _.has(item, 'performedOnBusiness._id') ? item.performedOnBusiness._id : undefined;
+    } else {
+      bid = _.has(item, 'shareSource.sourceBusiness._id') ? item.shareSource.sourceBusiness._id : undefined
+    }
+
+    if (!bid) {
+      error(`FL BID undefined for this [${type}] item with _id [${item._id}].`);
+      return true;
+    }
+
+    //REMOVE THIS LATER >>>>>>>>>>>>>>>>>>>>>>>>>
+    /*
+    if (_.has(item, 'shareSource.type.name') && item.shareSource.type.name === "Certificate of Insurance") {
+      SOMEGLOBALCOUNT++;
+      console.log("Continuing on COI document", item._id, bid, SOMEGLOBALCOUNT)
+    } else {
+      console.log("Skipping non COI document", item._id, bid)
+      return true;
+    }
+    */
+    //REMOVE THIS LATER <<<<<<<<<<<<<<<<<<<<<<<<<
+
+    let path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
+    try {
+      let resp = await CONNECTION.get({ path }).then(r => r.data as JsonObject)
+
+      // Check for changes to the resources
+      let equals = _.isEqual(resp['food-logiq-mirror'], item)
+      if (!equals) {
+        info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
+        sync = true;
+      }
+    } catch (err: any) {
+      if (err.status !== 404) throw err;
+      info(`Resource is not already on trellis. Syncing...`);
+      sync = true;
+    }
+
+    // Now, sync
+    if (sync) {
+      //delay += 500;
+      // This tree put, when run on startup or other cases where we are going
+      // through pages of data, causes if-match issues. The promise.map closure
+      // this falls within was changed to .each for the time-being
+      await CONNECTION.put({
+        path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
+        data: {'food-logiq-mirror': item } as unknown as Body,
+        tree
+      })
+      info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
+    }
+    return true;
+  } catch(err) {
+    //TODO: Need to add this to some sort of retry
+    error(`fetchCommunityResources errored on item ${item._id} bid ${bid}. Moving on`)
+    error(err);
+    return false;
+  }
+}
+
 /**
  * fetches community resources
  * @param {*} param0 pageIndex, type, date
  */
-async function fetchCommunityResources({ type, date, pageIndex=undefined }: {type: string, date: string, pageIndex?: number}) {
+export async function fetchCommunityResources({ type, date, pageIndex=undefined }: {type: string, date: string, pageIndex?: number}) {
   pageIndex = pageIndex || 0;
   let url = type === 'assessments' ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${date}..`
     : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&versionUpdated=${date}..`;
@@ -151,68 +217,97 @@ async function fetchCommunityResources({ type, date, pageIndex=undefined }: {typ
   let delay = 0;
 
   // Manually check for changes; Only update the resource if it has changed!
-  await Promise.map(response.data.pageItems, async (item: FlObject) => {
-    let sync;
+  await Promise.each(response.data.pageItems, async (item: FlObject) => {
+    let retries = 5;
+    //@ts-ignore
+    let success = false;
+    while (retries-- > 0 && !(success = await handleItem(type, item))) {}
+    /*
     let bid;
-    if (type === 'assessments') {
-      bid = _.has(item, 'performedOnBusiness._id') ? item.performedOnBusiness._id : undefined;
-    } else {
-      bid = _.has(item, 'shareSource.sourceBusiness._id') ? item.shareSource.sourceBusiness._id : undefined
-    }
-
-    if (!bid) {
-      error(`FL BID undefined for this [${type}] item with _id [${item._id}].`);
-      return;
-    }
-    let path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
-//    let _id;
     try {
-      let resp = await CONNECTION.get({ path }).then(r => r.data as JsonObject)
-
-      // Check for changes to the resources
-      let equals = _.isEqual(resp['food-logiq-mirror'], item)
-      if (!equals) {
-        info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
-        delay += 20000;
-        sync = true;
-//        _id = resp._id;
+      let sync;
+      if (type === 'assessments') {
+        bid = _.has(item, 'performedOnBusiness._id') ? item.performedOnBusiness._id : undefined;
+      } else {
+        bid = _.has(item, 'shareSource.sourceBusiness._id') ? item.shareSource.sourceBusiness._id : undefined
       }
-    } catch (err: any) {
-      if (err.status !== 404) throw err;
-      info(`Resource is not already on trellis. Syncing...`);
-      sync = true;
-      delay += 20000;
-    }
 
-    // Create a new resource if necessary and link to it
-    // Doing a tree-put manually-ish
-    // 5-20-2022 - no longer needed due to fixed tree put
-    /*if (!_id) {
-      _id = `resources/${ksuid.randomSync().string}`;
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/businesses/${bid}/${type}`,
-        data: {
-          [item._id]: {
-            _id,
-            "_rev": 0
-          }
-        },
-        tree,
-      }).catch((err) => {
-      })
+      if (!bid) {
+        error(`FL BID undefined for this [${type}] item with _id [${item._id}].`);
+        return;
+      }
+
+      //REMOVE THIS LATER >>>>>>>>>>>>>>>>>>>>>>>>>
+      if (_.has(item, 'shareSource.type.name') && item.shareSource.type.name === "Certificate of Insurance") {
+        SOMEGLOBALCOUNT++;
+        console.log("Continuing on COI document", item._id, bid, SOMEGLOBALCOUNT)
+      } else {
+        console.log("Skipping non COI document", item._id, bid)
+        return;
+      }
+      //REMOVE THIS LATER <<<<<<<<<<<<<<<<<<<<<<<<<
+
+      let path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
+      try {
+        let resp = await CONNECTION.get({ path }).then(r => r.data as JsonObject)
+
+        // Check for changes to the resources
+        let equals = _.isEqual(resp['food-logiq-mirror'], item)
+        if (!equals) {
+          info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
+          sync = true;
+        }
+      } catch (err: any) {
+        if (err.status !== 404) throw err;
+        info(`Resource is not already on trellis. Syncing...`);
+        sync = true;
       }
       */
 
-    // Now, sync
-    if (sync) {
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
-        data: {'food-logiq-mirror': item } as unknown as Body,
-        tree
-      })
-      info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
-    }
-  }, { concurrency: CONCURRENCY })
+      // Create a new resource if necessary and link to it
+      // Doing a tree-put manually-ish
+      // 5-20-2022 - no longer needed due to fixed tree put
+      /*if (!_id) {
+        _id = `resources/${ksuid.randomSync().string}`;
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses/${bid}/${type}`,
+          data: {
+            [item._id]: {
+              _id,
+              "_rev": 0
+            }
+          },
+          tree,
+        }).catch((err) => {
+        })
+        }
+      */
+
+     /*
+      // Now, sync
+      if (sync) {
+        delay += 500;
+        // This tree put, when run on startup or other cases where we are going
+        // through pages of data, causes if-match issues. The promise.map closure
+        // this falls within was changed to .each for the time-being
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
+          data: {'food-logiq-mirror': item } as unknown as Body,
+          tree
+        })
+        info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
+      }
+    } catch(err) {
+      //TODO: Need to add this to some sort of retry
+      error(`fetchCommunityResources errored on item ${item._id} bid ${bid}. Moving on`)
+      }
+    */
+  })//, { concurrency: CONCURRENCY })
+  .catch(err => {
+    console.log("SOMETHING DID HAPPEN HERE");
+    console.log(err);
+    throw err;
+  })
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
     info(`Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)}/${response.data.totalItemCount}`);
@@ -254,24 +349,30 @@ export async function pollFl(lastPoll: Moment) {
       forEach: async (i: {business: {_id: string}}) => {
         // Ensure main endpoints
         await Promise.each(['products', 'locations', 'documents', 'assessments'], async (type) => {
+          await CONNECTION.put({
+            path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
+            data: {} as unknown as Body,
+            tree,
+          })
+          /*
+          //TODO: REPLACE ALL OF THIS WITH A TREE PUT
           await CONNECTION.head({
             path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
           }).catch(async err => {
             if (err.status !== 404) throw err;
             let _id = await CONNECTION.post({
               path: `/resources`,
-              data: {},
               contentType: tree?.bookmarks?.services?.[SERVICE_NAME]?.businesses?.['*']?._type,
             }).then(r => r?.headers?.['content-location']?.replace(/^\//, ''))
 
-            await Promise.delay(5000);
-
             await CONNECTION.put({
-              path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
-              data: { _id, _rev: 0 },
+              path: `${SERVICE_PATH}/businesses/${i.business._id}`,
+              data: {
+                [type]: { _id, _rev: 0 },
+              },
               tree,
             })
-          })
+          })*/
         })
       },
     })
@@ -310,14 +411,14 @@ async function fetchAndSync({ from, to, pageIndex=undefined, forEach }: {from:st
 
           // Check for changes to the resources
           let equals = _.isEqual(resp['food-logiq-mirror'], item)
-          if (equals) info(`Resource difference in FL item [${item._id}] not detected. Skipping...`);
-          if (!equals) info(`Resource difference in FL item [${item._id}] detected. Syncing...`);
+          if (equals) info(`No resource difference in FL item [${item._id}]. Skipping...`);
+          if (!equals) info(`Resource difference in FL item [${item._id}] detected. Syncing to ${path}`);
           if (!equals) {
             sync = true;
           }
         } catch (err: any) {
           if (err.status === 404) {
-            info(`Resource is not already on trellis. Syncing...`);
+            info(`FL Resource ${item._id} is not already on trellis. Syncing...`);
             sync = true;
           } else {
             error(err);
@@ -326,22 +427,27 @@ async function fetchAndSync({ from, to, pageIndex=undefined, forEach }: {from:st
         }
 
         if (sync) {
+          /*
           let resp = await CONNECTION.post({
             path: `/resources`,
             contentType: tree?.bookmarks?.services?.[SERVICE_NAME]?.businesses?.['*']?._type,
             data: { 'food-logiq-mirror': item } as unknown as Body
           });
+          */
           await CONNECTION.put({
             path,
+            data: { 'food-logiq-mirror': item } as unknown as Body,
+            tree
+            /*
             data: {
               "_id": resp?.headers?.['content-location']?.replace(/^\//, ''),
               "_rev": 0
-            }
+            }*/
           });
         }
       }
       if (forEach) await forEach(item)
-    });
+    }, {concurrency: 20});
 
     // Repeat for additional pages of FL results
     if (response.data.hasNextPage) {
@@ -351,11 +457,12 @@ async function fetchAndSync({ from, to, pageIndex=undefined, forEach }: {from:st
     return;
   } catch (err: any) {
     info('getBusinesses Error', err.response ? err.response.status : 'Please check error logs');
+    console.log(err);
     throw err;
   }
 }//fetchAndSync
 
-function setConnection(conn: OADAClient) {
+export function setConnection(conn: OADAClient) {
   CONNECTION = conn;
 }
 
@@ -434,8 +541,8 @@ export async function initialize({
       });
 
       // Set the job type handlers
-      service.on('document-mirrored', config.get('timeouts.mirrorWatch'), handlePendingDocument);
-      service.on('assessment-mirrored', config.get('timeouts.mirrorWatch'), handleAssessment);
+      service.on('document-mirrored', config.get('timeouts.mirrorWatch'), handleDocumentJob);
+      service.on('assessment-mirrored', config.get('timeouts.mirrorWatch'), handleAssessmentJob);
 
       // Start the jobs watching service
       const serviceP = service.start();
@@ -484,7 +591,7 @@ if (esmain(import.meta)) {
   initialize({
     polling: true,
     watchConfig: true,
-    master: false,
+    master: true,
     target: true,
     service: true
   })

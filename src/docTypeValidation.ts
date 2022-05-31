@@ -18,10 +18,10 @@ const error = debug('fl-sync:mirror-watch:error');
 
 /**
  * validates documents that have not yet been approved
- * @param {*} trellisDoc 
+ * @param {*} trellisDoc
  * @param {*} flMirror
- * @param {*} type 
- * @returns 
+ * @param {*} type
+ * @returns
  */
 export async function validateResult(trellisDoc: any, flMirror: FlObject, type: string) {
   info(`Validating pending doc [${trellisDoc._id}]; type: [${type}]`);
@@ -169,7 +169,12 @@ function validateExpiration(trellisDates: Moment | Array<Moment>, flMirror: FlOb
   let status = true;
   let flExp = moment(flMirror.expirationDate).format('YYYY-MM-DD');
   let minimumExp : string;
+
+
   if (trellisDates && Array.isArray(trellisDates)) {
+    // Filter out the common bad date from target of 1900-12-30
+    trellisDates = trellisDates.filter(i => i.format('YYYY-MM-DD') !== '1900-12-30')
+
     if (trellisDates.length > 0) {
       //@ts-ignore
       minimumExp = trellisDates.reduce(
@@ -183,7 +188,7 @@ function validateExpiration(trellisDates: Moment | Array<Moment>, flMirror: FlOb
   }
   let now = moment().utcOffset(0);
 
-  if (flExp !== minimumExp) {
+  if (moment(flExp) > moment(minimumExp)) {
     message = `Expiration date submitted in Food Logiq (${flExp}) does not match the minimum expiration date found in the PDF document (${minimumExp}).`;
     status = false;
   }

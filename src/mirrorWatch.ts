@@ -118,7 +118,7 @@ export async function getLookup(item: any, key: string) {
     let flJobKeys = Object.keys(data?.services?.['fl-sync']?.jobs || {})
 
     let jobKey = mostRecentKsuid(flJobKeys);
-    if (!jobKey) throw new Error(`jobKey not found in _meta doc of the pdf [${pdfId}]`)
+    if (!jobKey) throw new Error(`jobKey not found in _meta doc of the pdf [${pdfId}]: flJobKeys: ${flJobKeys}`)
 
     let jobId = data?.services?.['fl-sync']?.jobs?.[jobKey]!._id
 
@@ -173,13 +173,14 @@ export async function onTargetChange(change: Change, targetJobKey: string) {
       info(`No target job lookup for ${targetJobKey}`);
       return;
     }
-    let {jobId} = targetToFlSyncJobs.get(targetJobKey)!;
-    let key = await CONNECTION.get({
-      path: `/${jobId}/config/key`
-    }).then(r => r.data as string)
+    let {jobId: flSyncJobId} = targetToFlSyncJobs.get(targetJobKey)!;
+    let jConfig = await CONNECTION.get({
+      path: `/${flSyncJobId}/config`
+    }).then(r => r.data as unknown as JobConfig)
+    let key = jConfig.key;
 
     // Handle final statuses
-    await handleTargetStatus(change, key, targetJobKey, jobId, job)
+    await handleTargetStatus(change, key, targetJobKey, flSyncJobId, job, jConfig)
 
     //Handle updates
     await handleTargetUpdates(change, key);
@@ -191,22 +192,56 @@ export async function onTargetChange(change: Change, targetJobKey: string) {
   }
 }//onTargetChange
 
-async function handleTargetStatus(change: Change, key: string, targetJobKey: string, jobId: string, job: JsonObject) {
+async function handleTargetStatus(change: Change, key: string, targetJobKey: string, flSyncJobId: string, targetJob: JsonObject, jConfig: JobConfig) {
   let status = pointer.has(change, `/body/status`) ? pointer.get(change, `/body/status`) : undefined;
   if (!status) return;
+
+  let flSyncJob = flSyncJobs.get(flSyncJobId);
+  if (flSyncJob && flSyncJob["allow-rejection"] === false) {
+
+    let docMirror = await CONNECTION.get({
+      path: `/${jConfig.mirrorid}`
+    }).then(r => r.data as JsonObject);
+    let item = docMirror["food-logiq-mirror"] as unknown as FlObject;
+
+    info(`Target finished with status ${status} on already-approved doc.`)
+    if (status === 'success') {
+    //If successful, skip the potential pitfalls of assessment creation and call finishDoc.
+      await postUpdate(
+        CONNECTION,
+        flSyncJobId,
+        'Target extraction completed. Handling result...',
+        'in-progress'
+      )
+      return finishDoc(item, jConfig.bid, jConfig.masterid, 'approved');
+    } else if (status === 'failure') {
+    //If failure, target can't extract it so we're stuck without a result. Fail the job
+    //and call finishDoc.
+      await postUpdate(
+        CONNECTION,
+        flSyncJobId,
+        'Target extraction failed',
+        'in-progress'
+      )
+      endJob(flSyncJobId, new JobError('Target errored on already-approved job', 'target-error-already-approved'));
+      targetToFlSyncJobs.delete(targetJobKey);
+      return finishDoc(item, jConfig.bid, jConfig.masterid, 'failed');
+    }
+  }
+
+
   if (status === 'success') {
     await postUpdate(
       CONNECTION,
-      jobId,
+      flSyncJobId,
       'Target extraction completed. Handling result...',
       'in-progress'
     )
     await handleScrapedResult(targetJobKey)
-    //targetToFlSyncJobs.delete(targetJobKey);
   } else if (status === 'failure') {
     await postUpdate(
       CONNECTION,
-      jobId,
+      flSyncJobId,
       'Target extraction failed',
       'in-progress'
     )
@@ -214,9 +249,9 @@ async function handleTargetStatus(change: Change, key: string, targetJobKey: str
     let jobError;
     let errMsg = "Other Target failure";
     //Target failed and we have "updates". Otherwise, no "updates"; make it work.
-    if (isObj(job) && job.updates) {
+    if (isObj(targetJob) && targetJob.updates) {
       //1. Find the update with the error message
-      let errObj = (Object.values(job.updates).find(obj => obj.status === 'error'));
+      let errObj = (Object.values(targetJob.updates).find(obj => obj.status === 'error'));
       if (errObj) errMsg = errObj!.information
       //2. Determine whether to reject the document based on target error type; others we'll need to review
       //3. Determine error indexing within fl-sync
@@ -230,13 +265,11 @@ async function handleTargetStatus(change: Change, key: string, targetJobKey: str
         })
         info(`Target job ${targetJobKey} errored. reject: ${reject}; fl-sync job error ${jobError}`)
 
-        // Fail the document now instead of waiting for reject to come in from
-        // the mirrormaker so that we can utilize the jobs error type now
         if (reject) await rejectFlDoc(key, errMsg);
-        if (jobError) endJob(jobId, new JobError(errMsg, jobError));
+        if (jobError) endJob(flSyncJobId, new JobError(errMsg, jobError));
       }
     }
-    if (!jobError) endJob(jobId, new JobError(errMsg, 'target-other'));
+    if (!jobError) endJob(flSyncJobId, new JobError(errMsg, 'target-other'));
     targetToFlSyncJobs.delete(targetJobKey);
   }
 }
@@ -252,7 +285,6 @@ async function handleTargetUpdates(change: Change, key: string) {
         details = val.information;
         break;
       case 'identified':
-        break;
       case 'success':
         break;
       default:
@@ -294,7 +326,7 @@ async function approveFlDoc(docId: string) {
    documents as much as possible.
  */
 //@ts-ignore
-export const handleAssessment: WorkerFunction = async (job: any, {oada, jobId: jobKey}) => {
+export const handleAssessmentJob: WorkerFunction = async (job: any, {oada, jobId: jobKey}) => {
   info(`Handling Assessment job ${jobKey}`);
   try {
     let jobId = `resources/${jobKey}`;
@@ -360,6 +392,7 @@ export const handleAssessment: WorkerFunction = async (job: any, {oada, jobId: j
     } else {
       // No auto-approve/reject set; leave it in limbo
     }
+    //Save the assessment job under its item._id (not job id)
     return new Promise((resolve, reject) => {
       flSyncJobs.set(item._id, {
         resolve,
@@ -367,10 +400,10 @@ export const handleAssessment: WorkerFunction = async (job: any, {oada, jobId: j
       })
     })
   } catch (err) {
-    error('Error handleAssessment', err);
+    error('Error handleAssessmentJob', err);
     throw err;
   }
-}//handleAssessment
+}//handleAssessmentJob
 
 export async function postTpDocument({bid, item, oada, masterid}:{bid: string, item: FlObject, oada: OADAClient, masterid: string}) {
   info(`postTpDocument: bid:${bid} item:${item._id}`);
@@ -383,6 +416,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
     //@ts-ignore
     responseEncoding: 'binary'
   }
+  console.log('postTpDocument 1')
 
   let file = await axios(request)
     .then(r => r.data)
@@ -391,6 +425,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
         throw new JobError(attachmentsErrorMsg, 'bad-fl-attachments')
       } else throw err;
     })
+  console.log('postTpDocument 2')
 
   let zip = await new jszip().loadAsync(file);
 
@@ -408,11 +443,13 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
   //safe for oada or client
   let fileHash = md5(fKey);
 
+  console.log('postTpDocument 3',item._id)
   // 2. Fetch mirror and pdf resource id
   let mirrorid = await oada.get({
     path: `${SERVICE_PATH}/businesses/${bid}/documents/${item!._id}/_id`,
   }).then(r => r.data)
 
+  console.log('postTpDocument 4')
   let pdfResponse = await oada.get({
     path: `${SERVICE_PATH}/businesses/${bid}/documents/${item!._id}/_meta/vdoc/pdf`,
   }).then(r => r.data as unknown as {[key: string]: any})
@@ -420,21 +457,27 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
     if (err.status !== 404) throw err;
   });
 
+  console.log('postTpDocument 5')
   // 3a. PDF could already have been mirrored in the approval flow
   // If it doesn't exist, create a new PDF resource
   let pdfId: string = pdfResponse?.[fileHash]?._id || `resources/${ksuid.randomSync().string}`;
+  console.log('postTpDocument 5.1')
 
   let ab = await zip.file(fKey)!.async("uint8array")
+  console.log('postTpDocument 5.2')
   let zdata = Buffer.alloc(ab.byteLength);
+  console.log('postTpDocument 5.3')
   for (var i = 0; i < zdata.length; ++i) {
     zdata[i] = ab[i]!;
   }
+  console.log('postTpDocument 5.4')
   await oada.put({
     path: `/${pdfId}`,
     data: zdata,
     contentType: 'application/pdf',
   })
 
+  console.log('postTpDocument 6')
   // 4. Create a vdoc entry from the pdf to foodlogiq
   await oada.put({
     path: `${pdfId}/_meta`,
@@ -448,6 +491,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
   });
 
 
+  console.log('postTpDocument 7')
   // 5. Create a vdoc entry from the fl doc to the pdf
   // First, overwrite what is currently there if previous pdfs vdocs had been linked
   await axios({
@@ -463,6 +507,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
       authorization: `Bearer ${TRELLIS_TOKEN}`
     },
   });
+  console.log('postTpDocument 7.5')
   await axios({
     method: 'put',
     url: `https://${DOMAIN}${SERVICE_PATH}/businesses/${bid}/documents/${item!._id}/_meta`,
@@ -480,6 +525,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
   });
   let pdfKey = pdfId.replace(/resources\//, '');
 
+  console.log('postTpDocument 8')
   //6. Link the pdf into the unextracted documents list
   let {document, docType, urlName} = await flToTrellis(item)
   let docKey = await oada.post({
@@ -489,6 +535,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
   }).then(r => r.headers['content-location']!.replace(/^\/resources\//,''));
   trace(`Partial JSON created at /resources/${docKey}`);
 
+  console.log('postTpDocument 9')
   await oada.put({
     path: `resources/${docKey}/_meta`,
 //    path: `resources/${docKey}/_meta/vdoc/pdf/${fKey}`,
@@ -504,6 +551,7 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
     },
     tree
   })
+  console.log('postTpDocument 10')
   info(`Created partial JSON in docs list: ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}`);
 
   return {pdfKey, docKey, item, urlName, docType, fKey, fileHash}
@@ -514,12 +562,13 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
  * @param {*} job
  * @param {*} oada
  */
-export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, jobId: jobKey}: {oada: OADAClient, jobId: string}) => {
+export const handleDocumentJob: WorkerFunction = async (job: Job, {oada, jobId: jobKey}: {oada: OADAClient, jobId: string}) => {
   let item: FlObject;
-  let { bid, key, masterid } = job.config as unknown as JobConfig;
+  let jConfig = job.config as unknown as JobConfig;
+  let { bid, key, masterid } = jConfig;
   let jobId: string = job.oadaId;
   try {
-    info(`handlePendingDocument processing pending FL document [${key}]`);
+    info(`handleDocumentJob processing pending FL document [${key}]`);
 
     let itemData = await oada.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${key}`
@@ -585,14 +634,16 @@ export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, job
       } else throw err;
     })
 
+    //Save the document job
     return new Promise((resolve, reject) => {
       flSyncJobs.set(jobId, {
         resolve,
-        reject
+        reject,
+        "allow-rejection": jConfig["allow-rejection"] // also save this here
       })
     })
   } catch (err: any) {
-    error(`handlePendingDocument errored`);
+    error(`handleDocumentJob errored`);
     error(err);
     if ([multipleFilesErrorMsg, attachmentsErrorMsg].includes(err.message)) {
       await CONNECTION.put({
@@ -604,12 +655,14 @@ export const handlePendingDocument: WorkerFunction = async (job: Job, {oada, job
           }
         }
       })
-      await rejectFlDoc(item!._id, err.message)
+      if (jConfig["allow-rejection"] !== false) await rejectFlDoc(item!._id, err.message)
       // Now let it continue below and throw; no promise gets made, but the job is failed now
     }
+    // if allow-rejection is false and it throws, the job will fail and leave
+    // the document "suspended" for further review, which is fine
     throw err;
   }
-}//handlePendingDoc
+}//handleDocumentJob
 
 
 /**
@@ -626,30 +679,37 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
     //1. Get reference of corresponding pending scraped pdf
     let jobs = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs`,
-    }).then(r => r.data as unknown as Links);
+    }).then(r => r.data as unknown as Links)
+    .catch((err) => {
+      if (err.status !== 404) throw err;
+      return {};
+    })
 
+    console.log('fd', 1)
     if (!jobs || !isObj(jobs)) throw new Error('Bad _meta target jobs during finishDoc');
     let jobKey = mostRecentKsuid(Object.keys(jobs));
     if (!jobKey || !jobs) throw new Error('Most recent KSUID Key had no link _id');
+    console.log('fd', 2)
     //let jobId = jobs[jobKey]!._id;
 
     // Get FL-Sync job id then tidy targetToFlSyncJobs and resolve job promise
-    if (!targetToFlSyncJobs.has(jobKey)) {
-      throw new Error(`targetJobKey ${jobKey} does not exist on Map targetToFlSyncJobs at handleScrapedResult`);
-    }
     //@ts-ignore
     let {jobId} = targetToFlSyncJobs.get(jobKey);
+    if (!jobId) throw new Error(`targetJobKey ${jobKey} does not exist on Map targetToFlSyncJobs at handleScrapedResult`);
     targetToFlSyncJobs.delete(jobKey);
+    console.log('fd', 3)
 
     let { data } = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs/${jobKey}`,
     }) as {data: JsonObject}
     let result = data.result as unknown as {[key: string]: any};
+    console.log('fd', 4)
 
     let type = Object.keys(result || {})[0];
     if (!type) return;
     let key = Object.keys(result[type])[0];
     if (!key) return;
+    console.log('fd', 5)
 
     //2. Move approved docs to trading partner /bookmarks
     info(`Moving approved document to [${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`);
@@ -658,14 +718,17 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
       data: {},
       tree
     });
+    console.log('fd', 6)
     await CONNECTION.put({
       path: `${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
       data: { _id: result[type][key]._id },
     })
+    console.log('fd', 7)
     endJob(jobId)
   } else {
     //Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
-    info(`Document [${item._id}] with status [${status}]. finishDoc not doing anything else. `);
+    info(`Document [${item._id}] with status [${status}]. finishDoc skipping.`);
+    return;
   }
 }//finishDoc
 
@@ -679,10 +742,12 @@ function endJob(jobId: string, msg?: string | Error | JobError) {
   info(`Removing ${jobId} from fl-sync job-flSyncJobs index`);
   trace(`All flSyncJobs: ${flSyncJobs}`);
   let prom = flSyncJobs.get(jobId)
-  if (msg) {
-    prom.reject(msg)
-  } else {
-    prom.resolve(jobId)
+  if (prom) {
+    if (msg) {
+      prom.reject(msg)
+    } else {
+      prom.resolve(jobId)
+    }
   }
   flSyncJobs.delete(jobId);
   return;
@@ -766,7 +831,7 @@ async function constructCOIAssessment(flId: string, name: string, bid: string, b
 }//constructAssessment
 
 /**
- * Gets the scraped JSON, perform and final validation, and process the doc
+ * Gets the scraped JSON, perform document vs FL validation, and start an assessment
  * @param {*} targetJobKey
  */
 async function handleScrapedResult(targetJobKey: string) {
@@ -939,8 +1004,7 @@ export async function startJobCreator(oada: OADAClient) {
       conn: CONNECTION,
       itemsPath: `$.*.documents.*.food-logiq-mirror`,
       name: `document-mirrored`,
-      onAddItem: queueDocumentJob,
-      onChangeItem: queueDocumentJob,
+      onItem: queueDocumentJob,
       path: `${SERVICE_PATH}/businesses`,
       resume: true,
       tree: mirrorTree,
@@ -950,8 +1014,7 @@ export async function startJobCreator(oada: OADAClient) {
       conn: CONNECTION,
       itemsPath: `$.*.assessments.*.food-logiq-mirror`,
       name: `assessment-mirrored`,
-      onAddItem: queueAssessmentJob,
-      onChangeItem: queueAssessmentJob,
+      onItem: queueAssessmentJob,
       path: `${SERVICE_PATH}/businesses`,
       resume: true,
       tree: mirrorTree,
@@ -978,6 +1041,13 @@ async function queueAssessmentJob(change: ListChange, path: string) {
     }
     let item = itemData['food-logiq-mirror'] as unknown as FlObject;
 
+
+    // Skip when there is no associated document job.
+    // This may happen on startup with lots of assessments already sitting there.
+    if (!assessmentToFlId.has(key)) {
+      info(`No associated fl-sync document job could be found for assessment: ${item._id}`)
+      return;
+    }
 
     let { jobId:docJob } = assessmentToFlId.get(key)!;
 
@@ -1058,8 +1128,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       })
 
     } else if (status === 'Approved') {
-      //2b. Clean up and remove after approval
-
+      // Approved (by anyone). Clean up and remove after approval
       endJob(item._id);
       assessmentToFlId.delete(item._id);
       // approve any linked jobs
@@ -1075,9 +1144,15 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       //Reject the assessment job;
       endJob(item._id as string, message);
       assessmentToFlId.delete(item._id);
+
       // Reject the FL Document with a supplier message; Reject the document fl-sync job
-      rejectFlDoc(flDocId, message);
-      endJob(flDocId, new JobError(message, "associated-assessment-rejected"));
+      if ((flSyncJobs.get(docJob))["allow-rejection"] !== false) {
+        await rejectFlDoc(flDocId, message);
+        endJob(docJob, new JobError(message, "associated-assessment-rejected"));
+      } else {
+        info (`Assessment ${item._id} failed logic, but cannot override approval. Calling finishDoc.`)
+        await approveFlDoc(flDocId);
+      }
     } else {
       //2c. Job not handled by trellis system. Leave
       let msg = `Assessment not pending, approval status not set by Trellis. Skipping. Assessment: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
@@ -1092,6 +1167,47 @@ async function queueAssessmentJob(change: ListChange, path: string) {
     );
   }
 }//queueAssessmentJob
+
+async function postJob(jConfig: JobConfig) {
+  const { headers } = await CONNECTION.post({
+    path: '/resources',
+    contentType: 'application/vnd.oada.job.1+json',
+    data: {
+      'type': 'document-mirrored',
+      'service': SERVICE_NAME,
+      'config': jConfig,
+    } as unknown as Body,
+  });
+  const jobkey = headers['content-location']!.replace(
+    /^\/resources\//,
+    ''
+  );
+
+  await CONNECTION.put({
+    path: pending,
+    tree,
+    data: {
+      [jobkey]: { _id: `resources/${jobkey}`, _rev: 0 },
+    },
+  });
+
+  //Store the job in the meta of the fl document
+  await CONNECTION.put({
+    path: `${SERVICE_PATH}/businesses/${jConfig.bid}/documents/${jConfig.key}/_meta`,
+    data: {
+      services: {
+        'fl-sync': {
+          'jobs': {
+            [jobkey]: {_id: `resources/${jobkey}`}
+          }
+        }
+      }
+    }
+  })
+
+  info('Posted document job resource, jobkey = %s', jobkey);
+  trace('Posted new fl-sync mirrored document job');
+}
 
 async function queueDocumentJob(data: ListChange, path: string) {
   try {
@@ -1122,67 +1238,47 @@ async function queueDocumentJob(data: ListChange, path: string) {
       return;
     }
     let status = item.shareSource && item.shareSource.approvalInfo.status;
-    let approvalUser = pointer.has(item, `/shareSource/approvalInfo/setBy/_id`) ?  pointer.get(item, `/shareSource/approvalInfo/setBy/_id`) : undefined;
+    let approvalUser = _.get(item, `shareSource.approvalInfo.setBy._id`);
     info(`approvalInfo user: [${approvalUser}]. Trellis user: [${FL_TRELLIS_USER}]. Status: [${status}].`);
 
     if (status === 'awaiting-review') {
       //2a. Create new job and link into jobs list and fl doc meta
-      const { headers } = await CONNECTION.post({
-        path: '/resources',
-        contentType: 'application/vnd.oada.job.1+json',
-        data: {
-          'type': 'document-mirrored',
-          'service': SERVICE_NAME,
-          'config': {
-            "fl-sync-type": 'document',
-            type: documentType,
-            key,
-            bid,
-            rev: data._rev,
-            masterid,
-            mirrorid: fullData._id,
-            bname: item.shareSource.sourceBusiness.name,
-            name: item.name,
-          },
-        } as unknown as Body,
-      });
-      const jobkey = headers['content-location']!.replace(
-        /^\/resources\//,
-        ''
-      );
-
-      await CONNECTION.put({
-        path: pending,
-        tree,
-        data: {
-          [jobkey]: { _id: `resources/${jobkey}`, _rev: 0 },
-        },
-      });
-
-      //Store the job in the meta of the fl document
-      await CONNECTION.put({
-        path: `${SERVICE_PATH}/businesses/${bid}/documents/${key}/_meta`,
-        data: {
-          services: {
-            'fl-sync': {
-              'jobs': {
-                [jobkey]: {_id: `resources/${jobkey}`}
-              }
-            }
-          }
-        }
+      await postJob({
+        "fl-sync-type": 'document',
+        type: documentType,
+        key: key as string,
+        bid,
+        _rev: data._rev as number,
+        masterid,
+        mirrorid: fullData._id as string,
+        bname: item.shareSource.sourceBusiness.name,
+        name: item.name,
       })
-
-      info('Posted document job resource, jobkey = %s', jobkey);
-      trace('Posted new fl-sync mirrored document job');
 
     } else if (approvalUser === FL_TRELLIS_USER) {
       // 2b. Approved or rejected by us. Finish up the automation
-      return finishDoc(item, bid, masterid, status);
+      await finishDoc(item, bid, masterid, status);
     } else {
       // 2c. Document handled by others
-      // TODO: Finish Approved Documents as if they were completed by Trellis.
-      // Go ahead and run the full fl-sync flow
+      if (status === "approved") {
+        // Run it through target and move it to trading-partner /bookmarks
+        info(`Document ${item._id} bid ${bid} approved by user ${approvalUser}. Ushering document through to completion...`)
+        await postJob({
+          "allow-rejection": false,
+          "fl-sync-type": 'document',
+          type: documentType,
+          key: key as string,
+          bid,
+          _rev: data._rev as number,
+          masterid,
+          mirrorid: fullData._id as string,
+          bname: item.shareSource.sourceBusiness.name,
+          name: item.name,
+        })
+      } else { //if (status === "rejected" || status === "incomplete") {
+
+      }
+
       let msg = `Document not pending, approval status not set by Trellis. Skipping. Document: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
       info(msg);
       return;
@@ -1191,7 +1287,7 @@ async function queueDocumentJob(data: ListChange, path: string) {
   } catch (cError: unknown) {
     throw oError.tag(
       cError as Error,
-      'queueJob Failed',
+      'queueDocumentJob Failed',
       data._id
     );
   }
@@ -1210,6 +1306,7 @@ export interface FlAssessment {
           columns: Array<{
             type: string;
             acceptanceType: string;
+            acceptanceValueBool?: boolean;
             acceptanceValueNumericPrimary: number;
             name: string,
             statisticsNumeric: {
@@ -1218,10 +1315,12 @@ export interface FlAssessment {
             statisticsCommon: {
               percentWithinTolerance: number;
             }
+            _id: string;
           }>
           answerRows: Array<{
             answers: Array<{
-              answerNumeric: number
+              answerBool?: boolean;
+              answerNumeric?: number
             }>
           }>
         }
@@ -1231,6 +1330,7 @@ export interface FlAssessment {
 }
 
 export interface JobConfig {
+  "fl-sync-type": 'document';
   _rev: number;
   type: string;
   key: string;
@@ -1239,6 +1339,7 @@ export interface JobConfig {
   mirrorid: string;
   bname: string;
   name: string;
+  "allow-rejection"?: boolean;
 }
 
 export interface FlObject {
