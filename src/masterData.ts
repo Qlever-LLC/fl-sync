@@ -1,10 +1,9 @@
 import bPromise from "bluebird";
 import _ from 'lodash';
-import oadalist from '@oada/list-lib';
+import {ListWatch} from '@oada/list-lib';
 import SHA256 from "js-sha256";
 let { sha256 } = SHA256;
 import debug from 'debug';
-let ListWatch = oadalist.ListWatch;
 import tree from './tree.masterData.js';
 import config from './config.masterdata.js';
 import type {JsonObject, OADAClient} from '@oada/client';
@@ -54,8 +53,11 @@ export async function watchTrellisFLBusinesses(conn: OADAClient) {
  * @param {*} item
  * @param {*} key
  */
-async function addTP2Trellis(item: any, key: string) {
+export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
   info(`New FL business detected [${item._id}]. Mapping to trellis trading partner.`);
+  if (!CONNECTION) {
+    setConnection(conn!);
+  }
   let _key: string = key.substring(1);
   try {
     if (typeof TradingPartners[key] === 'undefined') {//adds the business as trading partner
@@ -78,7 +80,7 @@ async function addTP2Trellis(item: any, key: string) {
           }).then(async (result: any) => {
             fl_mirror_content = result.data[FL_MIRROR];
             if (typeof fl_mirror_content === 'undefined') {
-              info(`ListWatch did not return a complete object. Retrying ...`);
+              info(`ListWatch did not return a complete object for business ${key}. Retrying ...`);
               if (tries > 10) {
                 info(`Giving up. No 'food-logiq-mirror' for business at ${item._id}.`);
 /*              await fetchAndSync({

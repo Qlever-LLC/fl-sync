@@ -16,7 +16,7 @@ const FL_DOMAIN = config.get('foodlogiq.domain') || '';
 const SUPPLIER = config.get('foodlogiq.testSupplier.id')
 const TOKEN = process.env.TOKEN || '';// || config.get('trellis.token') || '';
 const DOMAIN = config.get('trellis.domain') || '';
-import type {TreeKey} from '@oada/list-lib/lib/tree';
+import type {TreeKey} from '@oada/list-lib/dist/tree.js';
 let SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 let SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']){
@@ -162,7 +162,7 @@ test.skip(`Should fail on Target failure due to not text pdf, needs OCR`, async 
   t.is(Object.keys(jobKeys).length, keyCount+1);
 })
 
-test.skip(`Should approve a valid COI document.`, async (t) => {
+test(`Should approve a valid COI document.`, async (t) => {
   t.timeout(300000)
   let data = coi;
   data.attachments.pop();

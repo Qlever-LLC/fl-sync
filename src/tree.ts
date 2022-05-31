@@ -6,12 +6,20 @@ let docsTree = {
   'trellisfw': {
     '_type': 'application/vnd.oada.trellisfw.1+json',
     '_rev': 0,
+    'unidentified-docs': {
+      '_type': 'application/vnd.oada.trellisfw.documents.1+json',
+      '*': { // individual docs here
+        '_type': 'application/vnd.oada.trellisfw.document.1+json',
+        '_rev': 0
+      }
+    },
     'documents': {
       '_type': 'application/vnd.oada.trellisfw.documents.1+json',
       '*': { //cois, letters-of-guarantee, fsqa-audits, etc.
         '_type': 'application/vnd.oada.trellisfw.documents.1+json',
         '*': { // individual docs here
           '_type': 'application/vnd.oada.trellisfw.document.1+json',
+          '_rev': 0
         }
       }
     }

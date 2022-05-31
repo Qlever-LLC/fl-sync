@@ -28,6 +28,7 @@ export function checkAssessment(assessment: FlAssessment) {
           let res = column.statisticsCommon.percentWithinTolerance < 100
           if (res) {
             let reason = `${column.name}(${column.statisticsNumeric.average}) did not meet the requirement (${column.acceptanceValueNumericPrimary})`
+            info(`Assessment violation for id [${assessment._id}: ${reason}`)
             reasons.push(reason);
           }
           return res
@@ -50,12 +51,19 @@ const checkAssessments = new Map(Object.entries({
     let failed = assessment.sections.map(section => {
       return section.subsections.map(subsection => {
         return subsection.questions.map(question => {
-          let umbrella = _.findIndex(question.productEvaluationOptions.columns, ['name', "Umbrella Coverage"])
-          return question.productEvaluationOptions.columns.map((column, i) => {
+          let umbrellaIdx = _.findIndex(question.productEvaluationOptions.columns, ['name', "Umbrella Coverage"]);
+          let _id = question.productEvaluationOptions.columns[umbrellaIdx]!._id;
+          let umbrella = _.findIndex(question.productEvaluationOptions.answerRows[0]!.answers, ["column", _id]);
+          return question.productEvaluationOptions.columns.map((column) => {
+            let value;
+            let requirement;
+            let umbCov;
             // Handle columns that aren't scored
             if (column.acceptanceType === "none") return false;
+            // Check for policy coverage PLUS umbrella coverage
             if (column.statisticsCommon.percentWithinTolerance < 100 && column.name !== "Umbrella Coverage" && column.type === 'numeric') {
-              let value = question?.productEvaluationOptions?.answerRows?.[0]?.answers?.[i]?.answerNumeric;
+              let answerIdx = _.findIndex(question.productEvaluationOptions.answerRows[0]!.answers, ["column", column._id]);
+              let value = question?.productEvaluationOptions?.answerRows?.[0]?.answers?.[answerIdx]?.answerNumeric;
               let umbCov = question?.productEvaluationOptions?.answerRows?.[0]?.answers?.[umbrella]?.answerNumeric;
               let requirement = column.acceptanceValueNumericPrimary;
               // if umbrella only pertains to specific insurance types
@@ -64,6 +72,7 @@ const checkAssessments = new Map(Object.entries({
                 let result = (value + umbCov < requirement);
                 if (result) {
                   let reason = `The sum of ${column.name}(${value}) and Umbrella Coverage(${umbCov}) => ${value + umbCov} does not meet the required coverage (${requirement})`;
+                  info(`Assessment violation for id [${assessment._id}: ${reason}`)
                   reasons.push(reason);
                 }
                 return result
@@ -71,15 +80,25 @@ const checkAssessments = new Map(Object.entries({
             }
             let res = column.statisticsCommon.percentWithinTolerance < 100
             if (res) {
-              let reason = `${column.name}(${column.statisticsNumeric.average}) did not meet the requirement (${column.acceptanceValueNumericPrimary})`
-              reasons.push(reason); 
+              if (column.type === "numeric") {
+                let reason = `${column.name}(${value}; plus umbrella ${umbCov}) did not meet the requirement (${requirement})`
+                info(`Assessment violation for id [${assessment._id}: ${reason}`)
+                reasons.push(reason);
+              } else if (column.type === "bool") {
+                let answerIdx = _.findIndex(question.productEvaluationOptions.answerRows[0]!.answers, ["column", column._id]);
+                let value = question?.productEvaluationOptions?.answerRows?.[0]?.answers?.[answerIdx]?.answerBool;
+                let reason = `${column.name}(${value}) did not meet the requirement (${column.acceptanceValueBool})`
+                info(`Assessment violation for id [${assessment._id}: ${reason}`)
+                reasons.push(reason);
+              }
             }
             return column.statisticsCommon.percentWithinTolerance < 100
           })
         })
       })
-    }).flat(5).some(i => i)
-    return {failed, reasons}
+    })
+    let thing = failed.flat(5)
+    return {failed: thing.some(i => i), reasons}
   }
 }));
 

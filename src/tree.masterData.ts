@@ -1,4 +1,24 @@
 import type {Tree} from '@oada/list-lib'
+let temp = {
+  '_type': 'application/vnd.oada.bookmarks.1+json',
+  '_rev': 0,
+  'trellisfw': {
+    '_type': 'application/vnd.oada.trellisfw.1+json',
+    '_rev': 0,
+    'documents': {
+      '_type': 'application/vnd.oada.trellisfw.documents.1+json',
+      '*': {
+        '_type': 'application/vnd.oada.trellisfw.document.1+json',
+      }
+    },
+    'fsqa-audits': {
+      '_type': 'application/vnd.oada.trellisfw.fsqa-audits.1+json',
+      '*': {
+        '_type': 'application/vnd.oada.trellisfw.document.1+json',
+      }
+    }
+  }
+}
 export const tree : Tree = {
   "bookmarks": {
     "_type": "application/vnd.oada.bookmarks.1+json",
@@ -12,29 +32,8 @@ export const tree : Tree = {
         "*": {
           "_type": "application/vnd.trellisfw.trading-partner.1+json",
           "_rev": 0,
-          'shared': {
-            '_type': 'application/vnd.oada.bookmarks.1+json',
-            '_rev': 0,
-            'trellisfw': {
-              '_type': 'application/vnd.oada.trellisfw.1+json',
-              '_rev': 0,
-              'documents': {
-                '_type': 'application/vnd.oada.trellisfw.documents.1+json',
-                '*': {
-                  '_type': 'application/vnd.oada.trellisfw.document.1+json',
-                }
-              },
-              'fsqa-audits': {
-                '_type': 'application/vnd.oada.trellisfw.fsqa-audits.1+json',
-                '*': {
-                  '_type': 'application/vnd.oada.trellisfw.document.1+json',
-                }
-              }
-            }
-          },
-          "bookmarks": {
-            "_type": "application/vnd.oada.bookmarks.1+json"
-          }
+          'shared': temp,
+          "bookmarks": temp
         },
         "masterid-index": {
           "_type": "application/vnd.trellisfw.trading-partners.1+json",
