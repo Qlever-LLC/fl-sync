@@ -25,6 +25,13 @@ export const others = {
     }
   }
 }
+/*Bad doc attachment
+ *bid:5bae1421dd01530001b56f0f item:60d5cb749c09d3000ed43659
+BucketName: "flq-connect-production"
+S3Name: "627568eda9dcf7000f40ffeb"
+fileName: "Smithfield-570093005302.pdf"
+updatedAt: "0001-01-01T00:00:00Z"
+ */
 
 export const types = {
   '100g Nutritional Information': {
