@@ -52,7 +52,7 @@
     "adm-zip": "^0.5.3",
     "axios": "^0.21.1",
     "bluebird": "^3.7.2",
-    "convict": "^6.1.0",
+    "convict": "^6.2.3",
     "convict-format-with-moment": "^6.2.0",
     "convict-format-with-validator": "^6.2.0",
     "csvjson": "^5.1.0",
