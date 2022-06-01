@@ -78,12 +78,14 @@ let flTypes = new Map(Object.entries({
       'Certificate of Insurance (COI) Requirements': ASSESSMENT_TEMPLATE_ID,
     }
   },
+  /*
   '100g Nutritional Information': {},
   'Specified Risk Materials (SRM) Audit': {
     assessments: {
       'Supplier Risk Acknowledgement': "61f97e7614a99d000e5ec310",
     }
   },
+  */
 }));
 const multipleFilesErrorMsg = 'Multiple files attached. Please upload a single PDF per Food LogiQ document.';
 const attachmentsErrorMsg = 'Failed to retreive attachments';
@@ -1255,11 +1257,13 @@ async function queueDocumentJob(data: ListChange, path: string) {
       })
 
     } else if (approvalUser === FL_TRELLIS_USER) {
+      info(`Document ${item._id} approvalUser was Trellis. Calling finishDoc`)
       // 2b. Approved or rejected by us. Finish up the automation
       await finishDoc(item, bid, masterid, status);
     } else {
       // 2c. Document handled by others
       if (status === "approved") {
+        info(`Document ${item._id} approvalUser was not us. Status approved. Reprocessing what we can and usering to completion.`)
         // Run it through target and move it to trading-partner /bookmarks
         info(`Document ${item._id} bid ${bid} approved by user ${approvalUser}. Ushering document through to completion...`)
         await postJob({
@@ -1275,7 +1279,7 @@ async function queueDocumentJob(data: ListChange, path: string) {
           name: item.name,
         })
       } else { //if (status === "rejected" || status === "incomplete") {
-
+        info(`Document ${item._id} approvalUser was not us. status !== approved. Skipping.`)
       }
 
       let msg = `Document not pending, approval status not set by Trellis. Skipping. Document: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
