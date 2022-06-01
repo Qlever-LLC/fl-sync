@@ -151,8 +151,7 @@ export async function handleItem(type: string, item: FlObject) {
     //REMOVE THIS LATER >>>>>>>>>>>>>>>>>>>>>>>>>
     /*
     if (_.has(item, 'shareSource.type.name') && item.shareSource.type.name === "Certificate of Insurance") {
-      SOMEGLOBALCOUNT++;
-      console.log("Continuing on COI document", item._id, bid, SOMEGLOBALCOUNT)
+      console.log("Continuing on COI document", item._id, bid)
     } else {
       console.log("Skipping non COI document", item._id, bid)
       return true;
@@ -170,6 +169,8 @@ export async function handleItem(type: string, item: FlObject) {
         info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
         sync = true;
       }
+      //TODO: REMOVE LATER
+      sync = true;
     } catch (err: any) {
       if (err.status !== 404) throw err;
       info(`Resource is not already on trellis. Syncing...`);
@@ -187,6 +188,9 @@ export async function handleItem(type: string, item: FlObject) {
         data: {'food-logiq-mirror': item } as unknown as Body,
         tree
       })
+      console.log('awaiting delay for item', item._id)
+      await Promise.delay(30000);
+      console.log('done awaiting delay for item', item._id)
       info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
     }
     return true;
