@@ -425,6 +425,7 @@ export async function postTpDocument({bid, item, oada, masterid, jobId, jobKey}:
     .then(r => r.data)
     .catch(err => {
       if (err.status === 404) {
+        info(`Bad attachments on item ${item._id}. Throwing JobError`)
         throw new JobError(attachmentsErrorMsg, 'bad-fl-attachments')
       } else throw err;
     })
@@ -556,8 +557,6 @@ export async function postTpDocument({bid, item, oada, masterid, jobId, jobKey}:
       vdoc: { pdf: {[fileHash]: {_id: pdfId, _rev: 0 }}}}
   })
   info(`Pdf linked into /_meta/vdoc/pdf/${fileHash} of the partial json document.`);
-
-
 
   await oada.put({
     path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}`,
