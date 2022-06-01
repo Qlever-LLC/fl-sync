@@ -19,7 +19,7 @@ import tree from './tree.js';
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 }
-import {postTpDocument} from './mirrorWatch';
+//import {postTpDocument} from './mirrorWatch';
 //@ts-ignore
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
@@ -193,7 +193,7 @@ async function main() {
         tree
       })
 
-      await postTpDocument({masterid, item, bid, oada: CONNECTION});
+//      await postTpDocument({masterid, item, bid, oada: CONNECTION});
       console.log('DONE', key);
     })
   } catch(err) {
