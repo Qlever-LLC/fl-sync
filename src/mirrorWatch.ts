@@ -117,8 +117,9 @@ export async function getLookup(item: any, key: string) {
 
     let flJobKeys = Object.keys(data?.services?.['fl-sync']?.jobs || {})
 
+    console.log({flJobKeys})
     let jobKey = mostRecentKsuid(flJobKeys);
-    if (!jobKey) throw new Error(`jobKey not found in _meta doc of the pdf [${pdfId}]: flJobKeys: ${flJobKeys}`)
+    if (!jobKey) throw new Error(`jobKey not found in _meta doc of the pdf [${pdfId}]`)
 
     let jobId = data?.services?.['fl-sync']?.jobs?.[jobKey]!._id
 
@@ -170,7 +171,7 @@ export async function onTargetChange(change: Change, targetJobKey: string) {
     }).then(r => r.data as JsonObject);
 
     if (!targetToFlSyncJobs.has(targetJobKey)) {
-      info(`No target job lookup for ${targetJobKey}`);
+      trace(`No target job lookup for ${targetJobKey}`);
       return;
     }
     let {jobId: flSyncJobId} = targetToFlSyncJobs.get(targetJobKey)!;
@@ -405,7 +406,7 @@ export const handleAssessmentJob: WorkerFunction = async (job: any, {oada, jobId
   }
 }//handleAssessmentJob
 
-export async function postTpDocument({bid, item, oada, masterid}:{bid: string, item: FlObject, oada: OADAClient, masterid: string}) {
+export async function postTpDocument({bid, item, oada, masterid, jobId, jobKey}:{bid: string, item: FlObject, oada: OADAClient, masterid: string, jobKey: string, jobId: string}) {
   info(`postTpDocument: bid:${bid} item:${item._id}`);
   let type = item?.shareSource?.type?.name;
   // 1. Retrieve the attachments and unzip
@@ -480,16 +481,26 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
   console.log('postTpDocument 6')
   // 4. Create a vdoc entry from the pdf to foodlogiq
   await oada.put({
-    path: `${pdfId}/_meta`,
+    path: `/${pdfId}/_meta`,
     data: {
       filename: fKey,
       vdoc: {
         foodlogiq: { _id: mirrorid }
+      },
+      services: {
+        'fl-sync': {
+          jobs: {
+            [jobKey]: { _id: jobId }
+          }
+        }
       }
     } as Body,
     contentType: 'application/json',
   });
 
+  console.log("FINISHED WRITING FLSYNC TO META", {pdfId, jobKey, jobId})
+  // Create reference from the pdf to the fl-sync job
+//  trace(`Creating link to fl-sync job in meta of ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fileHash}/_meta`);
 
   console.log('postTpDocument 7')
   // 5. Create a vdoc entry from the fl doc to the pdf
@@ -544,6 +555,8 @@ export async function postTpDocument({bid, item, oada, masterid}:{bid: string, i
   })
   info(`Pdf linked into /_meta/vdoc/pdf/${fileHash} of the partial json document.`);
 
+
+
   await oada.put({
     path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}`,
     data: {
@@ -580,7 +593,7 @@ export const handleDocumentJob: WorkerFunction = async (job: Job, {oada, jobId: 
 
     if (!item || !isObj(item)) throw new Error(`Bad FlObject`);
 
-    let {fileHash, urlName, docKey, docType} = await postTpDocument({bid, oada, item, masterid})
+    let {docKey, docType} = await postTpDocument({bid, oada, item, masterid, jobKey, jobId})
     await postUpdate(
       CONNECTION,
       jobId,
@@ -597,20 +610,6 @@ export const handleDocumentJob: WorkerFunction = async (job: Job, {oada, jobId: 
       }
     })
 
-    // Create reference from the pdf to the fl-sync job
-    await CONNECTION.put({
-      path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fileHash}/_meta`,
-      data: {
-        services: {
-          'fl-sync': {
-            jobs: {
-              [jobKey]: { _id: jobId }
-            }
-          }
-        }
-      }
-    })
-    trace(`Creating link to fl-sync job in meta of ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fileHash}/_meta`);
 
     //Lazy create an index of trading partners' documents resources for monitoring.
     await CONNECTION.head({
@@ -1239,7 +1238,7 @@ async function queueDocumentJob(data: ListChange, path: string) {
     }
     let status = item.shareSource && item.shareSource.approvalInfo.status;
     let approvalUser = _.get(item, `shareSource.approvalInfo.setBy._id`);
-    info(`approvalInfo user: [${approvalUser}]. Trellis user: [${FL_TRELLIS_USER}]. Status: [${status}].`);
+    info(`approvalInfo user: [${approvalUser}]. Trellis user: [${FL_TRELLIS_USER}]. Status: [${status}]. id: [${item._id}]`);
 
     if (status === 'awaiting-review') {
       //2a. Create new job and link into jobs list and fl doc meta
