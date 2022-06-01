@@ -497,7 +497,7 @@ export async function initialize({
   watchConfig?: boolean
 }) {
   try {
-    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.7]       >>>>>>>>>>`);
+    info(`<<<<<<<<<       Initializing fl-sync service. [v1.2.8]       >>>>>>>>>>`);
     TOKEN = await getToken();
     // Connect to oada
     try {
