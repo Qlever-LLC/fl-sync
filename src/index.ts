@@ -188,9 +188,6 @@ export async function handleItem(type: string, item: FlObject) {
         data: {'food-logiq-mirror': item } as unknown as Body,
         tree
       })
-      console.log('awaiting delay for item', item._id)
-      await Promise.delay(30000);
-      console.log('done awaiting delay for item', item._id)
       info(`Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`);
     }
     return true;
@@ -308,8 +305,7 @@ export async function fetchCommunityResources({ type, date, pageIndex=undefined 
     */
   })//, { concurrency: CONCURRENCY })
   .catch(err => {
-    console.log("SOMETHING DID HAPPEN HERE");
-    console.log(err);
+    error('fetchCommunityResources', err);
     throw err;
   })
   // Repeat for additional pages of FL results
@@ -598,7 +594,7 @@ if (esmain(import.meta)) {
     master: true,
     target: true,
     service: true
-  })
+    })
 } else {
   info('Just importing fl-sync');
 }
