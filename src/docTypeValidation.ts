@@ -1,20 +1,34 @@
-import moment, {Moment} from 'moment';
+/**
+ * @license
+ * Copyright 2022 Qlever LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import moment, { Moment } from 'moment';
 import debug from 'debug';
-import type {FlObject} from './mirrorWatch.js';
-import {fromOadaType} from './conversions.js';
+import type { FlObject } from './mirrorWatch.js';
+import { fromOadaType } from './conversions.js';
 
 const info = debug('fl-sync:mirror-watch:info');
 const error = debug('fl-sync:mirror-watch:error');
 
-//TODO:
+// TODO:
 //      3) Add in the overall expiration date into the array to be
 //      reduced to a minimum expiration.
 //      4) Consider taking the FL expiration if its the minimum in the
 //      even that the expiration date is unlisted or something
 //      5) Fix typescript issues...
-
-
-
 
 /**
  * validates documents that have not yet been approved
@@ -23,20 +37,26 @@ const error = debug('fl-sync:mirror-watch:error');
  * @param {*} type
  * @returns
  */
-export async function validateResult(trellisDoc: any, flMirror: FlObject, type: string) {
-  info(`Validating pending doc [${trellisDoc._id}]; type: [${type}]`);
+export async function validateResult(
+  trellisDocument: any,
+  flMirror: FlObject,
+  type: string
+) {
+  info(`Validating pending doc [${trellisDocument._id}]; type: [${type}]`);
   try {
-    let flType = (fromOadaType(type))!.name as unknown as keyof typeof validation;
-    if (!flType || !validation[flType]) throw new Error(`Validation of FL Type ${flType} unsupported`);
-    return validation[flType](trellisDoc, flMirror);
-    } catch(err: any) {
-    error('validateResult Errored: ', err);
+    const flType = fromOadaType(type)!
+      .name as unknown as keyof typeof validation;
+    if (!flType || !validation[flType])
+      throw new Error(`Validation of FL Type ${flType} unsupported`);
+    return validation[flType](trellisDocument, flMirror);
+  } catch (error_: any) {
+    error('validateResult Errored: ', error_);
     return {
       status: false,
-      message: `validateResult Errored: ` + err.message
-    }
+      message: `validateResult Errored: ${error_.message}`,
+    };
   }
-}//validateResult
+} // ValidateResult
 
 // For multiple checks:
 /*
@@ -52,10 +72,9 @@ export async function validateResult(trellisDoc: any, flMirror: FlObject, type: 
     };
   */
 
-
-let validation = {
-  '100g Nutritional Information': (trellisDoc: any, flMirror: FlObject) => {
-    let trellisExpiration = moment(trellisDoc.expire_date).utcOffset(0);
+const validation = {
+  '100g Nutritional Information'(trellisDocument: any, flMirror: FlObject) {
+    const trellisExpiration = moment(trellisDocument.expire_date).utcOffset(0);
     return validateExpiration(moment(trellisExpiration), flMirror);
   },
   /*
@@ -78,11 +97,10 @@ let validation = {
   'California Prop 65 Statement': (trellisDoc: any, flMirror: FlObject) => {
   },
   */
-  'Certificate of Insurance': (trellisDoc: any, flMirror: FlObject) => {
-    //@ts-ignore
-    let trellisDates: any[] = Object.values(trellisDoc.policies)
-      .map((obj:any) => moment(obj.expire_date).utcOffset(0))
-    //@ts-ignore
+  'Certificate of Insurance'(trellisDocument: any, flMirror: FlObject) {
+    const trellisDates: any[] = Object.values(trellisDocument.policies).map(
+      (object: any) => moment(object.expire_date).utcOffset(0)
+    );
     return validateExpiration(trellisDates, flMirror);
   },
   /*
@@ -162,47 +180,54 @@ let validation = {
   'WIRE Form': (trellisDoc: any, flMirror: FlObject) => {
   },
   */
-}
+};
 
-function validateExpiration(trellisDates: Moment | Array<Moment>, flMirror: FlObject) {
+function validateExpiration(
+  trellisDates: Moment | Moment[],
+  flMirror: FlObject
+) {
   let message = '';
   let status = true;
-  let flExp = moment(flMirror.expirationDate).format('YYYY-MM-DD');
-  let minimumExp : string;
-
+  const flExp = moment(flMirror.expirationDate).format('YYYY-MM-DD');
+  let minimumExp: string;
 
   if (trellisDates && Array.isArray(trellisDates)) {
     // Filter out the common bad date from target of 1900-12-30
-    trellisDates = trellisDates.filter(i => i.format('YYYY-MM-DD') !== '1900-12-30')
+    trellisDates = trellisDates.filter(
+      (index) => index.format('YYYY-MM-DD') !== '1900-12-30'
+    );
 
     if (trellisDates.length > 0) {
-      //@ts-ignore
-      minimumExp = trellisDates.reduce(
-      //@ts-ignore
-        (prevExp, currentExp) => prevExp < currentExp ? prevExp : currentExp,
-        trellisDates[0]
-      ).format('YYYY-MM-DD');
-    } else throw new Error('Could not extract expiration dates from PDF.')
+      minimumExp = trellisDates
+        .reduce(
+          (previousExp, currentExp) =>
+            previousExp < currentExp ? previousExp : currentExp,
+          trellisDates[0]!
+        )
+        .format('YYYY-MM-DD');
+    } else throw new Error('Could not extract expiration dates from PDF.');
   } else {
     minimumExp = trellisDates.format('YYYY-MM-DD');
   }
-  let now = moment().utcOffset(0);
+
+  const now = moment().utcOffset(0);
 
   if (moment(flExp) > moment(minimumExp)) {
     message = `Expiration date submitted in Food Logiq (${flExp}) does not match the minimum expiration date found in the PDF document (${minimumExp}).`;
     status = false;
   }
+
   if (moment(minimumExp) <= now) {
     message = `Minimum expiration date found on the document indicates it is already expired: ${minimumExp}`;
     status = false;
   }
 
   if (message) info(message);
-  return {message, status}
+  return { message, status };
 }
 
 /*
-function validateEffective(trellisDoc: any, flMirror: FlObject) {
+Function validateEffective(trellisDoc: any, flMirror: FlObject) {
   let message: string;
   let status = true;
   let flEffective = moment(flMirror.shareSource.shareSpecificAttributes.effectiveDate).format('YYYY-MM-DD');
@@ -217,4 +242,4 @@ function validateEffective(trellisDoc: any, flMirror: FlObject) {
 
 export default {
   validateResult,
-}
+};
