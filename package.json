@@ -1,10 +1,11 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "1.2.12",
+  "version": "1.2.13",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.ts",
   "scripts": {
     "build": "tsc -b",
+    "watch": "tsc -b --watch",
     "start": "node ${INSPECT:-} --enable-source-maps dist/index.js",
     "test": "yarn build test && c8 ava",
     "test:debug": "ava -T 60m -svc 1 --no-worker-threads"
