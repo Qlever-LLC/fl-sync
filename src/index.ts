@@ -169,8 +169,6 @@ export async function handleItem(type: string, item: FlObject) {
         info(`Document difference in FL doc [${item._id}] detected. Syncing...`);
         sync = true;
       }
-      //TODO: REMOVE LATER
-      sync = true;
     } catch (err: any) {
       if (err.status !== 404) throw err;
       info(`Resource is not already on trellis. Syncing...`);
@@ -515,10 +513,12 @@ export async function initialize({
 
     if (watchConfig === undefined || watchConfig) {
       await watchFlSyncConfig();
+      info('Started fl-sync config handler.')
     }
 
     if (master === undefined || master) {
       await watchTrellisFLBusinesses(CONNECTION);
+      info('Started master data handler.')
     }
 
     // Some queued jobs may depend on the poller to complete, so start it now.
@@ -531,6 +531,7 @@ export async function initialize({
         interval: INTERVAL_MS,
         name: 'food-logiq-poll',
       });
+      info('Started fl-sync poller.')
     }
 
     // Create the service
@@ -557,11 +558,12 @@ export async function initialize({
         // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
         process.exit(1);
       });
-      info(`Finished starting service: ${SERVICE_NAME}`);
+      info('Started fl-sync mirror handler.')
     }
 
     if (target === undefined || target) {
       await watchTargetJobs();
+      info('Started target jobs handler.')
     }
 
 /*    await reports.interval({
@@ -588,6 +590,7 @@ process.on('uncaughtException', function(err) {
 });
 
 if (esmain(import.meta)) {
+  info("Starting up the service. Calling initialize")
   initialize({
     polling: true,
     watchConfig: true,
