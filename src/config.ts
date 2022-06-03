@@ -14,11 +14,11 @@
  */
 
 import convict from 'convict';
-import {url} from 'convict-format-with-validator';
-import {duration} from 'convict-format-with-moment';
-convict.addFormat(url)
-convict.addFormat(duration)
+import { url } from 'convict-format-with-validator';
+import { duration } from 'convict-format-with-moment';
 import { config as load } from 'dotenv';
+convict.addFormat(url);
+convict.addFormat(duration);
 
 load();
 
@@ -28,13 +28,13 @@ const config = convict({
       doc: 'Base path for the fl-sync service',
       default: '/bookmarks/services/fl-sync',
       env: 'SERVICE_PATH',
-      arg: 'service_path'
+      arg: 'service_path',
     },
     name: {
       doc: 'Name of the service; used by jobs lib; helps configuring tests separately',
       default: 'fl-sync',
       env: 'SERVICE_NAME',
-      arg: 'service_name'
+      arg: 'service_name',
     },
   },
   delay: {
@@ -42,7 +42,7 @@ const config = convict({
     default: 0,
     format: Number,
     env: 'DELAY',
-    arg: 'delay'
+    arg: 'delay',
   },
   trellis: {
     domain: {
@@ -60,18 +60,19 @@ const config = convict({
       arg: 'token',
     },
     endpoints: {
-      tps: {
+      'tps': {
         doc: 'trading partner endpoint in trellis',
-        default: "/bookmarks/trellisfw/trading-partners/",
+        default: '/bookmarks/trellisfw/trading-partners/',
       },
-      utps: {
-        default: "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index",
+      'utps': {
+        default:
+          '/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index',
         doc: 'unidentified trading partner endpoint in trellis',
       },
       'fl-bus': {
-        default: "/bookmarks/services/fl-sync/businesses",
+        default: '/bookmarks/services/fl-sync/businesses',
         doc: 'business mirror endpoint in trellis',
-      }
+      },
     },
     justTps: {
       doc: `Don't retrieve TP resources, just mirror only the TPs themselves.`,
@@ -85,102 +86,102 @@ const config = convict({
       format: Number,
       default: 1,
       env: 'CONCURRENCY',
-      arg: 'concurrency'
+      arg: 'concurrency',
     },
     handleIncompleteInterval: {
       doc: 'On this regular interval, items from the process queue that failed at some point will be reprocessed',
       format: Number,
-      default: 3600000,
+      default: 3_600_000,
       env: 'HANDLE_INCOMPLETE_INTERVAL',
-      arg: 'handleIncompleteInterval'
+      arg: 'handleIncompleteInterval',
     },
     reportInterval: {
       doc: 'Time interval for reports to be generated.',
       format: Number,
-      default: 86400000,
+      default: 86_400_000,
       env: 'REPORT_INTERVAL',
-      arg: 'reportInterval'
+      arg: 'reportInterval',
     },
   },
   foodlogiq: {
-    interval: {
+    'interval': {
       doc: 'polling interval',
       default: 30,
       env: 'INTERVAL',
       arg: 'interval',
     },
-    domain: {
+    'domain': {
       doc: 'food logiq api domain or base url',
       default: `https://sandbox-api.foodlogiq.com`,
-      env: 'FL_DOMAIN'
+      env: 'FL_DOMAIN',
     },
     'assessment-template': {
       id: {
         doc: 'template _id in food logiq',
-        default: "606cc945c8f60c000e53947f",
-        env: 'FL_COI_ASSESSMENT'
+        default: '606cc945c8f60c000e53947f',
+        env: 'FL_COI_ASSESSMENT',
       },
       name: {
-        default: "Certificate of Insurance (COI) Requirements",
+        default: 'Certificate of Insurance (COI) Requirements',
         doc: 'template name in food logiq',
-        env: 'FL_COI_ASSESSMENT_NAME'
+        env: 'FL_COI_ASSESSMENT_NAME',
       },
     },
-    community: {
+    'community': {
       id: {
         doc: 'community _id in food logiq to be synced',
-        default: "5fff03e0458562000f4586e9",
-        env: 'FL_COMMUNITY'
+        default: '5fff03e0458562000f4586e9',
+        env: 'FL_COMMUNITY',
       },
       name: {
         doc: 'name of community in food logiq to be synced',
-        default: "Smithfield Foods",
-        env: 'FL_COMMUNITY_NAME'
+        default: 'Smithfield Foods',
+        env: 'FL_COMMUNITY_NAME',
       },
       owner: {
         id: {
           doc: 'community owner business _id',
-          default: "5acf7c2cfd7fa00001ce518d",
-          env: 'FL_OWNER'
+          default: '5acf7c2cfd7fa00001ce518d',
+          env: 'FL_OWNER',
         },
         name: {
           doc: 'community owner name',
-          default: "Smithfield Foods",
-          env: 'FL_OWNER_NAME'
-        }
+          default: 'Smithfield Foods',
+          env: 'FL_OWNER_NAME',
+        },
       },
     },
-    testSupplier: {
+    'testSupplier': {
       name: {
         doc: 'Name of supplier used for testing',
-        default: "TrellisTest",
-        env: 'FL_SUPPLIER_NAME'
+        default: 'TrellisTest',
+        env: 'FL_SUPPLIER_NAME',
       },
       id: {
         doc: 'The _id of supplier used for testing',
-        default: "61f95cd2df6175000f371494",
-        //default: "61c22e047953d4000ee0363f",
-        env: 'FL_SUPPLIER_ID'
+        default: '61f95cd2df6175000f371494',
+        // Default: "61c22e047953d4000ee0363f",
+        env: 'FL_SUPPLIER_ID',
       },
     },
-    supportedTypes: {
-      doc: "Array of supported FL document types",
+    'supportedTypes': {
+      doc: 'Array of supported FL document types',
       format: Array,
-      default: ["Certificate of Insurance"],
-      env: "flTypes"
+      default: ['Certificate of Insurance'],
+      env: 'flTypes',
     },
-    token: {
+    'token': {
       doc: 'Food Logiq API token',
       format: String,
       default: '-----',
       env: 'FL_TOKEN',
     },
-    trellisUser: {
+    'trellisUser': {
       doc: 'User ID used by Trellis automation',
       format: String,
-      default: "5e27480dd85523000155f6db",
-      env: 'FL_TRELLIS_USER'
-    }
+      default: '5e27480dd85523000155f6db',
+      env: 'FL_TRELLIS_USER',
+    },
   },
   slack: {
     posturl: {

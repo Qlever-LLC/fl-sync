@@ -1,14 +1,30 @@
-import _ from "lodash";
-import chai from "chai";
-import chaiAsPromised from "chai-as-promised";
-import moment from "moment";
-import axios from "axios";
-import Promise from "bluebird";
-import debug from "debug";
+/**
+ * @license
+ * Copyright 2022 Qlever LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import _ from 'lodash';
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
+import moment from 'moment';
+import axios from 'axios';
+import Promise from 'bluebird';
+import debug from 'debug';
 const info = debug('fl-sync:info');
 const warn = debug('fl-sync:warn');
 const error = debug('fl-sync:error');
-import * as config from '../config.default.js';
+import { default } from '../config.default.js';
 
 const day = moment().format('YYYY-MM-DD');
 chai.use(chaiAsPromised);
@@ -20,90 +36,90 @@ const BID = "60a70d7eb22bd7000e45af14";
 
 let PATH_DOCUMENTS = `https://sandbox-api.foodlogiq.com/v2/businesses/${BID}/documents`;
 
-let FL_TOKEN = config.default.FL_TOKEN;
-let AUTHORIZATION = {
+let FL_TOKEN = default.FL_TOKEN;
+const AUTHORIZATION = {
   "Authorization": FL_TOKEN
 };
 
 /**
- * gets FL documents for Centricity Test Account
- * @param path 
+ * Gets FL documents for Centricity Test Account
+ * @param path
  */
 async function getFLDocuments(path) {
   await axios({
-    method: "get",
+    method: 'get',
     url: path,
-    headers: AUTHORIZATION
-  }).then(async (result) => {
-    return result.data.pageItems;
-  }).catch((e) => {
-    error("--> Error when retrieving documents. ", e);
-    return [];
-  });
-}//cleanUpFLDocuments
+    headers: AUTHORIZATION,
+  })
+    .then(async (result) => result.data.pageItems).catch((error_) => {
+    error("--> Error when retrieving documents. ", error_);
+      return [];
+    });
+} // cleanUpFLDocuments
 
 /**
  * deletes the Centricity Test Account documents from FL
- * @param path url 
+ * @param path url
  */
 async function cleanUpFLDocuments(path) {
   await axios({
-    method: "get",
+    method: 'get',
     url: path,
-    headers: AUTHORIZATION
-  }).then(async (result) => {
-    //return result.data.pageItems;
-    info("--> retrieving documents ", result.data.pageItems);
-    await Promise.map(result.data.pageItems, async function (document) {
-      let _path = path + `/${document._id}`
-      return await axios({
-        method: "delete",
-        url: _path,
-        headers: AUTHORIZATION
-      }).then(async (del_result) => {
-        info("Documents deleted.");
+    headers: AUTHORIZATION,
+  })
+    .then(async (result) => {
+      // return result.data.pageItems;
+      info('--> retrieving documents ', result.data.pageItems);
+      await Promise.map(result.data.pageItems, async (document) => {
+        let _path = path + `/${document._id}`;
+        return await axios({
+          method: 'delete',
+          url: _path,
+          headers: AUTHORIZATION,
+        }).then(async (del_result) => {
+          info('Documents deleted.');
+        });
       });
+    })
+    .catch((error_) => {
+    error("--> Error when retrieving documents. ", error_);
+      return [];
     });
-
-  }).catch((e) => {
-    error("--> Error when retrieving documents. ", e);
-    return [];
-  });
-}//cleanUpFLDocuments
+} // cleanUpFLDocuments
 
 /**
  * deletes documents from centricity test account
- * @param path 
- * @param documents 
+ * @param path
+ * @param documents
  */
 async function deleteDocuments(path, documents) {
-  await Promise.map(documents, async function (document) {
-    let _path = path + `/${document._id}`
+  await Promise.map(documents, async (document) => {
+    const _path = path + `/${document._id}`
     return await axios({
-      method: "delete",
+      method: 'delete',
       url: _path,
-      headers: AUTHORIZATION
-    }).then(async (del_result) => {
-      info("Documents deleted.");
-    }).catch((e) => {
-      error("--> Error when deleting documents. ", e);
-    });
+      headers: AUTHORIZATION,
+    })
+      .then(async (del_result) => {
+        info('Documents deleted.');
+      })
+      .catch((error_) => {
+      error("--> Error when deleting documents. ", error_);
+      });
   });
-}//deleteDocuments
+} // deleteDocuments
 
-
-describe("clean up documents in FL for Centricity Test Account.", () => {
-
+describe('clean up documents in FL for Centricity Test Account.', () => {
   before(async function () {
-    this.timeout(60000);
-    // let documents = await getFLDocuments(PATH_DOCUMENTS);
+    this.timeout(60_000);
+    // Let documents = await getFLDocuments(PATH_DOCUMENTS);
     // await deleteDocuments(PATH_DOCUMENTS, documents);
     await cleanUpFLDocuments(PATH_DOCUMENTS);
     await Promise.delay(2000);
   });
 
   it(`there should not be documents for business ${BID}`, async () => {
-    let n_docs = await axios({
+    const n_docs = await axios({
       method: "get",
       url: PATH_DOCUMENTS,
       headers: AUTHORIZATION
@@ -115,5 +131,4 @@ describe("clean up documents in FL for Centricity Test Account.", () => {
     });
     expect(n_docs).to.equal(0);
   });
-
 });

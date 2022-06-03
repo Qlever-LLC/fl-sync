@@ -1,11 +1,27 @@
-process.env.NODE_TLS_REJECT_AUTHORIZED='0';
+/**
+ * @license
+ * Copyright 2022 Qlever LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 import sql from 'mssql';
-import { connect, JsonObject} from '@oada/client'
+import { JsonObject, connect } from '@oada/client';
 import config from '../config.js';
 import Promise from 'bluebird';
+process.env.NODE_TLS_REJECT_AUTHORIZED = '0';
 
-let DOMAIN = config.get('trellis.domain');
-let TOKEN = config.get('trellis.token');
+const DOMAIN = config.get('trellis.domain');
+const TOKEN = config.get('trellis.token');
 
 let sqlConfig = {
   server: 'localhost',
@@ -14,12 +30,12 @@ let sqlConfig = {
   port: 3003,
   options: {
     encrypt: true,
-    trustServerCertificate: true 
-  }
-}
+    trustServerCertificate: true,
+  },
+};
 
-let prod = false;
-if (prod) {
+const production = false;
+if (production) {
   sqlConfig = {
     server: 'localhost',
     database: 'LFDynamic',
@@ -27,34 +43,37 @@ if (prod) {
     port: 3003,
     options: {
       encrypt: true,
-      trustServerCertificate: true
-    }
-  }
+      trustServerCertificate: true,
+    },
+  };
 }
-//let sqlString = 'Server=localhost,3003;TrustServerCertificate=true;Database=LFDynamic;User Id=trellisdev;Password=1S0wH9VhED^q;Encrypt=true'
-      
+// Let sqlString = 'Server=localhost,3003;TrustServerCertificate=true;Database=LFDynamic;User Id=trellisdev;Password=1S0wH9VhED^q;Encrypt=true'
+
 async function main() {
   try {
     await sql.connect(sqlConfig);
 
-    //const qresult = await sql.query`select * from SYSOBJECTS WHERE xtype = 'U'`
-    //const qresult = await sql.query`select * from LFDynamic.INFORMATION_SCHEMA.TABLES`
-    let qresult = (await sql.query`select * from SFI_Entities`).recordset as unknown as Array<sqlEntry>;
-    let trellisList = await fetchTradingPartners();
+    // Const qresult = await sql.query`select * from SYSOBJECTS WHERE xtype = 'U'`
+    // const qresult = await sql.query`select * from LFDynamic.INFORMATION_SCHEMA.TABLES`
+    let qresult = (await sql.query`select * from SFI_Entities`)
+      .recordset as unknown as sqlEntry[];
+    const trellisList = await fetchTradingPartners();
 
     await handleEntities(trellisList, qresult);
-    console.log('before', qresult)
-    qresult = (await sql.query`select * from SFI_Entities`).recordset as unknown as Array<sqlEntry>;
-    console.log('after', qresult)
-    console.log("SQL LIST:", qresult.length, "TRELLIS:", trellisList.length)
-  } catch (err) {
-    console.log(err);
-    }
-  process.exit()
+    console.log('before', qresult);
+    qresult = (await sql.query`select * from SFI_Entities`)
+      .recordset as unknown as sqlEntry[];
+    console.log('after', qresult);
+    console.log('SQL LIST:', qresult.length, 'TRELLIS:', trellisList.length);
+  } catch (error) {
+    console.log(error);
+  }
+
+  process.exit();
 }
 
 /*
-async function addRemove(list: Array<sqlEntry>, name: string) {
+Async function addRemove(list: Array<sqlEntry>, name: string) {
   let exists = list.map(v => v["Entity Name"]).includes(name)
   let item = list.filter(v => v["Entity Name"] === name)
   let theItem = item[0];
@@ -71,49 +90,49 @@ async function removeEntity(rowguid: string) {
 }
 
 async function addEntity(name: string) {
-  console.log(`adding ${name}`)
+  console.log(`adding ${name}`);
   try {
     return await sql.query`INSERT INTO SFI_Entities ("Entity Name") VALUES (${name})`;
-    //await sql.query`INSERT INTO SFI_Entities ("Entity Name", "masterid") VALUES (${name}, ${masterid})`;
-  } catch(err) {
-    console.log("ERRORED ON THIS ONE", name)
-    console.log(err);
-    return undefined;
+    // Await sql.query`INSERT INTO SFI_Entities ("Entity Name", "masterid") VALUES (${name}, ${masterid})`;
+  } catch (error: unknown) {
+    console.log('ERRORED ON THIS ONE', name);
+    console.log(error);
   }
+
+  return undefined;
 }
 
 async function fetchTradingPartners() {
-  let CONNECTION = await connect({
+  const CONNECTION = await connect({
     domain: DOMAIN,
-    token: TOKEN
-  })
+    token: TOKEN,
+  });
 
-  let tps = await CONNECTION.get({
+  const tps = await CONNECTION.get({
     path: `/bookmarks/trellisfw/trading-partners/expand-index`,
-
-  }).then(r => r.data as JsonObject)
-  return Object.values(tps) as unknown as Array<trellisEntry>;
+  }).then((r) => r.data as JsonObject);
+  return Object.values(tps) as unknown as trellisEntry[];
 }
 
-async function handleEntities(trellis: Array<trellisEntry>, sqlList: Array<sqlEntry>) {
-  let list = sqlList.map(i => i.rowguid);
-  await Promise.map(sqlList, async (i) => await removeEntity(i.rowguid))
+async function handleEntities(trellis: trellisEntry[], sqlList: sqlEntry[]) {
+  const list = new Set(sqlList.map((index) => index.rowguid));
+  await Promise.map(sqlList, async (index) => removeEntity(index.rowguid));
   return Promise.map(trellis, async (item) => {
-    //TODO: Probably change this test after we add trellisId or something to the sql table entries
-    if (!list.includes(item.masterid) && item.masterid !== undefined) {
-      await addEntity(item.name)
+    // TODO: Probably change this test after we add trellisId or something to the sql table entries
+    if (!list.has(item.masterid) && item.masterid !== undefined) {
+      await addEntity(item.name);
     }
-  })
+  });
 }
 
 interface sqlEntry {
-  rowguid: string
-  "Entity Name": string
+  'rowguid': string;
+  'Entity Name': string;
 }
 
 interface trellisEntry {
-  name: string
-  masterid: string
+  name: string;
+  masterid: string;
 }
 
-main()
+main();
