@@ -115,14 +115,24 @@ export async function getLookup(item: any, key: string) {
     // Fetch then store a mapping to the fl-sync job
     let data = await CONNECTION.get({
       path: `/${pdfId}/_meta`,
-    }).then(r => JSON.parse((r?.data || "").toString()))
+    }).then(r => r.data)
 
+    if (Buffer.isBuffer(data)) {
+      data = JSON.parse((data || "").toString())
+    }
+
+    if (!isObj(data)) {
+      throw new Error(`PDF _meta [${pdfId}] was not an object.`)
+    }
+    //@ts-ignore
     let flJobKeys = Object.keys(data?.services?.['fl-sync']?.jobs || {})
+    console.log('getLookup1', flJobKeys)
 
     console.log({flJobKeys})
     let jobKey = mostRecentKsuid(flJobKeys);
     if (!jobKey) throw new Error(`jobKey not found in _meta doc of the pdf [${pdfId}]`)
 
+    //@ts-ignore
     let jobId = data?.services?.['fl-sync']?.jobs?.[jobKey]!._id
 
     let {data: { bid, key: docKey }} = await CONNECTION.get({
@@ -664,21 +674,13 @@ export const handleDocumentJob: WorkerFunction = async (job: Job, {oada, jobId: 
   }
 }//handleDocumentJob
 
-
-/**
- * Move approved documents into final location. Triggered by document re-mirror.
- * @param {*} item
- * @param {*} bid
- * @param {*} masterid
- * @returns
- */
+//The new one
 async function finishDoc(item: FlObject, bid: string, masterid: string, status: string) {
-
-  if (status === 'approved') {
+ if (status === 'approved') {
     info(`Finishing doc: [${item._id}] with status [${status}] `);
     //1. Get reference of corresponding pending scraped pdf
     let jobs = await CONNECTION.get({
-      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs`,
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/fl-sync/jobs`,
     }).then(r => r.data as unknown as Links)
     .catch((err) => {
       if (err.status !== 404) throw err;
@@ -689,18 +691,35 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
     if (!jobs || !isObj(jobs)) throw new Error('Bad _meta target jobs during finishDoc');
     let jobKey = mostRecentKsuid(Object.keys(jobs));
     if (!jobKey || !jobs) throw new Error('Most recent KSUID Key had no link _id');
-    console.log('fd', 2)
-    //let jobId = jobs[jobKey]!._id;
+    console.log('fd', 2, jobKey)
 
-    // Get FL-Sync job id then tidy targetToFlSyncJobs and resolve job promise
+    let jobObj = await CONNECTION.get({
+      path: `/resources/${jobKey}`
+    }).then(r => r.data as JsonObject)
+
+    console.log('fd', 2.5)
+
+    let targetJobs = _.get(jobObj, 'target-jobs') as unknown as string;
+    let targetJob: string;
+    if (targetJobs) {
+      let tJobs = Object.keys(targetJobs);
+      if (tJobs.length > 0) {
+        targetJob = tJobs[0] as unknown as string;
+      }
+    }
+
     //@ts-ignore
-    let {jobId} = targetToFlSyncJobs.get(jobKey);
-    if (!jobId) throw new Error(`targetJobKey ${jobKey} does not exist on Map targetToFlSyncJobs at handleScrapedResult`);
-    targetToFlSyncJobs.delete(jobKey);
+    if (targetJob !== undefined && targetToFlSyncJobs.has(targetJob)) {
+      targetToFlSyncJobs.delete(jobKey);
+    } else {
+      throw new Error('Target job not found. Could not move result')
+    }
+
     console.log('fd', 3)
 
+    //@ts-ignore
     let { data } = await CONNECTION.get({
-      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs/${jobKey}`,
+      path: `/resources/${targetJob}`,
     }) as {data: JsonObject}
     let result = data.result as unknown as {[key: string]: any};
     console.log('fd', 4)
@@ -724,13 +743,95 @@ async function finishDoc(item: FlObject, bid: string, masterid: string, status: 
       data: { _id: result[type][key]._id },
     })
     console.log('fd', 7)
-    endJob(jobId)
+    endJob(`/resources/${jobKey}`)
   } else {
     //Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
     info(`Document [${item._id}] with status [${status}]. finishDoc skipping.`);
     return;
   }
+}
+
+
+/**
+ * Move approved documents into final location. Triggered by document re-mirror.
+ * @param {*} item
+ * @param {*} bid
+ * @param {*} masterid
+ * @returns
+ */
+/*
+async function finishDoc(item: FlObject, bid: string, masterid: string, status: string) {
+  try {
+    if (status === 'approved') {
+      info(`Finishing doc: [${item._id}] with status [${status}] `);
+      //1. Get reference of corresponding pending scraped pdf
+      let jobs = await CONNECTION.get({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs`,
+      }).then(r => r.data as unknown as Links)
+      .catch((err) => {
+        if (err.status !== 404) throw err;
+        return {};
+      })
+
+      console.log('fd', 1)
+      if (!jobs || !isObj(jobs)) throw new Error('Bad _meta target jobs during finishDoc');
+      let jobKey = mostRecentKsuid(Object.keys(jobs));
+      if (!jobKey || !jobs) throw new Error('Most recent KSUID Key had no link _id');
+      console.log('fd', 2, jobKey)
+
+      // Get FL-Sync job id then tidy targetToFlSyncJobs and resolve job promise
+      //@ts-ignore
+      let {jobId} = targetToFlSyncJobs.get(jobKey);
+      console.log('fd', 2.5, jobId)
+      if (!jobId) {
+        console.log(`targetJobKey ${jobKey} does not exist on Map targetToFlSyncJobs at handleScrapedResult`);
+        //Generally, this function only gets called when a job has not been queued.
+        //However, its better to throw here in case it gets called from somehwere
+        //that had a job queued
+        throw new Error(`targetJobKey ${jobKey} does not exist on Map targetToFlSyncJobs at handleScrapedResult`);
+      }
+      console.log('fd', 2.75, targetToFlSyncJobs);
+      console.log('fd', 2.75, targetToFlSyncJobs.get(jobKey));
+      targetToFlSyncJobs.delete(jobKey);
+      console.log('fd', 3)
+
+      let { data } = await CONNECTION.get({
+        path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/target/jobs/${jobKey}`,
+      }) as {data: JsonObject}
+      let result = data.result as unknown as {[key: string]: any};
+      console.log('fd', 4)
+
+      let type = Object.keys(result || {})[0];
+      if (!type) return;
+      let key = Object.keys(result[type])[0];
+      if (!key) return;
+      console.log('fd', 5)
+
+      //2. Move approved docs to trading partner /bookmarks
+      info(`Moving approved document to [${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`);
+      await CONNECTION.put({
+        path: `${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}`,
+        data: {},
+        tree
+      });
+      console.log('fd', 6)
+      await CONNECTION.put({
+        path: `${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
+        data: { _id: result[type][key]._id },
+      })
+      console.log('fd', 7)
+      endJob(jobId)
+    } else {
+      //Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
+      info(`Document [${item._id}] with status [${status}]. finishDoc skipping.`);
+      return;
+    }
+  } catch(err) {
+    console.log(err);
+    throw err;
+  }
 }//finishDoc
+*/
 
 /**
  * resolves flSyncJobs such that jobs get succeeded
@@ -896,7 +997,9 @@ async function handleScrapedResult(targetJobKey: string) {
         `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejected FL Doc ${flId}: ${validationResult!.message}`,
         'in-progress'
       )
-      await rejectFlDoc(flId, validationResult?.message)
+      if (validationResult.message && !validationResult?.message.includes("Could not extract expiration dates")) {
+        await rejectFlDoc(flId, validationResult?.message)
+      }
       endJob(jobId, new JobError(validationResult?.message, 'document-validation'));
       return;
     } else {
@@ -930,7 +1033,7 @@ async function handleScrapedResult(targetJobKey: string) {
         if (assessmentId) {
           assessmentToFlId.set(assessmentId, {jobId, mirrorid, flId})
           await CONNECTION.put({
-            path: `${pending}/${jobKey}/assessments/${ASSESSMENT_TEMPLATE_ID}`,
+            path: `/resources/${jobKey}/assessments/${ASSESSMENT_TEMPLATE_ID}`,
             data: {id: assessmentId} as Body
           })
         }
@@ -1000,6 +1103,7 @@ export async function startJobCreator(oada: OADAClient) {
       } else throw err;
     })
 
+    console.log("Making documents listwatch", `${SERVICE_PATH}/businesses`)
     new ListWatch({
       conn: CONNECTION,
       itemsPath: `$.*.documents.*.food-logiq-mirror`,
@@ -1009,6 +1113,7 @@ export async function startJobCreator(oada: OADAClient) {
       resume: true,
       tree: mirrorTree,
     })
+    console.log("Done making documents listwatch");
 
     return new ListWatch({
       conn: CONNECTION,

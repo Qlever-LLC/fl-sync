@@ -182,7 +182,7 @@ function validateExpiration(trellisDates: Moment | Array<Moment>, flMirror: FlOb
         (prevExp, currentExp) => prevExp < currentExp ? prevExp : currentExp,
         trellisDates[0]
       ).format('YYYY-MM-DD');
-    } else throw new Error('Invalid empty array of expiration dates given to validateExpiration')
+    } else throw new Error('Could not extract expiration dates from PDF.')
   } else {
     minimumExp = trellisDates.format('YYYY-MM-DD');
   }
