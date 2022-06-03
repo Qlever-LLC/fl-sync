@@ -127,7 +127,7 @@ export async function watchFlSyncConfig() {
   });
 
   info('Watching %s for changes to the config', SERVICE_PATH);
-  await handleConfigChanges(changes);
+  void handleConfigChanges(changes);
 } // WatchFlSyncConfig
 
 /**
@@ -686,6 +686,9 @@ export async function initialize({
 
 process.on('uncaughtExceptionMonitor', (cError: unknown) => {
   error({ error: cError }, 'Uncaught exception');
+  //The code can carry on for most of these errors, but I'd like to know about
+  //them. If I throw, it causes more trouble so I won't.
+//  throw cError;
 });
 
 if (esMain(import.meta)) {
