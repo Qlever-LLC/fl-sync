@@ -472,6 +472,17 @@ export const handleAssessmentJob: WorkerFunction = async (
         headers: { Authorization: FL_TOKEN },
         data: item,
       });
+      info("WRITING REASONS", reasons.join(';'));
+
+      let docJob = assessmentToFlId.get(item._id);
+      if (docJob) {
+        await CONNECTION.put({
+          path: `/${docJob.jobId}`,
+          data: {
+            'fail-reasons': reasons.join(';')
+          }
+        })
+      }
       await postUpdate(
         CONNECTION,
         jobId,
@@ -535,7 +546,7 @@ export async function postTpDocument({
   const file = await axios(request)
     .then((r) => r.data)
     .catch((error_) => {
-      if (error_.status === 404) {
+      if (error_.response.status === 404) {
         info(`Bad attachments on item ${item._id}. Throwing JobError`);
         throw new JobError(attachmentsErrorMessage, 'bad-fl-attachments');
       } else throw error_;
@@ -1380,15 +1391,17 @@ async function queueAssessmentJob(change: ListChange, path: string) {
 
     const { jobId: documentJob } = assessmentToFlId.get(key)!;
 
-    const { data } = (await CONNECTION.get({
-      path: `/${documentJob}/config`,
-    })) as unknown as { data: JobConfig };
+    const docJob = await CONNECTION.get({
+      path: `/${documentJob}`
+    }).then(r => r.data);
+    //@ts-ignore
+    let jConfig = docJob.config as unknown as JobConfig;
 
-    if (!isObj(data)) {
+    if (!isObj(jConfig)) {
       throw new Error('Unexpected job config data');
     }
 
-    const { key: flDocumentId, type: flDocumentType } = data;
+    const { key: flDocumentId, type: flDocumentType } = jConfig;
     if (!flDocumentType) {
       info(
         `Assessment [${item._id}] could not find fl doc type prior to queueing. Ignoring.`
@@ -1439,7 +1452,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
             'type': assessmentType,
             key,
             bid,
-            'rev': data._rev,
+            'rev': jConfig._rev,
             'flDocId': flDocumentId,
             'flDocType': flDocumentType,
             'flDocJobId': documentJob,
@@ -1481,18 +1494,22 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       // } else if (item!.state === 'Rejected' && approvalUser === FL_TRELLIS_USER) {
     } else if (item.state === 'Rejected') {
       // 2b. Notify, clean up, and remove after rejection
-      // TODO: Work on new message. This message doesn't really explain what caused the
-      // assessment to be rejected in the first place. I.e., was it policy coverage of a particular type?
-      // How ought we carry the information regarding why it was rejected forward
-      // to now where we see the rejected assessment arrive?
-      const message = `A supplier Assessment associated with this document has been rejected. Please resubmit a document that satisfies supplier requirements.`;
+      // @ts-ignore
+      info("DOC", docJob)
+      const reasons:string = _.get(docJob, 'fail-reasons') as unknown as string;
+
+      const message = `A supplier Assessment associated with this document has
+      been rejected for the following reasons: ${reasons}.`;
       // Reject the assessment job;
       endJob(item._id, message);
       assessmentToFlId.delete(item._id);
+      info("REASONS", reasons);
 
       // Reject the FL Document with a supplier message; Reject the document fl-sync job
       if (flSyncJobs.get(documentJob)['allow-rejection'] !== false) {
-        await rejectFlDocument(flDocumentId, message);
+        if (reasons) {
+          await rejectFlDocument(flDocumentId, message);
+        }
         endJob(
           documentJob,
           new JobError(message, 'associated-assessment-rejected')
