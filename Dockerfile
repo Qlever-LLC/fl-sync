@@ -16,7 +16,7 @@ ARG NODE_VER=18-alpine
 ARG DIR=/usr/src/app/
 
 FROM node:$NODE_VER AS install
-ARG SERVICE
+ARG DIR
 
 WORKDIR $DIR
 
@@ -26,7 +26,7 @@ COPY ./package.json ./yarn.lock ./.yarnrc.yml $DIR
 RUN yarn workspaces focus --all --production
 
 FROM install AS build
-ARG SERVICE
+ARG DIR
 
 # Install dev deps too
 RUN yarn install --immutable
@@ -37,7 +37,7 @@ COPY . $DIR
 RUN yarn build --verbose && rm -rfv .yarn .pnp*
 
 FROM node:$NODE_VER AS production
-ARG SERVICE
+ARG DIR
 
 # Install needed packages
 RUN apk add --no-cache \
