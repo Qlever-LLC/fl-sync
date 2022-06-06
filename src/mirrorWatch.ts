@@ -155,9 +155,7 @@ export async function getLookup(item: any, key: string) {
 
     // @ts-expect-error
     const flJobKeys = Object.keys(data?.services?.['fl-sync']?.jobs || {});
-    console.log('getLookup1', flJobKeys);
 
-    console.log({ flJobKeys });
     const jobKey = mostRecentKsuid(flJobKeys);
     if (!jobKey)
       throw new Error(`jobKey not found in _meta doc of the pdf [${pdfId}]`);
@@ -541,7 +539,7 @@ export async function postTpDocument({
     headers: { Authorization: FL_TOKEN },
     responseEncoding: 'binary',
   };
-  console.log('postTpDocument 1');
+  trace('postTpDocument 1');
 
   const file = await axios(request)
     .then((r) => r.data)
@@ -551,7 +549,7 @@ export async function postTpDocument({
         throw new JobError(attachmentsErrorMessage, 'bad-fl-attachments');
       } else throw error_;
     });
-  console.log('postTpDocument 2');
+  trace('postTpDocument 2');
 
   const zip = await new jszip().loadAsync(file);
 
@@ -572,7 +570,7 @@ export async function postTpDocument({
   // safe for oada or client
   const fileHash = md5(fKey);
 
-  console.log('postTpDocument 3', item._id);
+  trace('postTpDocument 3', item._id);
   // 2. Fetch mirror and pdf resource id
   const mirrorid = await oada
     .get({
@@ -580,7 +578,7 @@ export async function postTpDocument({
     })
     .then((r) => r.data);
 
-  console.log('postTpDocument 4');
+  trace('postTpDocument 4');
   const pdfResponse = await oada
     .get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/vdoc/pdf`,
@@ -590,29 +588,29 @@ export async function postTpDocument({
       if (error_.status !== 404) throw error_;
     });
 
-  console.log('postTpDocument 5');
+  trace('postTpDocument 5');
   // 3a. PDF could already have been mirrored in the approval flow
   // If it doesn't exist, create a new PDF resource
   const pdfId: string =
     pdfResponse?.[fileHash]?._id || `resources/${ksuid.randomSync().string}`;
-  console.log('postTpDocument 5.1');
+  trace('postTpDocument 5.1');
 
   const ab = await zip.file(fKey)!.async('uint8array');
-  console.log('postTpDocument 5.2');
+  trace('postTpDocument 5.2');
   const zdata = Buffer.alloc(ab.byteLength);
-  console.log('postTpDocument 5.3');
+  trace('postTpDocument 5.3');
   for (let index = 0; index < zdata.length; ++index) {
     zdata[index] = ab[index]!;
   }
 
-  console.log('postTpDocument 5.4');
+  trace('postTpDocument 5.4');
   await oada.put({
     path: `/${pdfId}`,
     data: zdata,
     contentType: 'application/pdf',
   });
 
-  console.log('postTpDocument 6');
+  trace('postTpDocument 6');
   // 4. Create a vdoc entry from the pdf to foodlogiq
   await oada.put({
     path: `/${pdfId}/_meta`,
@@ -632,11 +630,11 @@ export async function postTpDocument({
     contentType: 'application/json',
   });
 
-  console.log('FINISHED WRITING FLSYNC TO META', { pdfId, jobKey, jobId });
+  trace('FINISHED WRITING FLSYNC TO META', { pdfId, jobKey, jobId });
   // Create reference from the pdf to the fl-sync job
   //  trace(`Creating link to fl-sync job in meta of ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${docKey}/_meta/vdoc/pdf/${fileHash}/_meta`);
 
-  console.log('postTpDocument 7');
+  trace('postTpDocument 7');
   // 5. Create a vdoc entry from the fl doc to the pdf
   // First, overwrite what is currently there if previous pdfs vdocs had been linked
   await axios({
@@ -652,7 +650,7 @@ export async function postTpDocument({
       'authorization': `Bearer ${TRELLIS_TOKEN}`,
     },
   });
-  console.log('postTpDocument 7.5');
+  trace('postTpDocument 7.5');
   await axios({
     method: 'put',
     url: `https://${DOMAIN}${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
@@ -670,7 +668,7 @@ export async function postTpDocument({
   });
   const pdfKey = pdfId.replace(/resources\//, '');
 
-  console.log('postTpDocument 8');
+  trace('postTpDocument 8');
   // 6. Link the pdf into the unextracted documents list
   const { document, docType, urlName } = await flToTrellis(item);
   const documentKey = await oada
@@ -682,7 +680,7 @@ export async function postTpDocument({
     .then((r) => r.headers['content-location']!.replace(/^\/resources\//, ''));
   trace(`Partial JSON created at /resources/${documentKey}`);
 
-  console.log('postTpDocument 9');
+  trace('postTpDocument 9');
   await oada.put({
     path: `resources/${documentKey}/_meta`,
     //    Path: `resources/${docKey}/_meta/vdoc/pdf/${fKey}`,
@@ -701,7 +699,7 @@ export async function postTpDocument({
     },
     tree,
   });
-  console.log('postTpDocument 10');
+  trace('postTpDocument 10');
   info(
     `Created partial JSON in docs list: ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${documentKey}`
   );
@@ -849,19 +847,19 @@ async function finishDocument(
         return {};
       });
 
-    console.log('fd', 1);
+    trace('fd', 1);
     if (!jobs || !isObj(jobs))
       throw new Error('Bad _meta target jobs during finishDoc');
     const jobKey = mostRecentKsuid(Object.keys(jobs));
     if (!jobKey || !jobs)
       throw new Error('Most recent KSUID Key had no link _id');
-    console.log('fd', 2, jobKey);
+    trace('fd', 2, jobKey);
 
     const jobObject = await CONNECTION.get({
       path: `/resources/${jobKey}`,
     }).then((r) => r.data as JsonObject);
 
-    console.log('fd', 2.5);
+    trace('fd', 2.5);
 
     const targetJobs = _.get(jobObject, 'target-jobs') as unknown as string;
     let targetJob: string;
@@ -879,19 +877,19 @@ async function finishDocument(
       throw new Error('Target job not found. Could not move result');
     }
 
-    console.log('fd', 3);
+    trace('fd', 3);
 
     const { data } = (await CONNECTION.get({
       path: `/resources/${targetJob}`,
     })) as { data: JsonObject };
     const result = data.result as unknown as Record<string, any>;
-    console.log('fd', 4);
+    trace('fd', 4);
 
     const type = Object.keys(result || {})[0];
     if (!type) return;
     const key = Object.keys(result[type])[0];
     if (!key) return;
-    console.log('fd', 5);
+    trace('fd', 5);
 
     // 2. Move approved docs to trading partner /bookmarks
     info(
@@ -902,12 +900,12 @@ async function finishDocument(
       data: {},
       tree,
     });
-    console.log('fd', 6);
+    trace('fd', 6);
     await CONNECTION.put({
       path: `${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
       data: { _id: result[type][key]._id },
     });
-    console.log('fd', 7);
+    trace('fd', 7);
     endJob(`/resources/${jobKey}`);
   } else {
     // Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
@@ -1288,7 +1286,7 @@ async function rejectFlDocument(documentId: string, message?: string) {
     url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/capa`,
     headers: { Authorization: FL_TOKEN },
     data: {
-      details: `${message} Please correct and resubmit.`,
+      details: `${message} Please correct and resubmit or reach out to the Smithfield FSQA team.`,
       type: 'change_request',
     },
   });
@@ -1334,7 +1332,6 @@ export async function startJobCreator(oada: OADAClient) {
         throw error_;
       });
 
-    console.log('Making documents listwatch', `${SERVICE_PATH}/businesses`);
     new ListWatch({
       conn: CONNECTION,
       itemsPath: `$.*.documents.*.food-logiq-mirror`,
@@ -1344,7 +1341,6 @@ export async function startJobCreator(oada: OADAClient) {
       resume: true,
       tree: mirrorTree,
     });
-    console.log('Done making documents listwatch');
 
     return new ListWatch({
       conn: CONNECTION,
@@ -1480,7 +1476,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
         path: `/${documentJob}/assessment-jobs`,
         data: {
           [jobkey]: {
-            _id: `resources/${key}`,
+            _id: `resources/${jobkey}`,
           },
         },
       });
@@ -1498,8 +1494,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       info("DOC", docJob)
       const reasons:string = _.get(docJob, 'fail-reasons') as unknown as string;
 
-      const message = `A supplier Assessment associated with this document has
-      been rejected for the following reasons: ${reasons}.`;
+      const message = `A supplier Assessment associated with this document has been rejected for the following reasons: ${reasons}.`;
       // Reject the assessment job;
       endJob(item._id, message);
       assessmentToFlId.delete(item._id);
