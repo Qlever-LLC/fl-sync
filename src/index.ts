@@ -504,7 +504,7 @@ export async function initialize({
 }) {
   try {
     info(
-      `<<<<<<<<<       Initializing fl-sync service. [v1.2.8]       >>>>>>>>>>`
+      `<<<<<<<<<       Initializing fl-sync service. [v1.2.16]       >>>>>>>>>>`
     );
     TOKEN = await getToken();
     // Connect to oada
