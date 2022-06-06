@@ -18,10 +18,10 @@ ARG DIR=/usr/src/app/
 FROM node:$NODE_VER AS install
 ARG SERVICE
 
-WORKDIR ${DIR}
+WORKDIR $DIR
 
-COPY ./.yarn ${DIR}.yarn
-COPY ./package.json ./yarn.lock ./.yarnrc.yml ${DIR}
+COPY ./.yarn $DIR.yarn
+COPY ./package.json ./yarn.lock ./.yarnrc.yml $DIR
 
 RUN yarn workspaces focus --all --production
 
@@ -31,7 +31,7 @@ ARG SERVICE
 # Install dev deps too
 RUN yarn install --immutable
 
-COPY . ${DIR}
+COPY . $DIR
 
 # Build code and remove dev deps
 RUN yarn build --verbose && rm -rfv .yarn .pnp*
@@ -46,10 +46,10 @@ RUN apk add --no-cache \
 # Do not run service as root
 USER node
 
-WORKDIR ${DIR}
+WORKDIR $DIR
 
-COPY --from=install ${DIR} ${DIR}
-COPY --from=build ${DIR} ${DIR}
+COPY --from=install $DIR $DIR
+COPY --from=build $DIR $DIR
 
 # Launch entrypoint with dumb-init
 # Remap SIGTERM to SIGINT https://github.com/Yelp/dumb-init#signal-rewriting
