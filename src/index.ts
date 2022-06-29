@@ -236,18 +236,20 @@ export async function handleItem(type: string, item: FlObject) {
  */
 export async function fetchCommunityResources({
   type,
-  date,
+  startTime,
+  endTime,
   pageIndex,
 }: {
   type: string;
-  date: string;
+  startTime: string;
+  endTime: string;
   pageIndex?: number;
 }) {
   pageIndex = pageIndex ?? 0;
   const url =
     type === 'assessments'
-      ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${date}..`
-      : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&versionUpdated=${date}..`;
+      ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${startTime}..${endTime}`
+      : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&versionUpdated=${startTime}..${endTime}`;
   const request: AxiosRequestConfig = {
     method: `get`,
     url,
@@ -281,28 +283,26 @@ export async function fetchCommunityResources({
     );
     if (type === 'documents') info(`Pausing for ${delay / 60_000} minutes`);
     if (type === 'documents') await setTimeout(delay);
-    await fetchCommunityResources({ type, date, pageIndex: pageIndex + 1 });
+    await fetchCommunityResources({ type, startTime, endTime, pageIndex: pageIndex + 1 });
   }
 }
 
 /**
  * Gets resources
  */
-async function getResources(lastPoll: Moment) {
-  // Format date
-  const date = (lastPoll || moment('20150101', 'YYYYMMDD')).utc().format();
-
+async function getResources(startTime: string, endTime: string) {
   // Get pending resources
   for await (const type of ['products', 'locations', 'documents'] as const) {
     trace(`Fetching community ${type}`);
-    await fetchCommunityResources({ type, date, pageIndex: undefined });
+    await fetchCommunityResources({ type, startTime, endTime, pageIndex: undefined });
   }
 
   // Now get assessments (slightly different syntax)
   trace('Fetching community assessments');
   await fetchCommunityResources({
     type: 'assessments',
-    date,
+    startTime,
+    endTime,
     pageIndex: undefined,
   });
 }
@@ -310,13 +310,14 @@ async function getResources(lastPoll: Moment) {
 /**
  * The callback to be used in the poller. Gets lastPoll date
  */
-export async function pollFl(lastPoll: Moment) {
+export async function pollFl(lastPoll: Moment, end: Moment) {
   // Sync list of suppliers
-  const date = (lastPoll || moment('20150101', 'YYYYMMDD')).utc().format();
-  trace(`Fetching FL community members with date: [${date}]`);
+  const startTime = (lastPoll || moment('20150101', 'YYYYMMDD')).utc().format();
+  const endTime = end.utc().format();
+  trace(`Fetching FL community members with start time: [${startTime}]`);
 
   await fetchAndSync({
-    from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${date}..`,
+    from: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships?createdAt=${startTime}..${endTime}`,
     to: (index: { business: { _id: string } }) =>
       `${SERVICE_PATH}/businesses/${index.business._id}`,
     async forEach(index: { business: { _id: string } }) {
@@ -357,7 +358,7 @@ export async function pollFl(lastPoll: Moment) {
   // Now fetch community resources
   trace(`JUST_TPS set to ${Boolean(JUST_TPS)}`);
   if (!JUST_TPS) {
-    await getResources(lastPoll);
+    await getResources(startTime, endTime);
   }
 } // PollFl
 
@@ -543,6 +544,11 @@ export async function initialize({
         pollFunc: pollFl,
         interval: INTERVAL_MS,
         name: 'food-logiq-poll',
+        getTime: (async () => axios({
+            method: 'head',
+            url: `${FL_DOMAIN}/businesses`,
+            headers: { Authorization: FL_TOKEN },
+          }).then((r) => r.headers.date)) as unknown as () => Promise<string>
       });
       info('Started fl-sync poller.');
     }

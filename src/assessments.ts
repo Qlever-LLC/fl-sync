@@ -268,6 +268,7 @@ async function updateAssessment(path: string, data: FlAssessment) {
   }).catch((error_) => {
     error('--> Error when updating the assessment.');
     error(error_);
+    error('Request was:', { url: path, data: JSON.stringify(data) })
     throw error_;
   });
 
