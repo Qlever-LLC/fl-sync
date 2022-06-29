@@ -139,7 +139,7 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
       // mirroring the business into trading partners
       // 1. make the resource
       info('--> mirroring the business into trading partners.');
-      console.log('DATA', data);
+      trace('DATA', data);
       const resId = await CONNECTION.post({
         path: `/resources`,
         data,
@@ -197,6 +197,8 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
     } else {
       info('--> TP exists. The FL business was not mirrored.');
     } // If
+
+    //return TradingPartners[key].masterid;
   } catch (error_) {
     error('--> error ', error_);
     throw error;
@@ -331,7 +333,7 @@ async function updateMasterId(
       error('--> error when updating masterid-index element. ', error_);
     });
 
-  // Updating masterid under fl-sync/business/<bid>
+    // Updating masterid under fl-sync/business/<bid>
   await CONNECTION.put({
     path,
     data: { masterid },

@@ -475,17 +475,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/poll@npm:^0.0.3":
-  version: 0.0.3
-  resolution: "@oada/poll@npm:0.0.3"
+"@oada/poll@portal:/home/sanoel/poll::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@oada/poll@portal:/home/sanoel/poll::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
   dependencies:
     "@oada/client": ^4.0.1
+    bluebird: ^3.7.2
     debug: ^4.3.3
     moment: ^2.29.3
     tslib: ^2.4.0
-  checksum: e2348117697dd5d55dbb3aafd7e833fb88408127a98896f224a5bb5050453b4e778ada02c27333afbb65f5467731a5dea2934abf7a850bcee2312dc95f0dc502
   languageName: node
-  linkType: hard
+  linkType: soft
 
 "@oada/types@npm:^2.0.1":
   version: 2.0.1
