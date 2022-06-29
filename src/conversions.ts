@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import _ from 'lodash';
 import type { FlObject } from './mirrorWatch.js';
 
 export function fromOadaType(type: string) {
@@ -25,14 +26,34 @@ export function fromOadaType(type: string) {
 export async function flToTrellis(flDocument: FlObject) {
   const flDocumentType = flDocument.shareSource.type
     .name as keyof typeof conversions;
-  const document: any = {
-    effective_date:
-      flDocument.shareSource.shareSpecificAttributes.effectiveDate,
-  };
+  const document: any = {};
+
+  Object.keys(shareSpecificAttributes)
+    .filter((attributePath: string) => _.has(flDocument, `shareSource.shareSpecificAttributes.${attributePath}`))
+    .forEach((key) => {
+      let trellisPath = shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
+      let flPath = `shareSource.shareSpecificAttributes.${key}`;
+      let flValue = _.get(flDocument, flPath);
+      console.log(`Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`)
+      _.set(document, trellisPath, flValue)
+    })
+
+  Object.keys(defaultAttributes)
+    .filter((attributePath: string) => _.has(flDocument, attributePath))
+    .forEach((flPath) => {
+      let trellisPath = defaultAttributes[flPath as keyof typeof defaultAttributes];
+      let flValue = _.get(flDocument, flPath);
+      console.log(`Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`)
+      _.set(document, trellisPath, flValue)
+    })
+
+  if (!document.document_date) {
+    document.document_date = document.effective_date || _.get(flDocument, 'versionInfo.createdAt').substr(0,10);
+    console.log(`Setting document date from effective or create date: ${document.document_date}`)
+  }
 
   switch (flDocumentType) {
     case 'Certificate of Insurance':
-      document.expire_date = flDocument.expirationDate;
       document.holder = {
         name: flDocument.shareSource.sourceBusiness.name,
         location: {
@@ -44,8 +65,6 @@ export async function flToTrellis(flDocument: FlObject) {
           country: flDocument.shareSource.sourceBusiness.address.country,
         },
       };
-      break;
-    case '100g Nutritional Information':
       break;
 
     default:
@@ -59,7 +78,7 @@ export async function flToTrellis(flDocument: FlObject) {
   };
 }
 
-const conversions = {
+export const conversions = {
   'ACH Form': {
     name: 'ACH Form',
     urlName: 'ach-forms',
@@ -305,6 +324,28 @@ const conversions = {
     type: 'application/vnd.trellisfw.msa.1+json',
   },
 };
+
+const shareSpecificAttributes = {
+  adjustmentDate: "adjustment_date",
+  auditDate: 'audit_date',
+  certifyingBody: 'certifying_body',
+  doesYourCompanyComplyWithFsisDirective108001: 'fsis_directive_108001_compliance',
+  effectiveDate: 'effective_date', // 'certifying_body.name',
+  gradeScore: 'score', //'score.value',
+  initialTermDate: "initial_term_date",
+  isAuditorPaacoCertified: 'is_paaco_certified',
+  documentDate: 'document_date',
+  selectAllRegulationsYouComplyWith: 'regulation_compliance',
+}
+
+const defaultAttributes = {
+  'auditAttributes.auditor': 'auditor',
+  'auditAttributes.auditDate': 'audit_date',
+  'auditAttributes.certIssuedDate': 'issue_date',
+  'auditAttributes.criticalFailures': 'failures',
+  'auditAttributes.reAuditDate': 'reaudit_date',
+  'auditAttributes.scheme': 'scheme',
+}
 
 export function fromName(name: keyof typeof conversions) {
   return conversions[name];
