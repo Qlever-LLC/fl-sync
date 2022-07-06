@@ -1,6 +1,6 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "1.2.16",
+  "version": "1.2.17",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.ts",
   "scripts": {
@@ -46,7 +46,7 @@
     "@oada/client": "^4.1.1",
     "@oada/jobs": "^4.0.0",
     "@oada/list-lib": "3.0.8",
-    "@oada/poll": "^0.0.3",
+    "@oada/poll": "^0.0.4",
     "@oada/types": "^2.0.1",
     "@overleaf/o-error": "^3.4.0",
     "@types/json-pointer": "^1.0.31",
@@ -131,8 +131,5 @@
     "ts-node": "^10.8.0",
     "typescript": "4.6.4"
   },
-  "packageManager": "yarn@3.2.0",
-  "resolutions": {
-    "@oada/poll": "portal:/home/sanoel/poll"
-  }
+  "packageManager": "yarn@3.2.0"
 }
