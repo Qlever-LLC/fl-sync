@@ -101,6 +101,9 @@ if (SERVICE_NAME && mirrorTree?.bookmarks?.services?.['fl-sync']) {
 
 let CONNECTION: OADAClient;
 // Let flList = ['documents', 'products', 'locations', 'assessments'];
+const noMultiFile = [
+  'Certificate of Insurance'
+]
 /*const multiFileOkay = [
   'Rate Sheet',
   'Specified Risk Materials (SRM) Audit',
@@ -164,6 +167,7 @@ const flTypes = new Map(Object.entries(fTypes));
 
 const rejectable = {
   'Certificate of Insurance': 'Certificate of Insurance',
+  'cois': 'cois',
 }
 
 function mostRecentKsuid(keys: string[]) {
@@ -623,12 +627,10 @@ export async function postTpDocument({
 
   const files = Object.keys(zip.files);
 
-  /*
-  if (files.length !== 1 && !multiFileOkay.includes(type)) {
-    info(`multiFileOkay does not include type ${type}`);
+  if (files.length !== 1 && noMultiFile.includes(type)) {
+    info(`noMultiFile does not include type ${type}`);
     throw new JobError(multipleFilesErrorMessage, 'multi-files-attached');
   }
-  */
 
   const { document, docType, urlName } = await flToTrellis(item);
 
@@ -1284,6 +1286,8 @@ async function handleScrapedResult(targetJobKey: string) {
       } as unknown as Body,
     });
 
+    console.log('!!!!!!!', validationResult)
+
     // 4a. Validation failed, fail and reject things.
     if (!validationResult || !validationResult.status) {
       await postUpdate(
@@ -1298,6 +1302,8 @@ async function handleScrapedResult(targetJobKey: string) {
           'Could not extract expiration dates'
         )
       ) {
+        //@ts-ignore
+        console.log('222222!!!!!!!', type, rejectable[type])
         //@ts-ignore
         if (rejectable[type]) {
           await rejectFlDocument(flId, validationResult?.message);

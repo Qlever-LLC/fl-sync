@@ -475,17 +475,18 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/poll@portal:/home/sanoel/poll::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/poll@portal:/home/sanoel/poll::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/poll@npm:^0.0.4":
+  version: 0.0.4
+  resolution: "@oada/poll@npm:0.0.4"
   dependencies:
     "@oada/client": ^4.0.1
     bluebird: ^3.7.2
     debug: ^4.3.3
     moment: ^2.29.3
     tslib: ^2.4.0
+  checksum: 81d920314d81fec7f48da5653615199465c7d62407f89813122454c27bb5b0632a1329ffd24dcd4978d0b196d765384c41e4e1042f6e14eefa868fa0e152ae4e
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@oada/types@npm:^2.0.1":
   version: 2.0.1
@@ -520,7 +521,7 @@ __metadata:
     "@oada/client": ^4.1.1
     "@oada/jobs": ^4.0.0
     "@oada/list-lib": 3.0.8
-    "@oada/poll": ^0.0.3
+    "@oada/poll": ^0.0.4
     "@oada/types": ^2.0.1
     "@overleaf/o-error": ^3.4.0
     "@tsconfig/node16": ^1.0.2
