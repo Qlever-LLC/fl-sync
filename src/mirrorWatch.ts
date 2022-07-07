@@ -14,12 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+import { setTimeout } from 'node:timers/promises';
 import axios from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 import ksuid from 'ksuid';
 import debug from 'debug';
 import oError from '@overleaf/o-error';
-import Promise from 'bluebird';
 import _ from 'lodash';
 import pointer from 'json-pointer';
 import jszip from 'jszip';
@@ -101,9 +102,7 @@ if (SERVICE_NAME && mirrorTree?.bookmarks?.services?.['fl-sync']) {
 
 let CONNECTION: OADAClient;
 // Let flList = ['documents', 'products', 'locations', 'assessments'];
-const noMultiFile = [
-  'Certificate of Insurance'
-]
+const noMultiFile = ['Certificate of Insurance'];
 /*const multiFileOkay = [
   'Rate Sheet',
   'Specified Risk Materials (SRM) Audit',
@@ -114,61 +113,67 @@ const noMultiFile = [
   */
 
 let fTypes = {
-  '100g Nutritional Information': { assessments: false},
-  'ACH Form': { assessments: false},
-  'APHIS Statement': { assessments: false},
-  'Allergen Statement': { assessments: false},
-  'Animal Welfare Audit': { assessments: false},
-  'Animal Welfare Corrective Actions': { assessments: false},
-  'Bioengineered (BE) Ingredient Statement': { assessments: false},
-  'Bisphenol A (BPA) Statement': { assessments: false},
-  'Business License': { assessments: false},
-  'COA': { assessments: false},
-  'California Prop 65 Statement': { assessments: false},
+  '100g Nutritional Information': { assessments: false },
+  'ACH Form': { assessments: false },
+  'APHIS Statement': { assessments: false },
+  'Allergen Statement': { assessments: false },
+  'Animal Welfare Audit': { assessments: false },
+  'Animal Welfare Corrective Actions': { assessments: false },
+  'Bioengineered (BE) Ingredient Statement': { assessments: false },
+  'Bisphenol A (BPA) Statement': { assessments: false },
+  'Business License': { assessments: false },
+  'COA': { assessments: false },
+  'California Prop 65 Statement': { assessments: false },
   'Certificate of Insurance': {
     assessments: {
       'Certificate of Insurance (COI) Requirements': ASSESSMENT_TEMPLATE_ID,
     },
   },
-  'Co-Pack Confidentiality Agreement Form': { assessments: false},
-  'Co-Packer FSQA Questionnaire (GFSI Certified)': { assessments: false},
-  'Co-Packer FSQA Questionnaire (Non-GFSI Certified)': { assessments: false},
-  'Country of Origin Statement': { assessments: false},
-  'E.Coli 0157:H7 Intervention Audit': { assessments: false},
-  'E.Coli 0157:H7 Intervention Statement': { assessments: false},
-  'Foreign Material Control Plan': { assessments: false},
-  'GFSI Audit': { assessments: false},
-  'GFSI Certificate': { assessments: false},
-  'Gluten Statement': { assessments: false},
-  'HACCP Plan / Flow Chart': { assessments: false},
-  'Humane Harvest Statement': { assessments: false},
-  'Ingredient Breakdown Range %': { assessments: false},
-  'Lot Code Explanation': { assessments: false},
-  'Master Service Agreement (MSA)': { assessments: false},
-  'National Residue Program (NRP) Statement': { assessments: false},
-  'Natural Statement': { assessments: false},
-  'Non-Ambulatory (3D/4D) Animal Statement': { assessments: false},
-  'Product Label': { assessments: false},
-  'Product Specification': { assessments: false},
-  'Pure Food Guaranty and Indemnification Agreement (LOG)': { assessments: false},
-  'Rate Sheet': {assessments: false},
-  'Safety Data Sheet (SDS)': {assessments: false},
-  'Small Business Administration (SBA) Form': {assessments: false},
-  'Specified Risk Materials (SRM) Audit': {assessments: false},
-  'Specified Risk Materials (SRM) Audit Corrective Actions': {assessments: false},
-  'Specified Risk Materials (SRM) Statement': {assessments: false},
-  'Third Party Food Safety GMP Audit': {assessments: false},
-  'Third Party Food Safety GMP Audit Corrective Actions': {assessments: false},
-  'Third Party Food Safety GMP Certificate': {assessments: false},
+  'Co-Pack Confidentiality Agreement Form': { assessments: false },
+  'Co-Packer FSQA Questionnaire (GFSI Certified)': { assessments: false },
+  'Co-Packer FSQA Questionnaire (Non-GFSI Certified)': { assessments: false },
+  'Country of Origin Statement': { assessments: false },
+  'E.Coli 0157:H7 Intervention Audit': { assessments: false },
+  'E.Coli 0157:H7 Intervention Statement': { assessments: false },
+  'Foreign Material Control Plan': { assessments: false },
+  'GFSI Audit': { assessments: false },
+  'GFSI Certificate': { assessments: false },
+  'Gluten Statement': { assessments: false },
+  'HACCP Plan / Flow Chart': { assessments: false },
+  'Humane Harvest Statement': { assessments: false },
+  'Ingredient Breakdown Range %': { assessments: false },
+  'Lot Code Explanation': { assessments: false },
+  'Master Service Agreement (MSA)': { assessments: false },
+  'National Residue Program (NRP) Statement': { assessments: false },
+  'Natural Statement': { assessments: false },
+  'Non-Ambulatory (3D/4D) Animal Statement': { assessments: false },
+  'Product Label': { assessments: false },
+  'Product Specification': { assessments: false },
+  'Pure Food Guaranty and Indemnification Agreement (LOG)': {
+    assessments: false,
+  },
+  'Rate Sheet': { assessments: false },
+  'Safety Data Sheet (SDS)': { assessments: false },
+  'Small Business Administration (SBA) Form': { assessments: false },
+  'Specified Risk Materials (SRM) Audit': { assessments: false },
+  'Specified Risk Materials (SRM) Audit Corrective Actions': {
+    assessments: false,
+  },
+  'Specified Risk Materials (SRM) Statement': { assessments: false },
+  'Third Party Food Safety GMP Audit': { assessments: false },
+  'Third Party Food Safety GMP Audit Corrective Actions': {
+    assessments: false,
+  },
+  'Third Party Food Safety GMP Certificate': { assessments: false },
   'W-8': { assessments: false },
-  'W-9': { assessments: false }
+  'W-9': { assessments: false },
 };
 const flTypes = new Map(Object.entries(fTypes));
 
 const rejectable = {
   'Certificate of Insurance': 'Certificate of Insurance',
   'cois': 'cois',
-}
+};
 
 function mostRecentKsuid(keys: string[]) {
   return keys.length > 0
@@ -284,7 +289,7 @@ export async function onTargetChange(change: Change, targetJobKey: string) {
       targetJobKey,
       flSyncJobId,
       job,
-      indexConfig,
+      indexConfig
     );
 
     // Handle updates
@@ -366,14 +371,14 @@ async function handleTargetStatus(
 
       } else {
 */
-        return finishDocument(
-          item,
-          indexConfig.bid,
-          indexConfig.masterid,
-          'approved'
-          //'failed'// ? or should it be 'rejected'?
-        );
-//     }
+      return finishDocument(
+        item,
+        indexConfig.bid,
+        indexConfig.masterid,
+        'approved'
+        //'failed'// ? or should it be 'rejected'?
+      );
+      //     }
     }
   }
 
@@ -418,49 +423,49 @@ async function handleTargetStatus(
         );
 
         //@ts-ignore
-        if (reject && rejectable[indexConfig.type]) await rejectFlDocument(key, errorMessage);
+        if (reject && rejectable[indexConfig.type])
+          await rejectFlDocument(key, errorMessage);
         if (jobError) endJob(flSyncJobId, new JobError(errorMessage, jobError));
       }
     }
 
     if (!jobError)
-    endJob(flSyncJobId, new JobError(errorMessage, 'target-other'));
+      endJob(flSyncJobId, new JobError(errorMessage, 'target-other'));
     targetToFlSyncJobs.delete(targetJobKey);
   }
 }
 
 async function handleTargetUpdates(change: Change, key: string) {
-  await Promise.each(
-    Object.values((change && change.body && change.body.updates) || {}),
-    async (value: { status: string; information: string }) => {
-      let details;
-      switch (value.status) {
-        case 'started':
-          break;
-        case 'error':
-          details = value.information;
-          break;
-        case 'identified':
-        case 'success':
-          break;
-        default:
-          break;
-      }
-
-      if (details) {
-        info(`Posting new update to FL docId ${key}: ${details}`);
-        await axios({
-          method: 'post',
-          url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/capa`,
-          headers: { Authorization: FL_TOKEN },
-          data: {
-            details,
-            type: 'change_request',
-          },
-          });
-      }
+  for await (const value of Object.values(
+    (change && change.body && change.body.updates) ?? {}
+  )) {
+    let details;
+    switch (value.status) {
+      case 'started':
+        break;
+      case 'error':
+        details = value.information;
+        break;
+      case 'identified':
+      case 'success':
+        break;
+      default:
+        break;
     }
-  );
+
+    if (details) {
+      info(`Posting new update to FL docId ${key}: ${details}`);
+      await axios({
+        method: 'post',
+        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/capa`,
+        headers: { Authorization: FL_TOKEN },
+        data: {
+          details,
+          type: 'change_request',
+        },
+      });
+    }
+  }
 }
 
 /**
@@ -543,16 +548,16 @@ export const handleAssessmentJob: WorkerFunction = async (
         headers: { Authorization: FL_TOKEN },
         data: item,
       });
-      info("WRITING REASONS", reasons.join(';'));
+      info('WRITING REASONS', reasons.join(';'));
 
       let docJob = assessmentToFlId.get(item._id);
       if (docJob) {
         await CONNECTION.put({
           path: `/${docJob.jobId}`,
           data: {
-            'fail-reasons': reasons.join(';')
-          }
-        })
+            'fail-reasons': reasons.join(';'),
+          },
+        });
       }
       await postUpdate(
         CONNECTION,
@@ -662,7 +667,6 @@ export async function postTpDocument({
   trace(`Reset pdf vdoc reference into FL mirror _meta of FL _id: ${item._id}`);
 
   for (const fKey of files) {
-
     if (!fKey)
       throw new Error(
         `Failed to acquire file key while handling pending document`
@@ -687,7 +691,11 @@ export async function postTpDocument({
       .catch((error_) => {
         if (error_.status !== 404) throw error_;
       });
-      trace(`Retrieved vdoc pdf from FL mirror: ${Object.keys(pdfResponse || {}).join(';')}`);
+    trace(
+      `Retrieved vdoc pdf from FL mirror: ${Object.keys(pdfResponse || {}).join(
+        ';'
+      )}`
+    );
 
     // 3a. PDF could already have been mirrored in the approval flow
     // If it doesn't exist, create a new PDF resource
@@ -702,15 +710,20 @@ export async function postTpDocument({
       zdata[index] = ab[index]!;
     }
 
-    await oada.put({
-      path: `/${pdfId}`,
-      data: zdata,
-      contentType: 'application/pdf',
-    }).catch((err) => {
-      if (Buffer.byteLength(zdata) === 0) {
-        throw new JobError(`Attachment Buffer data 'zdata' was empty.`, 'bad-fl-attachments');
-      } else throw err;
-    })
+    await oada
+      .put({
+        path: `/${pdfId}`,
+        data: zdata,
+        contentType: 'application/pdf',
+      })
+      .catch((err) => {
+        if (Buffer.byteLength(zdata) === 0) {
+          throw new JobError(
+            `Attachment Buffer data 'zdata' was empty.`,
+            'bad-fl-attachments'
+          );
+        } else throw err;
+      });
     trace(`Wrote pdf data for fileHash ${fileHash} to pdfId ${pdfId}`);
 
     // 4. Create a vdoc entry from the pdf to foodlogiq
@@ -731,7 +744,9 @@ export async function postTpDocument({
       } as Body,
       contentType: 'application/json',
     });
-    trace(`Wrote FL mirror (${mirrorid}) and fl-sync job (${jobId}) references to _meta of pdf resource ${pdfId}`);
+    trace(
+      `Wrote FL mirror (${mirrorid}) and fl-sync job (${jobId}) references to _meta of pdf resource ${pdfId}`
+    );
 
     await axios({
       method: 'put',
@@ -748,7 +763,9 @@ export async function postTpDocument({
         'authorization': `Bearer ${TRELLIS_TOKEN}`,
       },
     });
-    trace(`Wrote pdf vdoc reference into FL mirror _meta for attachment ${fileHash}`);
+    trace(
+      `Wrote pdf vdoc reference into FL mirror _meta for attachment ${fileHash}`
+    );
 
     await oada.put({
       path: `resources/${documentKey}/_meta`,
@@ -756,7 +773,9 @@ export async function postTpDocument({
         vdoc: { pdf: { [fileHash]: { _id: pdfId, _rev: 0 } } },
       },
     });
-    trace(`Wrote pdf vdoc reference into trellis document _meta for attachment ${fileHash}`);
+    trace(
+      `Wrote pdf vdoc reference into trellis document _meta for attachment ${fileHash}`
+    );
   }
 
   await oada.put({
@@ -773,7 +792,7 @@ export async function postTpDocument({
   return {
     docKey: documentKey,
     docType,
-    type
+    type,
   };
 }
 
@@ -885,9 +904,14 @@ export const handleDocumentJob: WorkerFunction = async (
       if (indexConfig['allow-rejection'] !== false) {
         try {
           //@ts-ignore
-          if (flType && rejectable[flType]) await rejectFlDocument(item!._id, error_.message);
-        } catch(error) {
-          info(`Caught in rejectFlDocument, likely because this document id:${item!._id} no longer exists in FL.`)
+          if (flType && rejectable[flType])
+            await rejectFlDocument(item!._id, error_.message);
+        } catch (error) {
+          info(
+            `Caught in rejectFlDocument, likely because this document id:${
+              item!._id
+            } no longer exists in FL.`
+          );
         }
       }
       // Now let it continue below and throw; no promise gets made, but the job is failed now
@@ -909,7 +933,9 @@ async function finishDocument(
   if (status === 'approved') {
     info(`Finishing doc: [${item._id}] with status [${status}] `);
     // 1. Get reference of corresponding pending scraped pdf
-    console.log({path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/fl-sync/jobs`})
+    console.log({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/fl-sync/jobs`,
+    });
     const jobs = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta/services/fl-sync/jobs`,
     })
@@ -936,13 +962,18 @@ async function finishDocument(
     const targetJobs = jobObject['target-jobs'];
     let targetJob = mostRecentKsuid(Object.keys(targetJobs || {}));
     //@ts-ignore
-    console.log('fd', 2.6, {targetJob, targetJobs}, targetToFlSyncJobs.has(targetJob));
+    console.log(
+      'fd',
+      2.6,
+      { targetJob, targetJobs },
+      targetToFlSyncJobs.has(targetJob!)
+    );
 
     if (targetJob !== undefined && targetToFlSyncJobs.has(targetJob)) {
-      console.log('fd 2.6a')
+      console.log('fd 2.6a');
       targetToFlSyncJobs.delete(jobKey);
     } else {
-      console.log('fd 2.6b')
+      console.log('fd 2.6b');
       //throw new Error('Target job not found. Could not move result');
     }
 
@@ -963,7 +994,7 @@ async function finishDocument(
     }
     if (!type) {
       //@ts-ignore
-      type = data.config["oada-doc-type"];
+      type = data.config['oada-doc-type'];
     }
     if (!type) return;
     let key;
@@ -974,13 +1005,12 @@ async function finishDocument(
       _id = result[type][key]._id;
     } else {
       //@ts-ignore
-      key = data.config["docKey"];
+      key = data.config['docKey'];
       //@ts-ignore
       _id = data.config.document._id;
     }
     if (!key) return;
     console.log('fd', 5);
-
 
     // 2. Move approved docs to trading partner /bookmarks
     info(
@@ -1102,7 +1132,7 @@ function endJob(jobId: string, message?: string | Error | JobError) {
       prom.resolve(jobId);
     }
   } else {
-    warn(`Promise for flSyncJobs ${jobId} not found.`)
+    warn(`Promise for flSyncJobs ${jobId} not found.`);
   }
 
   flSyncJobs.delete(jobId);
@@ -1286,7 +1316,7 @@ async function handleScrapedResult(targetJobKey: string) {
       } as unknown as Body,
     });
 
-    console.log('!!!!!!!', validationResult)
+    console.log('!!!!!!!', validationResult);
 
     // 4a. Validation failed, fail and reject things.
     if (!validationResult || !validationResult.status) {
@@ -1303,7 +1333,7 @@ async function handleScrapedResult(targetJobKey: string) {
         )
       ) {
         //@ts-ignore
-        console.log('222222!!!!!!!', type, rejectable[type])
+        console.log('222222!!!!!!!', type, rejectable[type]);
         //@ts-ignore
         if (rejectable[type]) {
           await rejectFlDocument(flId, validationResult?.message);
@@ -1352,19 +1382,21 @@ async function handleScrapedResult(targetJobKey: string) {
       } catch (err: any) {
         if (err.response.status === 422) {
           let mirrorAssess = await CONNECTION.get({
-            path: `${SERVICE_PATH}/businesses/${bid}/assessments/${assessmentId}`
-          }).then(r => r.data as JsonObject)
+            path: `${SERVICE_PATH}/businesses/${bid}/assessments/${assessmentId}`,
+          }).then((r) => r.data as JsonObject);
           //@ts-ignore
-          let state = mirrorAssess["food-logiq-mirror"].state;
-          info(`Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`)
+          let state = mirrorAssess['food-logiq-mirror'].state;
+          info(
+            `Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`
+          );
 
-          Promise.delay(2000); // simulate the re-mirroring of the assessment
+          setTimeout(2000); // simulate the re-mirroring of the assessment
           CONNECTION.put({
             path: `${SERVICE_PATH}/businesses/${bid}/assessments/${assessmentId}`,
             data: {
-              "food-logiq-mirror": mirrorAssess["food-logiq-mirror"]
-            }
-          })
+              'food-logiq-mirror': mirrorAssess['food-logiq-mirror'],
+            },
+          });
         } else throw err;
       }
       info(`Spawned assessment [${assessmentId}] for business id [${bid}]`);
@@ -1385,7 +1417,7 @@ async function handleScrapedResult(targetJobKey: string) {
     } else {
       info(`Skipping assessment for result of type [${flType}] [${type}].`);
       //info(`Skipping assessment for result of type [${flType}] [${type}] and moving to doc approval.`);
-//      await approveFlDocument(flId);
+      //      await approveFlDocument(flId);
     }
 
     info(
@@ -1510,8 +1542,8 @@ async function queueAssessmentJob(change: ListChange, path: string) {
     const { jobId: documentJob } = assessmentToFlId.get(key)!;
 
     const docJob = await CONNECTION.get({
-      path: `/${documentJob}`
-    }).then(r => r.data);
+      path: `/${documentJob}`,
+    }).then((r) => r.data);
     //@ts-ignore
     let jConfig = docJob.config as unknown as JobConfig;
 
@@ -1612,13 +1644,16 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       // } else if (item!.state === 'Rejected' && approvalUser === FL_TRELLIS_USER) {
     } else if (item.state === 'Rejected') {
       // 2b. Notify, clean up, and remove after rejection
-      const reasons:string = _.get(docJob, 'fail-reasons') as unknown as string;
+      const reasons: string = _.get(
+        docJob,
+        'fail-reasons'
+      ) as unknown as string;
 
       const message = `A supplier Assessment associated with this document has been rejected for the following reasons: ${reasons}.`;
       // Reject the assessment job;
       endJob(item._id, message);
       assessmentToFlId.delete(item._id);
-      info("REASONS", reasons);
+      info('REASONS', reasons);
 
       // Reject the FL Document with a supplier message; Reject the document fl-sync job
       if (flSyncJobs.get(documentJob)['allow-rejection'] !== false) {
@@ -1707,15 +1742,14 @@ async function queueDocumentJob(data: ListChange, path: string) {
 
     if (!bus || !bus.masterid) {
       error(`No trading partner found for business ${bid}.`);
-      if (bus["food-logiq-mirror"]) {
+      if (bus['food-logiq-mirror']) {
         error(`Calling AddTP2Trellis now for business ${bid}.`);
         await addTP2Trellis(bus, `/${bid}`, CONNECTION);
         bus = await CONNECTION.get({
           path: `${SERVICE_PATH}/businesses/${bid}`,
         }).then((r) => r.data);
-
       } else {
-        error(`No mirror data for business ${bid}`)
+        error(`No mirror data for business ${bid}`);
       }
     }
 
@@ -1735,7 +1769,9 @@ async function queueDocumentJob(data: ListChange, path: string) {
     const status = item.shareSource && item.shareSource.approvalInfo.status;
     const approvalUser = _.get(item, `shareSource.approvalInfo.setBy._id`);
     info(
-      `approvalInfo user: ${approvalUser} (${approvalUser === FL_TRELLIS_USER ? "Was us." : "Was NOT us"}). Status: ${status}. id: ${item._id}`
+      `approvalInfo user: ${approvalUser} (${
+        approvalUser === FL_TRELLIS_USER ? 'Was us.' : 'Was NOT us'
+      }). Status: ${status}. id: ${item._id}`
     );
 
     if (status === 'awaiting-review') {
@@ -1885,10 +1921,10 @@ export interface FlObject {
       _id: string;
       firstName: string;
       lastName: string;
-    }
+    };
     currentVersionId: string;
     isCurrentVersion: boolean;
-  }
+  };
 }
 
 interface Link {
