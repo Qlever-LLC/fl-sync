@@ -15,14 +15,16 @@
  * limitations under the License.
  */
 
+import config from './config.js';
+
+import fs from 'node:fs';
+
+import { OADAClient, connect } from '@oada/client';
 import _ from 'lodash';
 import axios from 'axios';
-import config from './config.js';
-import { connect, OADAClient } from '@oada/client';
-//@ts-ignore
+// @ts-expect-error
 import csvjson from 'csvjson';
 import debug from 'debug';
-import fs from 'node:fs';
 import ksuid from 'ksuid';
 import moment from 'moment';
 
@@ -35,8 +37,8 @@ const CO_ID = config.get('foodlogiq.community.owner.id');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const info = debug('fl-sync:info');
-//const trace = debug('fl-sync:trace');
-//const error = debug('fl-sync:error');
+// Const trace = debug('fl-sync:trace');
+// const error = debug('fl-sync:error');
 
 const humanReadableJobError = {
   'target-other': 'Other target errors',
@@ -86,7 +88,7 @@ export async function makeFinalReport() {
   };
 
   try {
-    //1. Iterate over the docs
+    // 1. Iterate over the docs
     const mint = setInterval(() => {
       info(`ping`);
     }, 3000);
@@ -94,44 +96,42 @@ export async function makeFinalReport() {
       domain: `https://${DOMAIN}`,
       token: TOKEN,
     });
-    const buses: any = await oada
-      .get({
-        path: `${SERVICE_PATH}/businesses`,
-      })
-      .then((r) => r.data);
-    const busKeys: any = Object.keys(buses).filter(
+    const { data: buses } = await oada.get({
+      path: `${SERVICE_PATH}/businesses`,
+    });
+    const busKeys: any = Object.keys(buses as Record<string, unknown>).filter(
       (index) => !index.startsWith('_')
     );
 
     for await (const bid of busKeys) {
-      let docs = await oada
+      const docs = await oada
         .get({
           path: `${SERVICE_PATH}/businesses/${bid}/documents`,
         })
         .then((r) => r.data)
-        .catch(() => undefined);
+        .catch(() => {});
       if (!docs) {
         return;
       }
 
-      const docKeys = Object.keys(docs).filter(
+      const documentKeys = Object.keys(docs).filter(
         (index) => !index.startsWith('_')
       );
 
-      for await (const docid of docKeys) {
+      for await (const docid of documentKeys) {
         if (!docid) return;
-        let doc = await oada
+        const document = await oada
           .get({
             path: `${SERVICE_PATH}/businesses/${bid}/documents/${docid}`,
           })
           .then((r) => r.data)
-          .catch(() => undefined);
+          .catch(() => {});
 
-        if (!doc) {
+        if (!document) {
           return;
         }
 
-        const type = _.get(doc, 'food-logiq-mirror.shareSource.type.name');
+        const type = _.get(document, 'food-logiq-mirror.shareSource.type.name');
         if (type !== 'Certificate of Insurance') {
           return;
         }
@@ -148,69 +148,73 @@ export async function makeFinalReport() {
           return;
         }
 
-        let docName = _.get(doc, 'food-logiq-mirror.name');
-        let busName = _.get(
-          doc,
+        const documentName = _.get(document, 'food-logiq-mirror.name');
+        const busName = _.get(
+          document,
           'food-logiq-mirror.shareSource.sourceBusiness.name'
         );
-        let status = _.get(
-          doc,
+        const status = _.get(
+          document,
           'food-logiq-mirror.shareSource.approvalInfo.status'
         );
-        let user = _.get(
-          doc,
+        const user = _.get(
+          document,
           'food-logiq-mirror.shareSource.approvalInfo.setBy._id'
         );
-        let createDate = _.get(doc, 'food-logiq-mirror.versionInfo.createdAt');
+        const createDate = _.get(
+          document,
+          'food-logiq-mirror.versionInfo.createdAt'
+        );
         if (status) {
           finalReport.flStatuses[status] = finalReport.flStatuses[status] || {};
           finalReport.flStatuses[status].total =
             finalReport.flStatuses[status].total || 0;
           finalReport.flStatuses[status].total++;
         }
+
         if (status && user && user === FL_TRELLIS_USER) {
           finalReport.flStatuses[status].byUs =
             finalReport.flStatuses[status].byUs || 0;
           finalReport.flStatuses[status].byUs++;
         }
 
-        await axios({
-          method: 'head',
-          url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docid}`,
-          headers: {
-            Authorization: `${FL_TOKEN}`,
-          },
-        }).catch((err) => {
-          if (err.response.status === 404) {
+        try {
+          await axios({
+            method: 'head',
+            url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docid}`,
+            headers: {
+              Authorization: `${FL_TOKEN}`,
+            },
+          });
+        } catch (error: unknown) {
+          // @ts-expect-error stupid errors
+          if (error.response.status === 404) {
             console.log(`Document has been deleted in FL`, { docid, bid });
             otherReport.flDeleted[docid] = { docid, bid, status, user };
             finalReport.flDeleted++;
-          } else throw err;
-        });
+          } else throw error as Error;
+        }
 
-        //2. Get the associated job
-        let meta = await oada
+        // 2. Get the associated job
+        const { data: meta } = await oada
           .get({
             path: `${SERVICE_PATH}/businesses/${bid}/documents/${docid}/_meta`,
           })
-          .then((r) => r.data)
-          .catch(() => {
-            return undefined;
-          });
+          .catch(() => ({ data: undefined }));
         if (!meta) {
           return;
         }
 
-        let jobs = _.get(meta, 'services.fl-sync.jobs') || {};
+        const jobs = _.get(meta, 'services.fl-sync.jobs') ?? {};
         if (Object.keys(jobs).length <= 0) {
-          finalReport.missingFlSyncJob = finalReport.missingFlSyncJob || 0;
+          finalReport.missingFlSyncJob = finalReport.missingFlSyncJob ?? 0;
           finalReport.missingFlSyncJob++;
           finalReport.flStatuses[status].missingFlSyncJob =
-            finalReport.flStatuses[status].missingFlSyncJob || 0;
+            finalReport.flStatuses[status].missingFlSyncJob ?? 0;
           finalReport.flStatuses[status].missingFlSyncJob++;
-          otherReport.missingFlSyncJobs = otherReport.missingFlSyncJobs || {};
+          otherReport.missingFlSyncJobs = otherReport.missingFlSyncJobs ?? {};
           otherReport.missingFlSyncJobs[status] =
-            otherReport.missingFlSyncJobs[status] || {};
+            otherReport.missingFlSyncJobs[status] ?? {};
           otherReport.missingFlSyncJobs[status][docid] = {
             docid,
             bid,
@@ -224,12 +228,13 @@ export async function makeFinalReport() {
             console.log({ docid, bid, status, user });
             otherReport.approvedButNoJob[docid] = { docid, bid, status, user };
           }
+
           return;
         }
 
-        let jobkey = mostRecentKsuid(Object.keys(jobs));
+        const jobkey = mostRecentKsuid(Object.keys(jobs));
         if (!jobkey) return;
-        let jobid = jobs[jobkey]._id;
+        const jobid = jobs[jobkey]._id;
 
         const job: any = await oada
           .get({
@@ -237,7 +242,7 @@ export async function makeFinalReport() {
           })
           .then((r) => r.data);
 
-        //3. Find the reason for failure
+        // 3. Find the reason for failure
         const jobError: string = _.get(job, 'result.JobError');
         if (jobError) {
           finalReport['job-errors'][jobError] =
@@ -246,12 +251,12 @@ export async function makeFinalReport() {
           finalReport['job-errors'].total++;
 
           spreadsheet.push({
-            'Document Name': docName,
+            'Document Name': documentName,
             'Document Type': type,
             'Date Created': createDate,
             'Supplier': busName,
             'FoodLogiQ Status': status,
-            //@ts-ignore
+            // @ts-expect-error
             'Trellis Result': humanReadableJobError[jobError],
             'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docid}`,
             'FoodLogiQ Document ID': docid,
@@ -259,12 +264,14 @@ export async function makeFinalReport() {
           });
 
           return;
-        } else if (job.status === 'success') {
+        }
+
+        if (job.status === 'success') {
           finalReport.jobSuccess = finalReport.jobSuccess || 0;
           finalReport.jobSuccess++;
 
           spreadsheet.push({
-            'Document Name': docName,
+            'Document Name': documentName,
             'Document Type': type,
             'Date Created': createDate,
             'Supplier': busName,
@@ -279,7 +286,7 @@ export async function makeFinalReport() {
           finalReport.otherErrors++;
           otherReport.otherErrors[docid] = { docid, bid, jobid };
           spreadsheet.push({
-            'Document Name': docName,
+            'Document Name': documentName,
             'Document Type': type,
             'Date Created': createDate,
             'Supplier': busName,
@@ -292,16 +299,16 @@ export async function makeFinalReport() {
           return;
         }
 
-        let coiId = _.get(job, 'trellisDoc.key');
+        const coiId = _.get(job, 'trellisDoc.key');
 
         if (coiId) {
-          let coiMeta = await oada
+          const coiMeta = await oada
             .get({
               path: `/resources/${coiId}/_meta`,
             })
             .then((r) => r.data);
 
-          let entryId = _.get(coiMeta, 'services.lf-sync.LaserficheEntryID');
+          const entryId = _.get(coiMeta, 'services.lf-sync.LaserficheEntryID');
           if (entryId) {
             finalReport.inLaserfiche++;
           } else {
@@ -319,9 +326,9 @@ export async function makeFinalReport() {
             }
           }
         }
-        //3b. Was it a target error
-        //3c. Was it some other error?
-        //3d. Is it still in limbo due to bad format, OCR, etc?
+        // 3b. Was it a target error
+        // 3c. Was it some other error?
+        // 3d. Is it still in limbo due to bad format, OCR, etc?
       }
     }
 
@@ -379,16 +386,16 @@ export async function makeFinalReport() {
 
     clearInterval(mint);
     return csv;
-  } catch (err) {
-    console.log(err);
+  } catch (error: unknown) {
+    console.log(error);
   }
 }
 
 function fixHeaders(csv: string, headers: string[]) {
-  headers.forEach((h) => {
-    let pattern = new RegExp(`\\[\\]\\.${h}`);
+  for (const h of headers) {
+    const pattern = new RegExp(`\\[\\]\\.${h}`);
     csv = csv.replace(pattern, h);
-  });
+  }
 }
 
 function mostRecentKsuid(keys: string[]) {
@@ -403,7 +410,7 @@ export function extraStuff(oada: OADAClient) {
   // 1. Check every X minutes to see if it is time to run the report
   setInterval(() => {
     isItTime(oada);
-  }, 600000);
+  }, 600_000);
   // 2. Run the report
   // 3. Write the report out to OADA in some day-index (if there is content)
   //   3a. Index it on the key of the document id
@@ -416,22 +423,19 @@ export function extraStuff(oada: OADAClient) {
 export async function isItTime(oada: OADAClient) {
   let currentlyReporting = false;
   const now = moment();
-  const reportTime = await oada
-    .get({
-      path: `${SERVICE_PATH}/_meta/report/fl-sync-daily/last-report`,
-    })
-    .then((r) => r.data as unknown as string);
-  const lastTime = moment(reportTime);
+  const { data: reportTime } = await oada.get({
+    path: `${SERVICE_PATH}/_meta/report/fl-sync-daily/last-report`,
+  });
+  const lastTime = moment(reportTime as string);
 
   if (
     lastTime.year() === now.year() &&
-    lastTime.clone().add(1, 'day').dayOfYear() === now.dayOfYear()
+    lastTime.clone().add(1, 'day').dayOfYear() === now.dayOfYear() &&
+    !currentlyReporting
   ) {
-    if (!currentlyReporting) {
-      currentlyReporting = true;
-      let report = await makeFinalReport();
-      await postEmailJob(report, oada);
-    }
+    currentlyReporting = true;
+    const report = await makeFinalReport();
+    await postEmailJob(report, oada);
   }
 }
 

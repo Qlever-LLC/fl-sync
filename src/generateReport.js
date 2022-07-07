@@ -14,8 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-const moment = require('moment');
-const config = require('./config').default;
+
+import config from './config.js';
+
+import moment from 'moment';
+
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const TRELLIS_TOKEN = config.get('trellis.token');
 const FL_DOMAIN = config.get('foodlogiq.domain');
@@ -566,7 +569,9 @@ async function generateReport() {
                     newItems
                   );
                   return false;
-                } if (information && information.includes('multi-COI')) {
+                }
+
+                if (information && information.includes('multi-COI')) {
                   object.d2.d2b.count++;
                   object.d2.d2b.items.push({
                     bid,
@@ -582,7 +587,9 @@ async function generateReport() {
                     newItems
                   );
                   return false;
-                } if (information && information.includes('OCR')) {
+                }
+
+                if (information && information.includes('OCR')) {
                   object.d2.d2a.count++;
                   object.d2.d2a.items.push({
                     bid,
@@ -598,7 +605,9 @@ async function generateReport() {
                     newItems
                   );
                   return false;
-                } if (information && information.includes('Valiadation')) {
+                }
+
+                if (information && information.includes('Valiadation')) {
                   object.d2.d2d.count++;
                   object.d2.d2d.items.push({
                     bid,
@@ -614,7 +623,9 @@ async function generateReport() {
                     newItems
                   );
                   return false;
-                } else return true;
+                }
+
+                return true;
               }
             );
 

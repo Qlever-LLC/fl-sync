@@ -153,17 +153,17 @@ try {
     '61dc4133179e94000f8232f9', // Just another pdf
     //      "60f5e60d78bfbb000e3ec207", // <-- Multiple pdfs...need to solve this in oada
   ];
-  //    testDocs = [testDocs[0]];
+  //    TestDocs = [testDocs[0]];
 
   // 1. Get the document from the mirror
   for await (const [index, key] of Object.entries(testDocs)) {
     console.log('PROCESSING', index, key);
     // 1. Fetch from FL and mirror it.
-    const item = await axios({
+    const { data: item } = await axios({
       method: `get`,
       url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}`,
       headers: { Authorization: FL_TOKEN },
-    }).then((r) => r.data);
+    });
 
     const bid = item.shareSource.sourceBusiness._id;
     const mid = item.shareSource.membershipId;
@@ -183,11 +183,11 @@ try {
     if (!masterid) {
       console.log('no masterid, trying again');
       // 2. Fetch the business and ensure it exists
-      const bus = await axios({
+      const { data: bus } = await axios({
         method: `get`,
         url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${mid}`,
         headers: { Authorization: FL_TOKEN },
-      }).then((r) => r.data);
+      });
 
       await CONNECTION.put({
         path: `${SERVICE_PATH}/businesses/${bid}`,
@@ -199,10 +199,10 @@ try {
     }
 
     // 3. Get the masterid
-    const result = await CONNECTION.get({
+    const { data: result } = await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}`,
-    }).then((r) => r.data! as JsonObject);
-    masterid = result.masterid as string;
+    });
+    masterid = (result as JsonObject).masterid as string;
     console.log({ masterid });
 
     if (!masterid) throw new Error(`No masterid for key ${key}`);
@@ -216,7 +216,7 @@ try {
     //      Await postTpDocument({masterid, item, bid, oada: CONNECTION});
     console.log('DONE', key);
   }
-} catch (error) {
+} catch (error: unknown) {
   console.log(error);
 }
 

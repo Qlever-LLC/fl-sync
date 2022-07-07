@@ -112,7 +112,7 @@ export async function watchFlSyncConfig() {
         return {} as JsonObject;
       }
 
-      throw cError;
+      throw cError as Error;
     });
   if (
     typeof data === 'object' &&
@@ -651,8 +651,8 @@ export async function initialize({
 
 process.on('uncaughtExceptionMonitor', (cError: unknown) => {
   error({ error: cError }, 'Uncaught exception');
-  //The code can carry on for most of these errors, but I'd like to know about
-  //them. If I throw, it causes more trouble so I won't.
+  // The code can carry on for most of these errors, but I'd like to know about
+  // them. If I throw, it causes more trouble so I won't.
   //  throw cError;
 });
 
