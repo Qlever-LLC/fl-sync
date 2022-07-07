@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import sql from 'mssql';
-import { JsonObject, connect } from '@oada/client';
+
 import config from '../config.js';
-import Promise from 'bluebird';
+
+import { JsonObject, connect } from '@oada/client';
+import sql from 'mssql';
 process.env.NODE_TLS_REJECT_AUTHORIZED = '0';
 
 const DOMAIN = config.get('trellis.domain');
@@ -75,6 +76,8 @@ async function main() {
   process.exit();
 }
 
+process.exit();
+
 /*
 Async function addRemove(list: Array<sqlEntry>, name: string) {
   let exists = list.map(v => v["Entity Name"]).includes(name)
@@ -111,21 +114,23 @@ async function fetchTradingPartners() {
     token: TOKEN,
   });
 
-  const tps = await CONNECTION.get({
+  const { data: tps } = await CONNECTION.get({
     path: `/bookmarks/trellisfw/trading-partners/expand-index`,
-  }).then((r) => r.data as JsonObject);
-  return Object.values(tps) as unknown as trellisEntry[];
+  });
+  return Object.values(tps as JsonObject) as unknown as trellisEntry[];
 }
 
 async function handleEntities(trellis: trellisEntry[], sqlList: sqlEntry[]) {
   const list = new Set(sqlList.map((index) => index.rowguid));
-  await Promise.map(sqlList, async (index) => removeEntity(index.rowguid));
-  return Promise.map(trellis, async (item) => {
-    // TODO: Probably change this test after we add trellisId or something to the sql table entries
-    if (!list.has(item.masterid) && item.masterid !== undefined) {
-      await addEntity(item.name);
-    }
-  });
+  await Promise.all(sqlList.map(async (index) => removeEntity(index.rowguid)));
+  return Promise.all(
+    trellis.map(async (item) => {
+      // TODO: Probably change this test after we add trellisId or something to the sql table entries
+      if (!list.has(item.masterid) && item.masterid !== undefined) {
+        await addEntity(item.name);
+      }
+    })
+  );
 }
 
 interface sqlEntry {
@@ -137,5 +142,3 @@ interface trellisEntry {
   name: string;
   masterid: string;
 }
-
-main();
