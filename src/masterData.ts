@@ -15,16 +15,19 @@
  * limitations under the License.
  */
 
+import config from './config.masterdata.js';
+
 import { setTimeout } from 'node:timers/promises';
 
-import _ from 'lodash';
+import type { JsonObject, OADAClient } from '@oada/client';
 import { ListWatch } from '@oada/list-lib';
 import SHA256 from 'js-sha256';
-import debug from 'debug';
-import tree from './tree.masterData.js';
-import config from './config.masterdata.js';
-import type { JsonObject, OADAClient } from '@oada/client';
 import type { TreeKey } from '@oada/list-lib/dist/tree.js';
+import _ from 'lodash';
+import debug from 'debug';
+
+import tree from './tree.masterData.js';
+
 const { sha256 } = SHA256;
 
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
@@ -55,6 +58,7 @@ enum SOURCE_TYPE {
 export async function watchTrellisFLBusinesses(conn: OADAClient) {
   info(`Setting masterData ListWatch on FL Businesses`);
   setConnection(conn);
+  // eslint-disable-next-line no-new
   new ListWatch({
     path: `${SERVICE_PATH}/businesses`,
     name: `fl-sync-master-data-businesses`,
@@ -92,44 +96,45 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
       if (typeof item[FL_MIRROR] === 'undefined') {
         info(`Getting ${_path} with delay.`);
         // FIXME: find a more robust way to retrieve business content
-        let fl_mirror_content: boolean | undefined = item[FL_MIRROR];
+        let fl_mirror_content: unknown = item[FL_MIRROR];
         let tries = 0;
         // Retry until it gets a body with FL_MIRROR
         while (typeof fl_mirror_content === 'undefined') {
+          // eslint-disable-next-line no-await-in-loop
           await setTimeout(500);
-          await CONNECTION.get({
-            path: _path,
-          })
-            .then(async (result: any) => {
-              fl_mirror_content = result.data[FL_MIRROR];
-              if (typeof fl_mirror_content === 'undefined') {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await CONNECTION.get({
+              path: _path,
+            });
+            fl_mirror_content = (result.data as JsonObject)[FL_MIRROR];
+            if (typeof fl_mirror_content === 'undefined') {
+              info(
+                `ListWatch did not return a complete object for business ${key}. Retrying ...`
+              );
+              if (tries > 10) {
                 info(
-                  `ListWatch did not return a complete object for business ${key}. Retrying ...`
+                  `Giving up. No 'food-logiq-mirror' for business at ${item._id}.`
                 );
-                if (tries > 10) {
-                  info(
-                    `Giving up. No 'food-logiq-mirror' for business at ${item._id}.`
-                  );
-                  /*              Await fetchAndSync({
+                /*              Await fetchAndSync({
                   from:`${FL_DOMAIN/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/contacts/${}`,
                   to: ``,
                 })*/
-                  fl_mirror_content = false;
-                  return;
-                }
+                fl_mirror_content = false;
+                return;
+              }
 
-                tries++;
-              } else {
-                info(`Got a complete object.`);
-                info(`assigning data after get.`);
-                data = assignData(data, result.data);
-                data.id = _path;
-                expandData = assignDataExpandIndex(data, result.data);
-              } // If
-            })
-            .catch((error_: any) => {
-              error('--> error when retrieving business ', error_);
-            });
+              tries++;
+            } else {
+              info(`Got a complete object.`);
+              info(`assigning data after get.`);
+              data = assignData(data, result.data);
+              data.id = _path;
+              expandData = assignDataExpandIndex(data, result.data);
+            } // If
+          } catch (error_: unknown) {
+            error({ error: error_ }, '--> error when retrieving business ');
+          }
         } // While FIXME: Verify consistency of this
       } else {
         // If
@@ -152,38 +157,34 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
         }
       });
       const _datum = { _id: resId, _rev: 0 };
-      await CONNECTION.put({
-        path: `${TL_TP}`,
-        data: {
-          [key.replace(/^\//, '')]: _datum,
-        },
-        tree,
-      })
-        .then(async () => {
-          info('----> business mirrored. ', `${TL_TP}${key}`);
-          // Creating bookmarks endpoint under tp
-          await CONNECTION.put({
-            path: `${TL_TP}${key}/bookmarks`,
-            data: {},
-            tree,
-          }).then(async (bookmarks_result: any) => {
-            const _bookmarks_id: string = bookmarks_result.headers
-              ? bookmarks_result.headers['content-location']
-              : '';
-            const _string_content = _bookmarks_id.slice(1);
-            if (_bookmarks_id !== '') {
-              const _bookmarks_data: Bookmarks = {
-                bookmarks: {
-                  _id: _string_content,
-                },
-              };
-              expandData.user = _bookmarks_data;
-            } // If
-          });
-        })
-        .catch((error_: any) => {
-          error('--> error when mirroring ', error_);
+      try {
+        await CONNECTION.put({
+          path: `${TL_TP}`,
+          data: {
+            [key.replace(/^\//, '')]: _datum,
+          },
+          tree,
         });
+        info('----> business mirrored. ', `${TL_TP}${key}`);
+        // Creating bookmarks endpoint under tp
+        const { headers } = await CONNECTION.put({
+          path: `${TL_TP}${key}/bookmarks`,
+          data: {},
+          tree,
+        });
+        const _bookmarks_id: string = headers?.['content-location'] ?? '';
+        const _string_content = _bookmarks_id.slice(1);
+        if (_bookmarks_id !== '') {
+          const _bookmarks_data: Bookmarks = {
+            bookmarks: {
+              _id: _string_content,
+            },
+          };
+          expandData.user = _bookmarks_data;
+        } // If
+      } catch (error_: unknown) {
+        error({ error: error_ }, '--> error when mirroring ');
+      }
 
       // Updating the expand index
       info('--> updating the expand-idex ', expandData.masterid);
@@ -200,10 +201,10 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
       info('--> TP exists. The FL business was not mirrored.');
     } // If
 
-    //return TradingPartners[key].masterid;
-  } catch (error_) {
+    // return TradingPartners[key].masterid;
+  } catch (error_: unknown) {
     error('--> error ', error_);
-    throw error;
+    throw error_ as Error;
   }
 } // AddTP2Trellis
 
@@ -242,9 +243,9 @@ function assignData(data: TradingPartner, item: any) {
     data.foodlogiq = item[FL_MIRROR] ? item[FL_MIRROR] : '';
     data.masterid = _id;
     data.internalid = _id;
-  } catch (error_) {
-    error('Error when assigning data.', error_);
-    error('This is the content of the item FL MIRROR = ', item[FL_MIRROR]);
+  } catch (error_: unknown) {
+    error({ error: error_ }, 'Error when assigning data.');
+    error('This is the content of the item FL MIRROR = %o', item[FL_MIRROR]);
   }
 
   return data;
@@ -266,13 +267,13 @@ function assignDataExpandIndex(data: TradingPartner, item: any) {
     _id = item[FL_MIRROR].internalid;
   } // If
 
-  _expandIndexData.name = data.name ? data.name : '';
-  _expandIndexData.address = data.address ? data.address : '';
-  _expandIndexData.city = data.city ? data.city : '';
+  _expandIndexData.name = data.name ?? '';
+  _expandIndexData.address = data.address ?? '';
+  _expandIndexData.city = data.city ?? '';
   _expandIndexData.state = '';
-  _expandIndexData.email = data.email ? data.email : '';
-  _expandIndexData.phone = data.phone ? data.phone : '';
-  _expandIndexData.id = data.id ? data.id : '';
+  _expandIndexData.email = data.email ?? '';
+  _expandIndexData.phone = data.phone ?? '';
+  _expandIndexData.id = data.id ?? '';
   _expandIndexData.internalid = _id;
   _expandIndexData.masterid = _id;
   _expandIndexData.sapid = _id;
@@ -287,20 +288,19 @@ function assignDataExpandIndex(data: TradingPartner, item: any) {
  * @param expandIndexRecord expand index content
  */
 async function updateExpandIndex(expandIndexRecord: JsonObject, key: string) {
-  // Expand index
-  await CONNECTION.put({
-    path: `${TL_TP_EI}`,
-    data: {
-      [key]: expandIndexRecord,
-    },
-    tree,
-  })
-    .then(() => {
-      info('--> expand index updated. ');
-    })
-    .catch((error_: any) => {
-      error('--> error when mirroring expand index.', error_);
+  try {
+    // Expand index
+    await CONNECTION.put({
+      path: `${TL_TP_EI}`,
+      data: {
+        [key]: expandIndexRecord,
+      },
+      tree,
     });
+    info('--> expand index updated. ');
+  } catch (error_: unknown) {
+    error({ error: error_ }, '--> error when mirroring expand index.');
+  }
 } // UpdateExpandIndex
 
 /**
@@ -320,32 +320,36 @@ async function updateMasterId(
 
   // Creating masterid-index
   const mi_datum = { _id: resourceId };
-  await CONNECTION.put({
-    path: TL_TP_MI,
-    // Path: masterid_path,
-    data: {
-      [masterid]: mi_datum,
-    },
-    tree,
-  })
-    .then(() => {
-      info('--> trading-partners/masterid-index updated.');
-    })
-    .catch((error_: any) => {
-      error('--> error when updating masterid-index element. ', error_);
+  try {
+    await CONNECTION.put({
+      path: TL_TP_MI,
+      // Path: masterid_path,
+      data: {
+        [masterid]: mi_datum,
+      },
+      tree,
     });
+    info('--> trading-partners/masterid-index updated.');
+  } catch (error_: unknown) {
+    error(
+      { error: error_ },
+      '--> error when updating masterid-index element. '
+    );
+  }
 
   // Updating masterid under fl-sync/business/<bid>
-  await CONNECTION.put({
-    path,
-    data: { masterid },
-  })
-    .then(() => {
-      info(`${SERVICE_PATH}/businesses/<bid> updated with masterid.`);
-    })
-    .catch((error_: any) => {
-      error('--> error when updating masterid element in fl-sync. ', error_);
+  try {
+    await CONNECTION.put({
+      path,
+      data: { masterid },
     });
+    info(`${SERVICE_PATH}/businesses/<bid> updated with masterid.`);
+  } catch (error_: unknown) {
+    error(
+      { error: error_ },
+      '--> error when updating masterid element in fl-sync. '
+    );
+  }
 } // UpdateMasterId
 
 function setConnection(conn: OADAClient) {

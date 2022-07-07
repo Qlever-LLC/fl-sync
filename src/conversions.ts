@@ -14,8 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import _ from 'lodash';
+
 import type { FlObject } from './mirrorWatch.js';
+import _ from 'lodash';
 
 export function fromOadaType(type: string) {
   const vals = Object.values(conversions);
@@ -28,28 +29,39 @@ export async function flToTrellis(flDocument: FlObject) {
     .name as keyof typeof conversions;
   const document: any = {};
 
-  Object.keys(shareSpecificAttributes)
-    .filter((attributePath: string) => _.has(flDocument, `shareSource.shareSpecificAttributes.${attributePath}`))
-    .forEach((key) => {
-      let trellisPath = shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
-      let flPath = `shareSource.shareSpecificAttributes.${key}`;
-      let flValue = _.get(flDocument, flPath);
-      console.log(`Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`)
-      _.set(document, trellisPath, flValue)
-    })
+  for (const key of Object.keys(shareSpecificAttributes).filter(
+    (attributePath: string) =>
+      _.has(flDocument, `shareSource.shareSpecificAttributes.${attributePath}`)
+  )) {
+    const trellisPath =
+      shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
+    const flPath = `shareSource.shareSpecificAttributes.${key}`;
+    const flValue = _.get(flDocument, flPath);
+    console.log(
+      `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`
+    );
+    _.set(document, trellisPath, flValue);
+  }
 
-  Object.keys(defaultAttributes)
-    .filter((attributePath: string) => _.has(flDocument, attributePath))
-    .forEach((flPath) => {
-      let trellisPath = defaultAttributes[flPath as keyof typeof defaultAttributes];
-      let flValue = _.get(flDocument, flPath);
-      console.log(`Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`)
-      _.set(document, trellisPath, flValue)
-    })
+  for (const flPath of Object.keys(defaultAttributes).filter(
+    (attributePath: string) => _.has(flDocument, attributePath)
+  )) {
+    const trellisPath =
+      defaultAttributes[flPath as keyof typeof defaultAttributes];
+    const flValue = _.get(flDocument, flPath);
+    console.log(
+      `Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`
+    );
+    _.set(document, trellisPath, flValue);
+  }
 
   if (!document.document_date) {
-    document.document_date = document.effective_date || _.get(flDocument, 'versionInfo.createdAt').substr(0,10);
-    console.log(`Setting document date from effective or create date: ${document.document_date}`)
+    document.document_date =
+      document.effective_date ||
+      _.get(flDocument, 'versionInfo.createdAt').slice(0, 10);
+    console.log(
+      `Setting document date from effective or create date: ${document.document_date}`
+    );
   }
 
   switch (flDocumentType) {
@@ -326,17 +338,18 @@ export const conversions = {
 };
 
 const shareSpecificAttributes = {
-  adjustmentDate: "adjustment_date",
+  adjustmentDate: 'adjustment_date',
   auditDate: 'audit_date',
   certifyingBody: 'certifying_body',
-  doesYourCompanyComplyWithFsisDirective108001: 'fsis_directive_108001_compliance',
+  doesYourCompanyComplyWithFsisDirective108001:
+    'fsis_directive_108001_compliance',
   effectiveDate: 'effective_date', // 'certifying_body.name',
-  gradeScore: 'score', //'score.value',
-  initialTermDate: "initial_term_date",
+  gradeScore: 'score', // 'score.value',
+  initialTermDate: 'initial_term_date',
   isAuditorPaacoCertified: 'is_paaco_certified',
   documentDate: 'document_date',
   selectAllRegulationsYouComplyWith: 'regulation_compliance',
-}
+};
 
 const defaultAttributes = {
   'auditAttributes.auditor': 'auditor',
@@ -345,7 +358,7 @@ const defaultAttributes = {
   'auditAttributes.criticalFailures': 'failures',
   'auditAttributes.reAuditDate': 'reaudit_date',
   'auditAttributes.scheme': 'scheme',
-}
+};
 
 export function fromName(name: keyof typeof conversions) {
   return conversions[name];

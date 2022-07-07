@@ -1,4 +1,6 @@
-/* Copyright 2021 Qlever LLC
+/**
+ * @license
+ * Copyright 2021 Qlever LLC
  *
  * Licensed under the Apache License, Version 2.0 (the 'License');
  * you may not use this file except in compliance with the License.
@@ -13,14 +15,14 @@
  * limitations under the License.
  */
 
+import 'dotenv/config';
+
 import convict from 'convict';
-import { url } from 'convict-format-with-validator';
 import { duration } from 'convict-format-with-moment';
-import { config as load } from 'dotenv';
+import { url } from 'convict-format-with-validator';
+
 convict.addFormat(url);
 convict.addFormat(duration);
-
-load();
 
 const config = convict({
   service: {

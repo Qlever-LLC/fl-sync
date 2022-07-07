@@ -14,9 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-const attach = require('./attach.js');
 
-module.exports = {
+/* eslint-disable unicorn/prevent-abbreviations */
+/* eslint-disable unicorn/no-null */
+
+import attach from './attach.js';
+
+export default {
   '{{Host}}/v2/businesses/{{BusinessID}}/documents?sourceCommunities={{CommunityID}}&sourceBusiness={{BusinessID}}':
     {
       pageItems: [

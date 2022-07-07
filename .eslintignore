@@ -4,5 +4,3 @@ bundle.*
 coverage
 .pnp.*
 .yarn
-src/mirrorWatch.ts
-src/report.ts

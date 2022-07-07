@@ -30,7 +30,7 @@ const info = debug('fl-sync:mirror-watch:info');
 export function checkAssessment(assessment: FlAssessment) {
   info(`Checking assessment ${assessment._id}`);
 
-  const { _id } = assessment?.assessmentTemplate;
+  const { _id } = assessment?.assessmentTemplate ?? {};
 
   if (checkAssessments.has(_id)) {
     return checkAssessments.get(_id)!(assessment);
