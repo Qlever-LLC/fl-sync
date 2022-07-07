@@ -14,7 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import bPromise from 'bluebird';
+
+import { setTimeout } from 'node:timers/promises';
+
 import _ from 'lodash';
 import { ListWatch } from '@oada/list-lib';
 import SHA256 from 'js-sha256';
@@ -90,11 +92,11 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
       if (typeof item[FL_MIRROR] === 'undefined') {
         info(`Getting ${_path} with delay.`);
         // FIXME: find a more robust way to retrieve business content
-        let fl_mirror_content = item[FL_MIRROR];
+        let fl_mirror_content: boolean | undefined = item[FL_MIRROR];
         let tries = 0;
         // Retry until it gets a body with FL_MIRROR
         while (typeof fl_mirror_content === 'undefined') {
-          await bPromise.delay(500);
+          await setTimeout(500);
           await CONNECTION.get({
             path: _path,
           })
@@ -333,7 +335,7 @@ async function updateMasterId(
       error('--> error when updating masterid-index element. ', error_);
     });
 
-    // Updating masterid under fl-sync/business/<bid>
+  // Updating masterid under fl-sync/business/<bid>
   await CONNECTION.put({
     path,
     data: { masterid },

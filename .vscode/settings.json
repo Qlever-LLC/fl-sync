@@ -46,6 +46,9 @@
     "Centricity",
     "codeql",
     "foodlogiq",
+    "FSQA",
+    "lcov",
+    "Logiq",
     "Snyk",
     "sonarjs",
     "trellisfw"
