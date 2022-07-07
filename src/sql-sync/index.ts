@@ -65,7 +65,7 @@ try {
     .recordset as unknown as sqlEntry[];
   console.log('after', qresult);
   console.log('SQL LIST:', qresult.length, 'TRELLIS:', trellisList.length);
-} catch (error) {
+} catch (error: unknown) {
   console.log(error);
 }
 
@@ -96,9 +96,8 @@ async function addEntity(name: string) {
   } catch (error: unknown) {
     console.log('ERRORED ON THIS ONE', name);
     console.log(error);
+    throw error;
   }
-
-  return undefined;
 }
 
 async function fetchTradingPartners() {

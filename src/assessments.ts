@@ -14,11 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import config from './config.js';
-import type { JsonObject } from '@oada/client';
+
 import type { FlAssessment } from './mirrorWatch.js';
-import axios from 'axios';
+import type { JsonObject } from '@oada/client';
 import _ from 'lodash';
+import axios from 'axios';
 import debug from 'debug';
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');
@@ -78,8 +80,11 @@ const assessment_template = {
 
 interface Answer {
   column: string;
+  // eslint-disable-next-line @typescript-eslint/ban-types
   answerText?: string | undefined | null;
+  // eslint-disable-next-line @typescript-eslint/ban-types
   answerBool?: boolean | undefined | null;
+  // eslint-disable-next-line @typescript-eslint/ban-types
   answerNumeric?: number | undefined | null;
 }
 
@@ -138,10 +143,10 @@ export async function spawnAssessment(
       : PATH_SPAWN_ASSESSMENT,
     headers: { Authorization: FL_TOKEN },
     data: _assessment_template,
-  }).catch((error_) => {
+  }).catch((cError) => {
     error('--> Error when spawning an assessment.');
-    error(error_);
-    throw error_;
+    error(cError);
+    throw cError as Error;
   });
 
   // Setting the assessment if to be modified
@@ -248,8 +253,8 @@ export async function linkAssessmentToDocument(
         to: document,
       },
     ],
-  }).catch((error_: Error) => {
-    error(error_);
+  }).catch((cError: Error) => {
+    error(cError);
   });
 } // LinkAssessmentToDocument
 
@@ -260,20 +265,21 @@ export async function linkAssessmentToDocument(
  */
 async function updateAssessment(path: string, data: FlAssessment) {
   trace(`Updating assessment [${data._id}] after creation`);
-  const result = await axios({
-    method: 'put',
-    url: path,
-    headers: { Authorization: FL_TOKEN },
-    data,
-  }).catch((error_) => {
-    error('--> Error when updating the assessment.');
-    error(error_);
-    error('Request was:', { url: path, data: JSON.stringify(data) })
-    throw error_;
-  });
+  try {
+    const result = await axios({
+      method: 'put',
+      url: path,
+      headers: { Authorization: FL_TOKEN },
+      data,
+    });
 
-  info('--> assessment created. ', result.data._id);
-  return result;
+    info('--> assessment created. ', result.data._id);
+    return result;
+  } catch (cError: unknown) {
+    error({ error: cError }, '--> Error when updating the assessment.');
+    error('Request was:', { url: path, data: JSON.stringify(data) });
+    throw cError as Error;
+  }
 } // UpdateAssessment
 
 export { assessment_template };
