@@ -14,9 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/* eslint-disable no-secrets/no-secrets */
+/* eslint-disable sonarjs/no-duplicate-string */
+
+import type { OADAClient } from '@oada/client';
 import ksuid from 'ksuid';
 import tree from './tree.js';
-import type { OADAClient } from '@oada/client';
 
 async function fakeFlBusiness(con: OADAClient) {
   const bid = `TRELLIS-TEST${ksuid.randomSync().string}`;

@@ -46,8 +46,14 @@
     "Centricity",
     "codeql",
     "foodlogiq",
+    "FSQA",
+    "jszip",
+    "ksuid",
+    "lcov",
+    "Logiq",
     "Snyk",
     "sonarjs",
-    "trellisfw"
+    "trellisfw",
+    "vdoc"
   ]
 }

@@ -22,7 +22,7 @@ import { setTimeout } from 'node:timers/promises';
 
 import axios, { AxiosRequestConfig } from 'axios';
 import moment, { Moment } from 'moment';
-import Promise from 'bluebird';
+import Bluebird from 'bluebird';
 import { Service } from '@oada/jobs';
 import _ from 'lodash';
 import debug from 'debug';
@@ -112,7 +112,7 @@ export async function watchFlSyncConfig() {
         return {} as JsonObject;
       }
 
-      throw cError;
+      throw cError as Error;
     });
   if (
     typeof data === 'object' &&
@@ -284,7 +284,12 @@ export async function fetchCommunityResources({
     );
     if (type === 'documents') info(`Pausing for ${delay / 60_000} minutes`);
     if (type === 'documents') await setTimeout(delay);
-    await fetchCommunityResources({ type, startTime, endTime, pageIndex: pageIndex + 1 });
+    await fetchCommunityResources({
+      type,
+      startTime,
+      endTime,
+      pageIndex: pageIndex + 1,
+    });
   }
 }
 
@@ -295,7 +300,12 @@ async function getResources(startTime: string, endTime: string) {
   // Get pending resources
   for await (const type of ['products', 'locations', 'documents'] as const) {
     trace(`Fetching community ${type}`);
-    await fetchCommunityResources({ type, startTime, endTime, pageIndex: undefined });
+    await fetchCommunityResources({
+      type,
+      startTime,
+      endTime,
+      pageIndex: undefined,
+    });
   }
 
   // Now get assessments (slightly different syntax)
@@ -393,7 +403,7 @@ async function fetchAndSync({
     const response = await axios(request);
 
     // Manually check for changes; Only update the resource if it has changed!
-    await Promise.map(
+    await Bluebird.map(
       response.data.pageItems,
       async (item: FlObject) => {
         let sync;
@@ -545,11 +555,12 @@ export async function initialize({
         pollFunc: pollFl,
         interval: INTERVAL_MS,
         name: 'food-logiq-poll',
-        getTime: (async () => axios({
+        getTime: (async () =>
+          axios({
             method: 'head',
             url: `${FL_DOMAIN}/businesses`,
             headers: { Authorization: FL_TOKEN },
-          }).then((r) => r.headers.date)) as unknown as () => Promise<string>
+          }).then((r) => r.headers.date)) as unknown as () => Promise<string>,
       });
       info('Started fl-sync poller.');
     }
@@ -640,9 +651,9 @@ export async function initialize({
 
 process.on('uncaughtExceptionMonitor', (cError: unknown) => {
   error({ error: cError }, 'Uncaught exception');
-  //The code can carry on for most of these errors, but I'd like to know about
-  //them. If I throw, it causes more trouble so I won't.
-//  throw cError;
+  // The code can carry on for most of these errors, but I'd like to know about
+  // them. If I throw, it causes more trouble so I won't.
+  //  throw cError;
 });
 
 if (esMain(import.meta)) {

@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
+/* eslint-disable unicorn/prevent-abbreviations */
+
 import moment, { Moment } from 'moment';
-import debug from 'debug';
 import type { FlObject } from './mirrorWatch.js';
+import debug from 'debug';
 import { fromOadaType } from './conversions.js';
 
 const info = debug('fl-sync:mirror-watch:info');
@@ -49,11 +51,11 @@ export async function validateResult(
     if (!flType || !validation[flType])
       throw new Error(`Validation of FL Type ${flType} unsupported`);
     return validation[flType](trellisDocument, flMirror);
-  } catch (error_: any) {
-    error('validateResult Errored: ', error_);
+  } catch (error_: unknown) {
+    error({ error: error_ }, 'validateResult Errored');
     return {
       status: false,
-      message: `validateResult Errored: ${error_.message}`,
+      message: `validateResult Errored: ${(error_ as Error).message}`,
     };
   }
 } // ValidateResult
