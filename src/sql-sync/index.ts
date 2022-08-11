@@ -27,7 +27,7 @@ let sqlConfig = {
   server: 'localhost',
   database: 'LFDynamic',
   user: 'trellisdev',
-  port: 3003,
+  port: 3002,
   options: {
     encrypt: true,
     trustServerCertificate: true,
@@ -40,7 +40,7 @@ if (production) {
     server: 'localhost',
     database: 'LFDynamic',
     user: "trellisprod",
-    port: 3003,
+    port: 3008,
     options: {
       encrypt: true,
       trustServerCertificate: true,
@@ -51,8 +51,10 @@ if (production) {
 
 async function main() {
   try {
+    console.log({sqlConfig})
     await sql.connect(sqlConfig);
 
+    /*
     // Const qresult = await sql.query`select * from SYSOBJECTS WHERE xtype = 'U'`
     // const qresult = await sql.query`select * from LFDynamic.INFORMATION_SCHEMA.TABLES`
     let qresult = (await sql.query`select * from SFI_Entities`)
@@ -65,6 +67,7 @@ async function main() {
       .recordset as unknown as sqlEntry[];
     console.log('after', qresult);
     console.log('SQL LIST:', qresult.length, 'TRELLIS:', trellisList.length);
+    */
   } catch (error) {
     console.log(error);
   }

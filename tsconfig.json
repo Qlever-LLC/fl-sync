@@ -11,7 +11,7 @@
     "strict": true,
     "importsNotUsedAsValues": "error",
     "noUncheckedIndexedAccess": true,
-    "noUnusedLocals": true,
+    "noUnusedLocals": false,
     "noUnusedParameters": true,
     "noImplicitThis": true,
     "noImplicitAny": true,

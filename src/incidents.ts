@@ -42,7 +42,6 @@ import {
   onTargetChange,
   startJobCreator,
 } from './mirrorWatch.js';
-import { reportConfig } from './reportConfig.js';
 import tree from './tree.js';
 import { watchTrellisFLBusinesses } from './masterData.js';
 
@@ -76,60 +75,6 @@ let TOKEN;
 
 let CONNECTION: OADAClient;
 // Let SOMEGLOBALCOUNT = 0;
-
-async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
-  for await (const change of changes) {
-    try {
-      if (_.has(change.body, 'autoapprove-assessments')) {
-        setAutoApprove(Boolean(change.body['autoapprove-assessments']));
-      }
-    } catch (cError: unknown) {
-      error({ error: cError }, 'mirror watchCallback error');
-    }
-  }
-}
-
-/**
- * Watches FL config
- */
-export async function watchFlSyncConfig() {
-  const data = await CONNECTION.get({
-    path: `${SERVICE_PATH}`,
-  })
-    .then((r) => r.data as JsonObject)
-    .catch(async (cError: any) => {
-      if (cError.status === 404) {
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}`,
-          data: {},
-          tree,
-        });
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/businesses`,
-          data: {},
-          tree,
-        });
-        return {} as JsonObject;
-      }
-
-      throw cError;
-    });
-  if (
-    typeof data === 'object' &&
-    !Array.isArray(data) &&
-    !Buffer.isBuffer(data)
-  ) {
-    setAutoApprove(Boolean(data['autoapprove-assessments']));
-  }
-
-  const { changes } = await CONNECTION.watch({
-    path: `${SERVICE_PATH}`,
-    type: 'single',
-  });
-
-  info('Watching %s for changes to the config', SERVICE_PATH);
-  void handleConfigChanges(changes);
-} // WatchFlSyncConfig
 
 /**
  * watches target jobs
@@ -556,52 +501,25 @@ export async function initialize({
 
     // Create the service
     if (service === undefined || service) {
-      const svc = new Service({
+      const service = new Service({
         name: SERVICE_NAME,
         oada: CONNECTION,
       });
 
       // Set the job type handlers
-      svc.on(
+      service.on(
         'document-mirrored',
         config.get('timeouts.mirrorWatch'),
         handleDocumentJob
       );
-      svc.on(
+      service.on(
         'assessment-mirrored',
         config.get('timeouts.mirrorWatch'),
         handleAssessmentJob
       );
-      svc.addReport(
-        'fl-sync-report',
-        CONNECTION,
-        reportConfig,
-        `0 0 * * * *`,
-        () => {
-          const date = moment().format('YYYY-MM-DD');
-          return {
-            from: 'noreply@trellis.one',
-            to: {
-              name: 'Sam Noel',
-              email: 'sn@centricity.us'
-            },
-            replyTo: { email: 'sn@centricity.us' },
-            subject: `Trellis Automation Report - ${date}`,
-            text: `Attached is the daily Trellis Automation Report for the FoodLoiQ documents process on ${date}.`,
-            attachments: [
-              {
-                filename: `TrellisAutomationReport-${date}`,
-                type: 'text/csv',
-                content: ''
-              }
-            ]
-          }
-        },
-        'document'
-      )
 
       // Start the jobs watching service
-      const serviceP = svc.start();
+      const serviceP = service.start();
 
       // Start the things watching to create jobs
       const p = startJobCreator(CONNECTION);
