@@ -109,7 +109,7 @@ jobs:
 
       - name: Cache docker layers
         if: ${{ !env.ACT }} # Awaiting ACT version after 0.2.17 for this feature
-        uses: actions/cache@v3.0.5
+        uses: actions/cache@v3.0.7
         id: cache
         with:
           path: /tmp/.buildx-cache
@@ -178,7 +178,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push images
-        uses: docker/build-push-action@v3.1.0
+        uses: docker/build-push-action@v3.1.1
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/Dockerfile
