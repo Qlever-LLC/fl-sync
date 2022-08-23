@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type { Tree } from '@oada/list-lib';
+//import type { Tree } from '@oada/list-lib';
 const temporary = {
   _type: 'application/vnd.oada.bookmarks.1+json',
   _rev: 0,
@@ -35,7 +35,7 @@ const temporary = {
     },
   },
 };
-export const tree: Tree = {
+export const tree: Record<string,any> = {
   bookmarks: {
     _type: 'application/vnd.oada.bookmarks.1+json',
     _rev: 0,

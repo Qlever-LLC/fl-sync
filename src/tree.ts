@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type { Tree } from '@oada/list-lib';
+//import type { Tree } from '@oada/list-lib';
 
 const docsTree = {
   _type: 'application/vnd.oada.bookmarks.1+json',
@@ -44,7 +44,7 @@ const docsTree = {
     },
   },
 };
-export const tree: Tree = {
+export const tree: Record<string, any> = {
   bookmarks: {
     _type: 'application/vnd.oada.bookmarks.1+json',
     _rev: 0,
@@ -144,6 +144,20 @@ export const tree: Tree = {
               '_rev': 0,
               '*': {
                 // '_type': 'application/vnd.foodlogiq.product.1+json',
+                _type: 'application/vnd.oada.trellisfw.1+json',
+                _rev: 0,
+              },
+            },
+          },
+        },
+        'incident-types': {
+          '_type': 'application/vnd.oada.trellisfw.1+json',
+          '_rev': 0,
+          '*': {
+            _type: 'application/vnd.oada.trellisfw.1+json',
+            _rev: 0,
+            incidents: {
+              '*': {
                 _type: 'application/vnd.oada.trellisfw.1+json',
                 _rev: 0,
               },

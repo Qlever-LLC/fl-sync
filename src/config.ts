@@ -184,8 +184,52 @@ const config = convict({
       default: '5e27480dd85523000155f6db',
       env: 'FL_TRELLIS_USER',
     },
+    'capaTrellisUser': {
+      doc: 'User ID used by Trellis automation in /capa endpoints',
+      format: String,
+      default: '604a4abed6ed0f000e8063c5',
+      env: 'CAPA_TRELLIS_USER',
+    },
+    'force_write': {
+      doc: 'Force writes whether remote data already equals oada',
+      format: Boolean,
+      default: false,
+      env: 'FL_FORCE_WRITE',
+    },
   },
-  slack: {
+  'incidents-sql': {
+    server: {
+      doc: 'Server name',
+      format: String,
+      default: 'localhost',
+      env: 'INCIDENTS_SERVER',
+    },
+    database: {
+      doc: 'Database name',
+      format: String,
+      default: null,
+      env: 'INCIDENTS_DB',
+    },
+    user: {
+      doc: 'User name',
+      format: String,
+      default: null,
+      env: 'INCIDENTS_USER',
+    },
+    password: {
+      doc: 'Password',
+      format: String,
+      default: 'pass',
+      env: 'INCIDENTS_PASSWORD',
+    },
+    port: {
+      doc: 'Port',
+      format: Number,
+      default: 1433,
+      env: 'INCIDENTS_PORT',
+    },
+  },
+  'slack': {
     posturl: {
       format: 'url',
       // Use a real slack webhook URL
@@ -199,7 +243,7 @@ const config = convict({
       doc: 'Timeout duration for mirror handler jobs',
       format: 'duration',
       // The types for duration suck
-      default: 3_600_000 as unknown as number,
+      default: 86_400_000 as unknown as number,
       env: 'MIRROR_WATCH_TIMEOUT',
       arg: 'mirror-watch-timeout',
     },

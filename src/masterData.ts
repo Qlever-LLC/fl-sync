@@ -22,7 +22,7 @@ import { setTimeout } from 'node:timers/promises';
 import type { JsonObject, OADAClient } from '@oada/client';
 import { ListWatch } from '@oada/list-lib';
 import SHA256 from 'js-sha256';
-import type { TreeKey } from '@oada/list-lib/dist/tree.js';
+import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import _ from 'lodash';
 import debug from 'debug';
 
