@@ -118,9 +118,9 @@ const checkAssessments = new Map(
                   if (result) {
                     const reason = `The sum of ${
                       column.name
-                    }(${value}) and Umbrella Coverage(${umbCov}) => ${
+                    }(${value}) and Umbrella Coverage(${umbCov}) was ${
                       value + umbCov
-                    } does not meet the required coverage (${requirement})`;
+                    }. This does not meet the required coverage (${requirement})`;
                     info(
                       `Assessment violation for id [${assessment._id}: ${reason}`
                     );

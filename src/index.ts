@@ -31,7 +31,7 @@ import esMain from 'es-main';
 import { Change, JsonObject, OADAClient, connect } from '@oada/client';
 import type { Body } from '@oada/client/lib/client';
 import { ListWatch } from '@oada/list-lib';
-import type { TreeKey } from '@oada/list-lib/dist/tree.js';
+import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import poll from '@oada/poll';
 
 import {
@@ -63,6 +63,7 @@ const CONCURRENCY = config.get('trellis.concurrency');
 const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; // FL polling interval
 const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
 
 const info = debug('fl-sync:info');
 const trace = debug('fl-sync:trace');
@@ -150,7 +151,7 @@ async function watchTargetJobs() {
   });
 } // WatchTargetJobs
 
-export async function handleItem(type: string, item: FlObject) {
+export async function handleItem(type: string, item: FlObject, oada?: OADAClient) {
   let bid;
   try {
     let sync;
@@ -182,13 +183,13 @@ export async function handleItem(type: string, item: FlObject) {
 
     const path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
     try {
-      const { data: resp } = (await CONNECTION.get({ path })) as {
+      const { data: resp } = (await (CONNECTION || oada).get({ path })) as {
         data: JsonObject;
       };
 
       // Check for changes to the resources
       const equals = _.isEqual(resp['food-logiq-mirror'], item);
-      if (!equals) {
+      if (!equals || FL_FORCE_WRITE) {
         info(
           `Document difference in FL doc [${item._id}] detected. Syncing...`
         );
@@ -210,7 +211,7 @@ export async function handleItem(type: string, item: FlObject) {
       // This tree put, when run on startup or other cases where we are going
       // through pages of data, causes if-match issues. The promise.map closure
       // this falls within was changed to .each for the time-being
-      await CONNECTION.put({
+      await (CONNECTION || oada).put({
         path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
         data: { 'food-logiq-mirror': item } as unknown as Body,
         tree,
@@ -240,11 +241,13 @@ export async function fetchCommunityResources({
   startTime,
   endTime,
   pageIndex,
+  oada,
 }: {
   type: string;
   startTime: string;
   endTime: string;
   pageIndex?: number;
+  oada?: OADAClient;
 }) {
   pageIndex = pageIndex ?? 0;
   const url =
@@ -268,7 +271,7 @@ export async function fetchCommunityResources({
     for await (const item of response.data.pageItems as FlObject[]) {
       let retries = 5;
       // eslint-disable-next-line no-await-in-loop
-      while (retries-- > 0 && !(await handleItem(type, item)));
+      while (retries-- > 0 && !(await handleItem(type, item, oada)));
     }
   } catch (cError: unknown) {
     error({ error: cError }, 'fetchCommunityResources');
@@ -289,6 +292,7 @@ export async function fetchCommunityResources({
       startTime,
       endTime,
       pageIndex: pageIndex + 1,
+      oada
     });
   }
 }
@@ -549,6 +553,7 @@ export async function initialize({
     // Some queued jobs may depend on the poller to complete, so start it now.
     if (polling === undefined || polling) {
       await poll.poll({
+        //@ts-ignore
         connection: CONNECTION,
         basePath: SERVICE_PATH,
         pollOnStartup: true,
@@ -587,7 +592,7 @@ export async function initialize({
         'fl-sync-report',
         CONNECTION,
         reportConfig,
-        `0 0 * * * *`,
+        `0 0 0 * * *`,
         () => {
           const date = moment().format('YYYY-MM-DD');
           return {
@@ -608,7 +613,7 @@ export async function initialize({
             ]
           }
         },
-        'document'
+        'document-mirrored'
       )
 
       // Start the jobs watching service
