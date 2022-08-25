@@ -222,7 +222,7 @@ export async function getLookup(item: any, key: string) {
 
     const jobKey = mostRecentKsuid(flJobKeys);
     if (!jobKey)
-      throw new Error(`jobKey not found in _meta doc of the pdf [${pdfId}]`);
+      return warn(`jobKey not found in _meta doc of the pdf [${pdfId}]`);
 
     // @ts-expect-error
     const jobId = data?.services?.['fl-sync']?.jobs?.[jobKey]!._id;
@@ -1372,7 +1372,6 @@ async function handleScrapedResult(targetJobKey: string) {
 async function rejectFlDocument(documentId: string, jobId: string, message?: string) {
   info(`Rejecting FL document [${documentId}]. ${message}`);
   // Post message regarding error
-  console.log('1')
   await axios({
     method: 'post',
     url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/capa`,
@@ -1383,7 +1382,6 @@ async function rejectFlDocument(documentId: string, jobId: string, message?: str
     },
   });
 
-  console.log('2')
   await axios({
     method: 'put',
     url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/submitCorrectiveActions`,
@@ -1403,7 +1401,7 @@ async function rejectFlDocument(documentId: string, jobId: string, message?: str
   await CONNECTION.put({
     path: `/${jobId}`,
     data: {
-      "foodlogiq-reult-status": "rejected"
+      "foodlogiq-result-status": "rejected"
     }
   })
   console.log('done')
