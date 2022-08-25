@@ -594,7 +594,7 @@ export async function initialize({
         reportConfig,
         `0 0 0 * * *`,
         () => {
-          const date = moment().format('YYYY-MM-DD');
+          const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
           return {
             from: 'noreply@trellis.one',
             to: {
@@ -603,7 +603,7 @@ export async function initialize({
             },
             replyTo: { email: 'sn@centricity.us' },
             subject: `Trellis Automation Report - ${date}`,
-            text: `Attached is the daily Trellis Automation Report for the FoodLoiQ documents process on ${date}.`,
+            text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
             attachments: [
               {
                 filename: `TrellisAutomationReport-${date}`,
