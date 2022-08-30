@@ -23,11 +23,12 @@ import _ from 'lodash';
 //@ts-ignore
 import csvjson from 'csvjson';
 import debug from 'debug';
+import moment, { Moment } from 'moment';
+import { poll } from '@oada/poll';
 import sql from 'mssql';
 
 import type { JsonObject, OADAClient } from '@oada/client';
 import type { Body } from '@oada/client/lib/client';
-import { ListWatch } from '@oada/list-lib';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 
 import tree from './tree.js';
@@ -42,34 +43,13 @@ const CO_ID = config.get('foodlogiq.community.owner.id');
 // const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
-const { database, server, user, password, port } = config.get('incidents-sql');
+const { database, server, user, password, port, interval } = config.get('incidents');
 
 const info = debug('fl-sync:info');
 const trace = debug('fl-sync:trace');
 const error = debug('fl-sync:error');
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
-}
-
-/*
-function transformIncident() {
-
-}
-
-async function syncIncident(incident: FlIncident) {
-  transformIncident();
-}
- */
-
-export async function watchIncidents() {
-
-  /*
-  new ListWatch({
-    basePath: `${SERVICE_PATH}/incident-types`,
-    itemsPath: `$.*.incidents.*`,
-    onAddItem: syncIncident
-  })
-  */
 }
 
 export async function handleItem(item: FlIncident, oada: OADAClient) {
@@ -103,15 +83,12 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
 
     // Now, sync
     if (sync) {
-      console.log('SYNCING', path);
       await oada.put({
         path,
         data: { 'food-logiq-mirror': item } as unknown as Body,
         tree,
       });
-      info(
-        `Document synced to mirror: type:${type} _id:${item._id}`
-      );
+      info(`Document synced to mirror: type:${type} _id:${item._id}`);
     }
 
     return true;
@@ -172,12 +149,32 @@ export async function fetchIncidents({
         response.data.pageItemCount * (pageIndex + 1)
       }/${response.data.totalItemCount}`
     );
-    await fetchIncidents({ startTime, endTime, pageIndex: pageIndex + 1, oada });
+    await fetchIncidents({
+      startTime,
+      endTime,
+      pageIndex: pageIndex + 1,
+      oada,
+    });
   }
 }
 
+export async function pollIncidents(
+  lastPoll: Moment,
+  end: Moment,
+  oada: OADAClient
+) {
+  // Sync list of suppliers
+  const startTime: string = (lastPoll || moment('20150101', 'YYYYMMDD'))
+    .utc().format();
+  const endTime: string = end.utc().format();
+
+  await fetchIncidentTypes({ startTime, endTime, oada });
+  await fetchIncidents({ startTime, endTime, oada });
+  await fetchIncidentsCsv({ startTime, endTime });
+}
+
 /**
- * Fetches community resources
+ * Fetch Incidents in csv format
  * @param {*} param0 pageIndex, type, date
  */
 export async function fetchIncidentsCsv({
@@ -188,7 +185,6 @@ export async function fetchIncidentsCsv({
   startTime: string;
   endTime: string;
   pageIndex?: number;
-  oada: OADAClient;
 }) {
   pageIndex = pageIndex ?? 0;
   const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?updated=${startTime}..${endTime}`;
@@ -201,30 +197,12 @@ export async function fetchIncidentsCsv({
     request.params = { pageIndex };
   }
 
-  console.log('make request');
-  /*
   const response = await axios(request);
 
-  let csvData = csvjson.toObject(response.data, { delimiter: ",", quote: '"' });
+  const csvData = csvjson.toObject(response.data, { delimiter: ",", quote: '"' });
 
   if (csvData.length > 0) {
     await syncToSql(csvData);
-    }
-  */
-  syncToSql(undefined);
-
-
-  // Manually check for changes; Only update the resource if it has changed!
-  /*
-  try {
-    for await (const item of response.data.pageItems as FlIncident[]) {
-      let retries = 5;
-      // eslint-disable-next-line no-await-in-loop
-      while (retries-- > 0 && !(await handleItem(item, oada)));
-    }
-  } catch (cError: unknown) {
-    error({ error: cError }, 'fetchIncidents');
-    throw cError;
   }
 
   // Repeat for additional pages of FL results
@@ -234,35 +212,16 @@ export async function fetchIncidentsCsv({
         response.data.pageItemCount * (pageIndex + 1)
       }/${response.data.totalItemCount}`
     );
-    await fetchIncidents({ startTime, endTime, pageIndex: pageIndex + 1, oada });
+    await fetchIncidentsCsv({
+      startTime,
+      endTime,
+      pageIndex: pageIndex + 1,
+    });
   }
-  */
 }
 
-function sanitize(key: string) {
-  return key;
-}
-
-async function syncToSql(csvData: any) {
-  console.log('syncToSql', csvData)
-  /*
-  let headers = Object.keys(csvData[0])
-    .filter(key => key !== 'Id')
-    .map(key => sanitize(key))
-//    .map(key => key.replace(/ /, ''))
-.map(key => `[${key}] text NULL`)
-*/
-
-  // First verify table
-  console.log({
-    server,
-    database,
-    user,
-    password,
-    port,
-  })
-  //@ts-ignore
-  await sql.connect({
+export async function startIncidents(connection: OADAClient) {
+  const sqlConfig = {
     server,
     database,
     user,
@@ -270,68 +229,118 @@ async function syncToSql(csvData: any) {
     port,
     options: {
       encrypt: true,
-      trustServerCertificate: false
-    }
-  })
-  /*
+      trustServerCertificate: true,
+    },
+  };
 
+  //@ts-ignore
+  await sql.connect(sqlConfig);
+
+  await ensureTable();
+
+  await poll({
+    connection,
+    basePath: SERVICE_PATH,
+    pollOnStartup: true,
+    pollFunc: pollIncidents,
+    interval,
+    name: 'food-logiq-incidents',
+    getTime: (async () =>
+      axios({
+        method: 'head',
+        url: `${FL_DOMAIN}/businesses`,
+        headers: { Authorization: FL_TOKEN },
+      }).then((r) => r.headers.date)) as unknown as () => Promise<string>
+  });
+  info('Started fl-sync poller.');
+}
+
+async function ensureTable() {
   const tables = await sql.query`select * from INFORMATION_SCHEMA.TABLES`;
   const matches = tables.recordset.filter((obj: any) => obj.TABLE_NAME === 'incidents')
 
   console.log(matches.length)
   if (matches.length === 0) {
     const query = `create table incidents (${TableColumns} PRIMARY KEY (Id))`;
-    console.log(query);
-    trace(`Creating incidents table: ${query}`);
     await sql.query(query)
-  } else {
-    await sql.query(`drop table incidents`);
-
+    trace(`Creating incidents table: ${query}`);
   }
 
-  */
+}
 
-  //Now, write the rows
-  /*
-  for await (let row of csvData) {
-    row.Id = parseInt(row.Id);
+function prepRow(row: any) {
+  if (row['CREDIT NOTE']) {
+    delete row['CREDIT NOTE'];
+  }
 
-    const values = Object.values(row);
-    const entries = Object.entries(
-      ([key, value]: [string, string]) => `[${key}] = ${value}`).join(', ');
-    console.log({entries, values});
+  let oldKey = `Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)`;
+  if (row[oldKey]) {
+    let newKey =
+      `Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?`;
+    row[newKey] = row[oldKey];
+    delete row[oldKey];
+  }
+  return row;
+}
 
-    await sql.query(`
-    IF NOT EXISTS (SELECT * FROM incidents.incidents WHERE Id = ${row.Id})
-      INSERT INTO incidents.incidents(${headers})
-      VALUES(${values.join(',')})
-    ELSE
-      UPDATE incidents.incidents
-      SET ${entries}
-      WHERE Id = ${row.Id}
-      `);
-      }
-   */
 
-  /*
-  await sql.query(`MERGE
-INTO incidents.incidents WITH (HOLDLOCK) AS target
-USING (SELECT
-    77748 AS rtu_id
-   ,'12B096876' AS meter_id
-   ,56112 AS meter_reading
-   ,'20150602 00:20:11' AS local_time) AS source
-(rtu_id, meter_id, meter_reading, time_local)
-ON (target.rtu_id = source.rtu_id
-  AND target.time_local = source.time_local)
-WHEN MATCHED
-  THEN UPDATE
-      SET meter_id = '12B096876'
-         ,meter_reading = 56112
-WHEN NOT MATCHED
-  THEN INSERT (rtu_id, meter_id, meter_reading, time_local)
-      VALUES (77748, '12B096876', 56112, '20150602 00:20:11')`);
-      */
+async function syncToSql(csvData: any) {
+  const sqlConfig = {
+    server,
+    database,
+    user,
+    password,
+    port,
+    options: {
+      encrypt: true,
+      trustServerCertificate: true,
+    },
+  };
+
+  //@ts-ignore
+  await sql.connect(sqlConfig);
+
+  for await (const row of csvData) {
+    console.log('Row in', row);
+    let newRow = prepRow(row);
+    newRow = Object.fromEntries(
+      ColumnKeys.map((key) => {
+        if (!isNaN(Number(newRow[key]))) {
+          return [key, Number(newRow[key])];
+        } else if (newRow[key] === 'true' || newRow[key] === 'false') {
+          return [key, newRow[key] === 'true'];
+        } else if (!newRow[key]) {
+          return [key, 'NULL'];
+        } else {
+          return [key, `'${newRow[key]}'`]
+        }
+      })
+    );
+
+    const selectString = ColumnKeys.map(
+      (key) => `${newRow[key]} AS ${key}`).join(',');
+    const setString = ColumnKeys.map(
+      (key) => `SET ${key} = ${newRow[key]}`).join(' AND ');
+    const targetString = ColumnKeys.map(
+      (key) => `target.${key} = source.${key}`).join(',');
+
+    const cols = ColumnKeys.join(',');
+    const values = ColumnKeys.map((key) => newRow[key]).join(',');
+
+    const query = `MERGE
+      INTO incidents.incidents WITH (HOLDLOCK) AS target
+      USING (SELECT ${selectString}) AS source
+      (${cols})
+      ON (${targetString})
+      WHEN MATCHED
+        THEN UPDATE
+          SET ${setString}
+      WHEN NOT MATCHED
+        THEN INSERT (${cols})
+        VALUES (${values})`
+    trace(`SQL Query: %s`, query);
+    await sql.query(query);
+  }
 }
 
 export async function fetchIncidentTypes({
@@ -377,7 +386,12 @@ export async function fetchIncidentTypes({
         response.data.items.length * (pageIndex + 1)
       }/${response.data.total}`
     );
-    await fetchIncidentTypes({ startTime, endTime, pageIndex: pageIndex + 1, oada });
+    await fetchIncidentTypes({
+      startTime,
+      endTime,
+      pageIndex: pageIndex + 1,
+      oada,
+    });
   }
 }
 
@@ -415,15 +429,12 @@ export async function handleIncidentType(
 
     // Now, sync
     if (sync) {
-      console.log('SYNCING', path);
       await oada.put({
         path,
         data: { 'food-logiq-mirror': item } as unknown as Body,
         tree,
       });
-      info(
-        `Document synced to mirror: type:${item.name} _id:${item._id}`
-      );
+      info(`Document synced to mirror: type:${item.name} _id:${item._id}`);
     }
 
     return true;
@@ -718,6 +729,7 @@ export type FlIncidentsConf = {
   notConfigurable: boolean;
 };
 
+
 //Edits to the columns:
 //1) removed [CREDIT NOTE] as duplicate of [Credit Note]
 //2) trimmed the really long potbelly column name that was > 128 characters
@@ -982,3 +994,264 @@ const TableColumns = `
   [Do you have enough information to begin investigation of the incident as defined above?] BIT NULL,
   [What information is still needed?] VARCHAR(max) NULL,
   [Additional Documentation] BIT NOT NULL,`;
+
+const ColumnKeys = [
+  'Id',
+  'Incident ID',
+  'Incident Type',
+  'Current Status',
+  'Last Updated At',
+  'Last Updated By',
+  'Due Date',
+  'Reported By',
+  'Created At',
+  'Created From',
+  'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)',
+  'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)',
+  'community (Community/Business Name)',
+  'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
+  'Issued By',
+  'Title',
+  'distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)',
+  'Country',
+  'Type of Product Issue',
+  'Type of Foreign Material',
+  'Type of Distribution Issue',
+  'Type of Quality Issue',
+  'Description',
+  'Customer Complaint Related',
+  'Still have the product?',
+  'Do you still have the foreign object?',
+  'Requesting Credit?',
+  'Invoice Date / Delivery Date',
+  'Invoice Number',
+  'Affected Quantity',
+  'Unit of Measurement',
+  'productType (Product Name/Product Type/QA Product Category/Material Category)',
+  'Item Name',
+  'sourceMembership (Manufacturer of Product or Distributor Name/Supplier/Product Supplier/Supplier Name)',
+  'Supplier Status',
+  'quantityAffected (Quantity Affected/Affected Quantity)',
+  'Pack Date / Grind Date / Manufacture Date',
+  'Run Time',
+  'Use By Date / Freeze By Date / Expiration Date',
+  'Production Date / Julian Code / Case Code / Batch Code / Lot Code',
+  'IMAGE OF SUPPLIER CASE LABEL',
+  'IMAGE(s) OF ISSUE AND QUANTITY AFFECTED',
+  'IMAGE OF DISTRIBUTOR LABEL, if applicable',
+  'Hold or Isolate',
+  'Confirm Credit Request',
+  'Review and Action Comments',
+  'supplierLocation (Supplier Location/Supplier Manufacturing Location)',
+  'SUPPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT',
+  'Supplier Corrective Action',
+  'Supplier Credit Decision',
+  'Supplier Credit Approval - Rep Name',
+  'Quantity Credit Amount (Not Dollars)',
+  'Quantity Unit of Measure',
+  'Comment',
+  'Credit Decision',
+  'Credit Number',
+  'Credit Amount',
+  'Currency',
+  'Hold Product',
+  'Hold Comments',
+  'Isolate Product',
+  'Isolate Comments',
+  'CM Team Notified',
+  'CM Team Activated',
+  'Supplier Investigation Report',
+  'Corrective Action Report',
+  'Reason for Request',
+  'Please describe further',
+  'Enter Product Name',
+  'Distributor Item Number',
+  'Best By/Expiration Date',
+  'Do you have enough usable product to last you until next delivery?',
+  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? ',
+  'Please describe why you are not emailing _supplychain@potbelly.com',
+  'Lot Code (enter N/A if this was a short)',
+  'images (Photo of Case Labels & Product/Photos or Documents)',
+  'product (Product Name Name/Material Name/Product Name)',
+  'product (Product GTIN/Product Name GTIN/Material GTIN)',
+  'product (Product Name LOT/Material LOT/Product LOT)',
+  'Reason for DC Denial',
+  'Credit Memo',
+  'Credit Amount Approved',
+  'DC Comments',
+  'Reason for Supplier Denial',
+  'Supplier Comments',
+  'Comments',
+  'Credit Decision by DC',
+  'Rejection Reason',
+  'Credit Type',
+  'Type of Delivery Incident',
+  'Still have the product',
+  'Do you still have the foreign object?  If so, please hold for further investigation.',
+  'Invoice Photo',
+  'Date Product Was Received',
+  'Pack Date / Manufacture Date',
+  'Incident Photo(s)',
+  'Supplier Label',
+  'DC Pick Label',
+  'Purchase Order Image',
+  'Invoice Image',
+  'Shelf Life Issue',
+  'Supplier Initial Assessment',
+  'SUPPLIER INVESTIGATION REPORT(S)',
+  'CORRECTIVE ACTION REPORTS',
+  'Supplier Credit Number',
+  'SUPPLIER CREDIT DOCUMENTATION',
+  'Distribution Company',
+  'Incident Acknowledged?',
+  'Brand',
+  'Restaurant Contact Name',
+  'Restaurant Phone Number',
+  'Date Product Received',
+  'DC Invoice Number',
+  'HAVI Product ID',
+  'Manufacturer Code',
+  'DC Product Code',
+  'Best By/Use By Date',
+  'Complaint Type',
+  'Complaint Subtype - Foreign Object',
+  'Complaint Subtype - Low Piece Count',
+  'Complaint Subtype - Size and Weight',
+  'Complaint Subtype - Temperature Abuse',
+  'Complaint Subtype - Packaging',
+  'Complaint Subtype - Shelf Life',
+  'Complaint Subtype - Product Performance',
+  'Complaint Subtype - Appearance',
+  'Complaint Subtype - Fresh Produce',
+  'Complaint Details',
+  'Quantity Affected',
+  'Additional Comments',
+  'Fresh Produce DC Credit Decision',
+  'Fresh Produce DC Comments',
+  'Feedback for Supplier',
+  'Supplier Documentation / Photos',
+  'Supplier Additional Comments',
+  'Reason For Denial',
+  'DC Credit Decision',
+  'DC Documentation / Photos',
+  'DC Additional Comments',
+  'DC Reason For Denial',
+  'DC Corrective Action',
+  'Corrective Action - Distributor Revised',
+  'Corrective Action Document',
+  'Credit note to supplier',
+  'Produce Supplier + Distributor Credit Decision',
+  'Quantity Credit Amount (Not currency)',
+  'Credit Note',
+  'Produce Supplier + Distributor INVESTIGATION / CORRECTIVE ACTION(S) REPORT',
+  'Produce Supplier + Distributor Corrective Action',
+  'Produce Supplier + Distributor Investigation/Corrective Action Report',
+  'Failure Group',
+  'Failure Type',
+  'Severity',
+  'Supporting Details',
+  'Additional Vendor Batch/Lots',
+  'Quantity',
+  'Unit of Measure',
+  'PO Number',
+  'Inbound Freight Carrier',
+  'Initial Disposition',
+  'Downtime Caused (when applicable)',
+  'Supporting Document',
+  'Potential for Claim',
+  'Root Cause',
+  'Action Plan',
+  'Responsible Party',
+  'Additional Notes',
+  'Final Disposition',
+  'Resolution Details',
+  'Best By Date',
+  'Incident Issue',
+  'Appearance Issue',
+  'Fatty / Excess Fat Issue',
+  'Foreign Object Issue',
+  'Fresh Produce Issue',
+  'Fresh Produce Credit Decision',
+  'Low Piece Count',
+  'Off Odor / Flavor Issue',
+  'Packaging Issue',
+  'Product Performance Issue',
+  'Size and Weight Issue',
+  'Temperature Abuse Issue',
+  'Wrong Product Issue',
+  'Incident Details',
+  'Photos or Documents',
+  'Supplier Photos or Documents',
+  'Supplier Credit Denial Reason',
+  'Dine Brands Quality Assurance Feedback',
+  'Distribution Center Credit Decision',
+  'Distribution Center Photos or Documents',
+  'Distribution Center Credit Denial Reason',
+  'Distribution Center Additional Comments',
+  'PO# / STO#',
+  'Does your SAP plant number begin with a 2?',
+  'Batch Code',
+  'Inbound Issue',
+  'Inbound Issue Details/Comments',
+  'Quantity Involved',
+  'Labor Hours to Correct',
+  'Load/Pallet Issue',
+  'Trailer Number Photo',
+  'Document/BOL',
+  'Case Label',
+  'Other as Necessary',
+  'Incident Investigator Comments',
+  'Please provide root cause analysis',
+  'Root Cause Analysis Resolution',
+  'What is the root cause?',
+  'What are the corrections you have made?',
+  'What are the preventive measures you have taken?',
+  'Evidence of Correction',
+  'CAPA Resolution',
+  'Triage Manager Comments',
+  'Incident Investigator Review Comments',
+  'Reporter Review Comments',
+  'Reason for incorrect information decision',
+  'Evidence to Reassign',
+  'Please confirm that you received the notification from "info@foodlogiq.com"',
+  'Reporter Name',
+  'Reporter Phone',
+  'Internal Supplier',
+  'Est No',
+  'Defect Group',
+  'Appearance/Color Defect Type',
+  'Describe the Misc. Color',
+  'Fat Defect Type',
+  'Foreign Materials Defect Type',
+  'Indigenous Materials Defect Type',
+  'Labeling Defect Type',
+  'Meat Quality Defect Type',
+  'Off Condition Defect Type',
+  'Other Defect Type',
+  'Package Condition Defect Type',
+  'Packaging Defect Type',
+  'Product Age/Dating Defect Type',
+  'Scheduling Defect Type',
+  'Shipping Defect Type',
+  'Temperature Defect Type',
+  'Transportation Defect Type',
+  'Weight/Fill Defect Type',
+  'Problem Statement',
+  'Combo/Case Label',
+  'Quality Defect',
+  'Do you acknowledge the incident as defined above?',
+  'Will you begin investigation of the incident as described above?',
+  'Please provide Root Cause',
+  'RCA Documentation',
+  'What is the preventive measure?',
+  'FSQA Manager Comments',
+  'Rejection Action',
+  'Reporter Comment',
+  'Buyer Final Review',
+  'Buyer Final Review Comments',
+  'Reporter Final Review',
+  'Protein Type',
+  'Do you have enough information to begin investigation of the incident as defined above?',
+  'What information is still needed?',
+  'Additional Documentation'
+];

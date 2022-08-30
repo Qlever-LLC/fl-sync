@@ -26,7 +26,7 @@ import { initialize as service } from '../dist/index.js';
 import { FlObject, isObj as isObject } from '../dist/mirrorWatch.js';
 import { coi } from './documents/coi.js';
 import config from '../dist/config.js';
-import type { TreeKey } from '@oada/list-lib/dist/tree.js';
+import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'
 const FL_TOKEN = config.get('foodlogiq.token') || '';
 const FL_DOMAIN = config.get('foodlogiq.domain') || '';
@@ -434,7 +434,6 @@ async function postDocument(data: Body, oada: OADAClient) {
   if (typeof resp !== 'object') throw new Error('Bad data');
   // @ts-expect-error
   const aft = Object.keys(resp).filter((k) => !k.startsWith('_'));
-  // @ts-expect-error
   let flId = aft.filter((k) => !bef.has(k));
   // @ts-expect-error
   flId = flId[0];
@@ -464,7 +463,7 @@ async function postAndPause(data: Body, oada: OADAClient) {
       if (r && typeof r.data === 'object') {
         // @ts-expect-error
         return Object.keys(r.data)[0];
-      }
+      } else return undefined
     });
   const jobKey = jobId!.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id');

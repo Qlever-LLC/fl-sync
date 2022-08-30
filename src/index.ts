@@ -32,7 +32,8 @@ import { Change, JsonObject, OADAClient, connect } from '@oada/client';
 import type { Body } from '@oada/client/lib/client';
 import { ListWatch } from '@oada/list-lib';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
-import poll from '@oada/poll';
+import { poll } from '@oada/poll';
+import { startIncidents } from './fl_incidents.js';
 
 import {
   FlObject,
@@ -64,6 +65,7 @@ const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; // FL polling inter
 const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
+const REPORT_EMAIL = config.get('trellis.reportEmail');
 
 const info = debug('fl-sync:info');
 const trace = debug('fl-sync:trace');
@@ -94,27 +96,26 @@ async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
  * Watches FL config
  */
 export async function watchFlSyncConfig() {
-  const data = await CONNECTION.get({
-    path: `${SERVICE_PATH}`,
-  })
-    .then((r) => r.data as JsonObject)
-    .catch(async (cError: any) => {
-      if (cError.status === 404) {
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}`,
-          data: {},
-          tree,
-        });
-        await CONNECTION.put({
-          path: `${SERVICE_PATH}/businesses`,
-          data: {},
-          tree,
-        });
-        return {} as JsonObject;
-      }
-
-      throw cError as Error;
-    });
+  let data: JsonObject = {};
+  try {
+    const response = (await CONNECTION.get({
+      path: `${SERVICE_PATH}`,
+    })) as { data: JsonObject }
+    data = response.data ?? {};
+  } catch(cError: any) {
+    if (cError.status === 404) {
+      await CONNECTION.put({
+        path: `${SERVICE_PATH}`,
+        data: {},
+        tree,
+      });
+      await CONNECTION.put({
+        path: `${SERVICE_PATH}/businesses`,
+        data: {},
+        tree,
+      });
+    } else throw cError as Error;
+  };
   if (
     typeof data === 'object' &&
     !Array.isArray(data) &&
@@ -169,17 +170,6 @@ export async function handleItem(type: string, item: FlObject, oada?: OADAClient
       error(`FL BID undefined for this [${type}] item with _id [${item._id}].`);
       return true;
     }
-
-    // REMOVE THIS LATER >>>>>>>>>>>>>>>>>>>>>>>>>
-    /*
-    if (_.has(item, 'shareSource.type.name') && item.shareSource.type.name === "Certificate of Insurance") {
-      console.log("Continuing on COI document", item._id, bid)
-    } else {
-      console.log("Skipping non COI document", item._id, bid)
-      return true;
-    }
-    */
-    // REMOVE THIS LATER <<<<<<<<<<<<<<<<<<<<<<<<<
 
     const path = `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`;
     try {
@@ -348,25 +338,6 @@ export async function pollFl(lastPoll: Moment, end: Moment) {
           data: {} as unknown as Body,
           tree,
         });
-        /*
-          //TODO: REPLACE ALL OF THIS WITH A TREE PUT
-          await CONNECTION.head({
-            path: `${SERVICE_PATH}/businesses/${i.business._id}/${type}`,
-          }).catch(async err => {
-            if (err.status !== 404) throw err;
-            let _id = await CONNECTION.post({
-              path: `/resources`,
-              contentType: tree?.bookmarks?.services?.[SERVICE_NAME]?.businesses?.['*']?._type,
-            }).then(r => r?.headers?.['content-location']?.replace(/^\//, ''))
-
-            await CONNECTION.put({
-              path: `${SERVICE_PATH}/businesses/${i.business._id}`,
-              data: {
-                [type]: { _id, _rev: 0 },
-              },
-              tree,
-            })
-          })*/
       }
     },
   });
@@ -511,12 +482,14 @@ export async function initialize({
   master = false,
   service = false,
   watchConfig = false,
+  incidents = false,
 }: {
   polling?: boolean;
   target?: boolean;
   master?: boolean;
   service?: boolean;
   watchConfig?: boolean;
+  incidents?: boolean;
 }) {
   try {
     info(
@@ -539,6 +512,9 @@ export async function initialize({
     // Run populateIncomplete first so that the change feeds coming in will have
     // the necessary in-memory items for them to continue being processed.
     // await populateIncomplete()
+    if (incidents === undefined || incidents) {
+      await startIncidents(CONNECTION);
+    }
 
     if (watchConfig === undefined || watchConfig) {
       await watchFlSyncConfig();
@@ -552,7 +528,7 @@ export async function initialize({
 
     // Some queued jobs may depend on the poller to complete, so start it now.
     if (polling === undefined || polling) {
-      await poll.poll({
+      await poll({
         //@ts-ignore
         connection: CONNECTION,
         basePath: SERVICE_PATH,
@@ -565,7 +541,7 @@ export async function initialize({
             method: 'head',
             url: `${FL_DOMAIN}/businesses`,
             headers: { Authorization: FL_TOKEN },
-          }).then((r) => r.headers.date)) as unknown as () => Promise<string>,
+          }).then((r) => r.headers.date)) as unknown as () => Promise<string>
       });
       info('Started fl-sync poller.');
     }
@@ -588,6 +564,7 @@ export async function initialize({
         config.get('timeouts.mirrorWatch'),
         handleAssessmentJob
       );
+      /*
       svc.addReport(
         'fl-sync-report',
         CONNECTION,
@@ -599,22 +576,23 @@ export async function initialize({
             from: 'noreply@trellis.one',
             to: {
               name: 'Sam Noel',
-              email: 'sn@centricity.us'
+              email: REPORT_EMAIL,
             },
-            replyTo: { email: 'sn@centricity.us' },
+            replyTo: { email: REPORT_EMAIL },
             subject: `Trellis Automation Report - ${date}`,
             text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
             attachments: [
               {
                 filename: `TrellisAutomationReport-${date}`,
                 type: 'text/csv',
-                content: ''
-              }
-            ]
-          }
+                content: '',
+              },
+            ],
+          },
         },
         'document-mirrored'
       )
+      */
 
       // Start the jobs watching service
       const serviceP = svc.start();
@@ -669,6 +647,7 @@ if (esMain(import.meta)) {
     master: true,
     target: true,
     service: true,
+    incidents: true,
   });
 } else {
   info('Just importing fl-sync');
