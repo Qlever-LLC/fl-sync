@@ -104,10 +104,18 @@ const config = convict({
       env: 'REPORT_INTERVAL',
       arg: 'reportInterval',
     },
+    reportEmail: {
+      doc: 'Email address to send reports to',
+      format: String,
+      default: null,
+      env: 'REPORT_EMAIL',
+      arg: 'reportEmail',
+    },
   },
   foodlogiq: {
     'interval': {
       doc: 'polling interval',
+      format: Number,
       default: 30,
       env: 'INTERVAL',
       arg: 'interval',
@@ -197,30 +205,41 @@ const config = convict({
       env: 'FL_FORCE_WRITE',
     },
   },
-  'incidents-sql': {
+  incidents: {
+    interval: {
+      doc: 'polling interval',
+      format: Number,
+      default: 600_000,
+      env: 'INCIDENTS_INTERVAL',
+      arg: 'incidentsInterval',
+    },
     server: {
       doc: 'Server name',
       format: String,
       default: 'localhost',
       env: 'INCIDENTS_SERVER',
+      arg: 'incidentsServer',
     },
     database: {
       doc: 'Database name',
       format: String,
       default: null,
       env: 'INCIDENTS_DB',
+      arg: 'incidentsDb',
     },
     user: {
       doc: 'User name',
       format: String,
       default: null,
       env: 'INCIDENTS_USER',
+      arg: 'incidentsUser',
     },
     password: {
       doc: 'Password',
       format: String,
       default: 'pass',
       env: 'INCIDENTS_PASSWORD',
+      arg: 'incidentsPassword',
     },
     port: {
       doc: 'Port',
