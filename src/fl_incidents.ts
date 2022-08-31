@@ -297,6 +297,7 @@ async function syncToSql(csvData: any) {
     },
   };
 
+  console.log(sqlConfig);
   //@ts-ignore
   await sql.connect(sqlConfig);
 
