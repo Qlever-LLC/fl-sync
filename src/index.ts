@@ -20,7 +20,7 @@ import config from './config.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import axios, { AxiosRequestConfig } from 'axios';
+import { default as axios, AxiosRequestConfig } from 'axios';
 import moment, { Moment } from 'moment';
 import Bluebird from 'bluebird';
 import { Service } from '@oada/jobs';
@@ -29,7 +29,6 @@ import debug from 'debug';
 import esMain from 'es-main';
 
 import { Change, JsonObject, OADAClient, connect } from '@oada/client';
-import type { Body } from '@oada/client/lib/client';
 import { ListWatch } from '@oada/list-lib';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import { poll } from '@oada/poll';
@@ -66,6 +65,8 @@ const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
 const REPORT_EMAIL = config.get('trellis.reportEmail');
+const LOCAL = config.get('local');
+const services = config.get('services');
 
 const info = debug('fl-sync:info');
 const trace = debug('fl-sync:trace');
@@ -84,7 +85,7 @@ async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
   for await (const change of changes) {
     try {
       if (_.has(change.body, 'autoapprove-assessments')) {
-        setAutoApprove(Boolean(change.body['autoapprove-assessments']));
+        setAutoApprove(Boolean(change.body!['autoapprove-assessments']));
       }
     } catch (cError: unknown) {
       error({ error: cError }, 'mirror watchCallback error');
@@ -144,7 +145,6 @@ async function watchTargetJobs() {
     conn: CONNECTION,
     resume: true,
     onAddItem: getLookup,
-    // @ts-expect-error
     onChangeItem: onTargetChange,
   });
   process.on('beforeExit', async () => {
@@ -203,7 +203,7 @@ export async function handleItem(type: string, item: FlObject, oada?: OADAClient
       // this falls within was changed to .each for the time-being
       await (CONNECTION || oada).put({
         path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
-        data: { 'food-logiq-mirror': item } as unknown as Body,
+        data: { 'food-logiq-mirror': item } as any,
         tree,
       });
       info(
@@ -335,7 +335,7 @@ export async function pollFl(lastPoll: Moment, end: Moment) {
       ] as const) {
         await CONNECTION.put({
           path: `${SERVICE_PATH}/businesses/${index.business._id}/${type}`,
-          data: {} as unknown as Body,
+          data: {} as any,
           tree,
         });
       }
@@ -417,22 +417,10 @@ async function fetchAndSync({
           }
 
           if (sync) {
-            /*
-          Let resp = await CONNECTION.post({
-            path: `/resources`,
-            contentType: tree?.bookmarks?.services?.[SERVICE_NAME]?.businesses?.['*']?._type,
-            data: { 'food-logiq-mirror': item } as unknown as Body
-          });
-          */
             await CONNECTION.put({
               path,
-              data: { 'food-logiq-mirror': item } as unknown as Body,
+              data: { 'food-logiq-mirror': item } as any,
               tree,
-              /*
-            Data: {
-              "_id": resp?.headers?.['content-location']?.replace(/^\//, ''),
-              "_rev": 0
-            }*/
             });
           }
         }
@@ -480,20 +468,20 @@ export async function initialize({
   polling = false,
   target = false,
   master = false,
-  service = false,
+  mirrorWatch = false,
   watchConfig = false,
   incidents = false,
 }: {
   polling?: boolean;
   target?: boolean;
   master?: boolean;
-  service?: boolean;
+  mirrorWatch?: boolean;
   watchConfig?: boolean;
   incidents?: boolean;
 }) {
   try {
     info(
-      `<<<<<<<<<       Initializing fl-sync service. [v1.2.16]       >>>>>>>>>>`
+      `<<<<<<<<<       Initializing fl-sync service. [v1.2.23]       >>>>>>>>>>`
     );
     TOKEN = await getToken();
     // Connect to oada
@@ -511,7 +499,6 @@ export async function initialize({
 
     // Run populateIncomplete first so that the change feeds coming in will have
     // the necessary in-memory items for them to continue being processed.
-    // await populateIncomplete()
     if (incidents === undefined || incidents) {
       await startIncidents(CONNECTION);
     }
@@ -547,7 +534,7 @@ export async function initialize({
     }
 
     // Create the service
-    if (service === undefined || service) {
+    if (mirrorWatch === undefined || mirrorWatch) {
       const svc = new Service({
         name: SERVICE_NAME,
         oada: CONNECTION,
@@ -583,7 +570,7 @@ export async function initialize({
             text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
             attachments: [
               {
-                filename: `TrellisAutomationReport-${date}`,
+                filename: `TrellisAutomationReport-${date}.csv`,
                 type: 'text/csv',
                 content: '',
               },
@@ -615,16 +602,6 @@ export async function initialize({
       info('Started target jobs handler.');
     }
 
-    /*    Await reports.interval({
-      connection: CONNECTION,
-      basePath: SERVICE_PATH,
-      interval: 3600*24*1000,
-      reportFunc: genReport,
-      interval: INTERVAL_MS,
-      name: 'fl-sync',
-    });
-    */
-    //    setInterval(handleIncomplete, HANDLE_INCOMPLETE_INTERVAL);
     info('Initialize complete. Service running...');
   } catch (cError: unknown) {
     error(cError);
@@ -641,14 +618,7 @@ process.on('uncaughtExceptionMonitor', (cError: unknown) => {
 
 if (esMain(import.meta)) {
   info('Starting up the service. Calling initialize');
-  await initialize({
-    polling: true,
-    watchConfig: true,
-    master: true,
-    target: true,
-    service: true,
-    incidents: true,
-  });
+  await initialize(services)
 } else {
   info('Just importing fl-sync');
 }

@@ -24,11 +24,9 @@ import type { Change, JsonObject, OADAClient } from '@oada/client';
 import type { Job, WorkerFunction } from '@oada/jobs';
 import { JobError, postUpdate } from '@oada/jobs';
 import { Change as ListChange, ListWatch } from '@oada/list-lib';
-import type { AxiosRequestConfig } from 'axios';
-import type { Body } from '@oada/client/lib/client';
+import { default as axios, AxiosRequestConfig } from 'axios';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import _ from 'lodash';
-import axios from 'axios';
 import debug from 'debug';
 import jszip from 'jszip';
 import ksuid from 'ksuid';
@@ -72,7 +70,7 @@ const assessmentToFlId = new Map<
 const targetErrors = {
   'target-multiple-docs-combined': {
     patterns: [/this is a multi-.* file/i],
-    reject: true,
+    reject: false,
     jobError: 'target-multiple-docs-combined',
   },
   'target-validation': {
@@ -107,7 +105,7 @@ if (SERVICE_NAME && mirrorTree?.bookmarks?.services?.['fl-sync']) {
 
 let CONNECTION: OADAClient;
 // Let flList = ['documents', 'products', 'locations', 'assessments'];
-const noMultiFile = new Set(['Certificate of Insurance']);
+const noMultiFile = new Set();
 /* Const multiFileOkay = [
   'Rate Sheet',
   'Specified Risk Materials (SRM) Audit',
@@ -446,10 +444,12 @@ async function handleTargetStatus(
 async function handleTargetUpdates(change: Change, key: string) {
   for await (const value of Object.values(change?.body?.updates ?? {})) {
     let details;
+    //@ts-ignore
     switch (value.status) {
       case 'started':
         break;
       case 'error':
+        //@ts-ignore
         details = value.information;
         break;
       case 'identified':
@@ -753,7 +753,7 @@ export async function postTpDocument({
             },
           },
         },
-      } as Body,
+      } as any,
       contentType: 'application/json',
     });
     trace(
@@ -1236,7 +1236,7 @@ async function handleScrapedResult(targetJobKey: string) {
       path: `/${jobId}`,
       data: {
         validation: validationResult,
-      } as unknown as Body,
+      } as any,
     });
 
     info('!!!!!!!', validationResult)
@@ -1344,7 +1344,7 @@ async function handleScrapedResult(targetJobKey: string) {
         assessmentToFlId.set(assessmentId, { jobId, mirrorid, flId });
         await CONNECTION.put({
           path: `/resources/${jobKey}/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-          data: { id: assessmentId } as Body,
+          data: { id: assessmentId } as any,
         });
       }
     } else {
@@ -1428,6 +1428,7 @@ export async function startJobCreator(oada: OADAClient) {
         throw cError as Error;
       });
 
+    info(`Path: ${SERVICE_PATH}/businesses`)
     // eslint-disable-next-line no-new
     new ListWatch({
       conn: CONNECTION,
@@ -1608,8 +1609,6 @@ async function queueAssessmentJob(change: ListChange, path: string) {
           );
         }
 
-        console.log('ENDING JOB NOW');
-
         endJob(
           documentJob,
           new JobError(message, 'associated-assessment-rejected')
@@ -1644,7 +1643,7 @@ async function postJob(indexConfig: JobConfig, flStatus: string) {
       service: SERVICE_NAME,
       config: indexConfig,
       "foodlogiq-result-status": flStatus
-    } as unknown as Body,
+    } as any,
   });
   const jobkey = headers['content-location']!.replace(/^\/resources\//, '');
 
@@ -1675,6 +1674,7 @@ async function postJob(indexConfig: JobConfig, flStatus: string) {
 }
 
 async function queueDocumentJob(data: ListChange, path: string) {
+  console.log('doc')
   try {
     // 1. Gather fl indexing, mirror data, and trellis master id
     info(`queueDocumentJob processing mirror change`);
@@ -1879,6 +1879,13 @@ export interface FlObject {
 interface Link {
   _id: string;
   _rev?: number | string;
+}
+
+interface JobUpdate {
+  time: string;
+  information?: string;
+  error?: string;
+  status: string;
 }
 
 type Links = Record<string, Link>;
