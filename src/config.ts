@@ -25,6 +25,13 @@ convict.addFormat(url);
 convict.addFormat(duration);
 
 const config = convict({
+  local: {
+    doc: 'Whether this is running locally or a deployment',
+    format: Boolean,
+    default: true,
+    env: 'LOCAL',
+    arg: 'local',
+  },
   service: {
     path: {
       doc: 'Base path for the fl-sync service',
@@ -37,6 +44,50 @@ const config = convict({
       default: 'fl-sync',
       env: 'SERVICE_NAME',
       arg: 'service_name',
+    },
+  },
+  services: {
+    mirrorWatch: {
+      doc: 'Enable/disable mirrorWatch subservice',
+      format: Boolean,
+      default: true,
+      env: 'MIRROR_WATCH_SERVICE',
+      arg: 'mirrorWatchService',
+    },
+    master: {
+      doc: 'Enable/disable master data watcher subservice',
+      format: Boolean,
+      default: true,
+      env: 'MASTER_SERVICE',
+      arg: 'masterService',
+    },
+    incidents: {
+      doc: 'Enable/disable incidents MSSQL syncer subservice',
+      format: Boolean,
+      default: true,
+      env: 'INCIDENTS_SERVICE',
+      arg: 'incidentsService',
+    },
+    polling: {
+      doc: 'Enable/disable Food LogiQ polling subservice',
+      format: Boolean,
+      default: true,
+      env: 'POLLING_SERVICE',
+      arg: 'pollingService',
+    },
+    target: {
+      doc: 'Enable/disable target-watching subservice',
+      format: Boolean,
+      default: true,
+      env: 'TARGET_SERVICE',
+      arg: 'targetServiceService',
+    },
+    watchConfig: {
+      doc: 'Enable/disable subservice watching the configuration',
+      format: Boolean,
+      default: true,
+      env: 'WATCH_CONFIG_SERVICE',
+      arg: 'watchConfigService',
     },
   },
   delay: {

@@ -21,7 +21,7 @@ import fs from 'node:fs';
 
 import { OADAClient, connect } from '@oada/client';
 import _ from 'lodash';
-import axios from 'axios';
+import { default as axios } from 'axios';
 // @ts-expect-error
 import csvjson from 'csvjson';
 import debug from 'debug';

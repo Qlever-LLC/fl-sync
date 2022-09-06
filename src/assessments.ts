@@ -20,7 +20,7 @@ import config from './config.js';
 import type { FlAssessment } from './mirrorWatch.js';
 import type { JsonObject } from '@oada/client';
 import _ from 'lodash';
-import axios from 'axios';
+import { default as axios } from 'axios';
 import debug from 'debug';
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');
@@ -143,7 +143,7 @@ export async function spawnAssessment(
       : PATH_SPAWN_ASSESSMENT,
     headers: { Authorization: FL_TOKEN },
     data: _assessment_template,
-  }).catch((cError) => {
+  }).catch((cError: unknown) => {
     error('--> Error when spawning an assessment.');
     error(cError);
     throw cError as Error;

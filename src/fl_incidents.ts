@@ -43,7 +43,7 @@ const CO_ID = config.get('foodlogiq.community.owner.id');
 // const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
-const { database, server, user, password, port, interval } = config.get('incidents');
+const { database, server, user, password, port, interval, table } = config.get('incidents');
 
 const info = debug('fl-sync:info');
 const trace = debug('fl-sync:trace');
@@ -199,7 +199,11 @@ export async function fetchIncidentsCsv({
 
   const response = await axios(request);
 
-  const csvData = csvjson.toObject(response.data, { delimiter: ",", quote: '"' });
+  const arr = csvjson.toArray(response.data, { delimiter: ",", quote: '"' });
+  const headers = arr.shift();
+  const csvData = arr.map((values: string[]) => headers.reduce((a: any, b: string, i: number) => ({ ...a, [b]: a[b] || values[i]}), {}));
+  // Had a bug on the first item
+  //const csvData = csvjson.toObject(response.data, { delimiter: ",", quote: '"' });
 
   if (csvData.length > 0) {
     await syncToSql(csvData);
@@ -268,18 +272,60 @@ async function ensureTable() {
 
 }
 
+
+let alters = {
+  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)': 'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?',
+  'incidentDate (Incident Date/Delivery Date)': 'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
+  'incidentDate (Delivery Date/Incident Date)': 'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
+  'Community': 'community (Community/Business Name)',
+  'location (My Location Name/Location Name)': 'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)',
+  'location (Location Name/My Location Name)': 'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)',
+  'location (Location GLN/My Location GLN)': 'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)',
+  'location (My Location GLN/Location GLN)': 'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)',
+  'Affected Quantity': 'quantityAffected (Quantity Affected/Affected Quantity)',
+  'IMAGE OF SUPPLIER CASE LABEL': 'images (Photo of Case Labels & Product/Photos or Documents)',
+  'product (Material GTIN/Product GTIN)': 'product (Product GTIN/Product Name GTIN/Material GTIN)',
+  'product (Product GTIN/Material GTIN)': 'product (Product GTIN/Product Name GTIN/Material GTIN)',
+}
+
+let noDelete = [
+  'Affected Quantity',
+  'IMAGE OF SUPPLIER CASE LABEL'
+];
+
+let notNull = {
+  'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)': '0',
+  'product (Product GTIN/Product Name GTIN/Material GTIN)': '0',
+  'Invoice Photo': 'false',
+  'DC Pick Label': 'false',
+  'Invoice Image': 'false',
+  'Purchase Order Image': 'false',
+  'Supplier Label': 'false',
+  'Incident Photo(s)': 'false',
+  'SUPPLIER INVESTIGATION REPORT(S)': 'false',
+  'SUPPLIER CREDIT DOCUMENTATION': 'false',
+};
+
+
 function prepRow(row: any) {
   if (row['CREDIT NOTE']) {
     delete row['CREDIT NOTE'];
   }
 
-  let oldKey = `Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)`;
-  if (row[oldKey]) {
-    let newKey =
-      `Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?`;
-    row[newKey] = row[oldKey];
-    delete row[oldKey];
+  for (const oldKey in alters) {
+  console.log(oldKey, oldKey in row);
+    if (oldKey in row) {
+      //@ts-ignore
+      row[alters[oldKey]] = row[alters[oldKey]] || row[oldKey];
+      //@ts-ignore
+      console.log('ALTER', row[oldKey], 'to', alters[oldKey])
+      if (!noDelete.includes(oldKey)) {
+        console.log('Deleting key', oldKey)
+        delete row[oldKey];
+      }
+    }
   }
+
   return row;
 }
 
@@ -297,50 +343,112 @@ async function syncToSql(csvData: any) {
     },
   };
 
-  console.log(sqlConfig);
   //@ts-ignore
   await sql.connect(sqlConfig);
 
   for await (const row of csvData) {
-    console.log('Row in', row);
+  //  ColumnKeys = ColumnKeys.slice(0, 110);
+    console.log({row})
     let newRow = prepRow(row);
-    newRow = Object.fromEntries(
-      ColumnKeys.map((key) => {
-        if (!isNaN(Number(newRow[key]))) {
-          return [key, Number(newRow[key])];
-        } else if (newRow[key] === 'true' || newRow[key] === 'false') {
-          return [key, newRow[key] === 'true'];
-        } else if (!newRow[key]) {
-          return [key, 'NULL'];
+
+    newRow = Object.fromEntries(ColumnKeys.map((key) => {
+      console.log('in', {key}, newRow[key]);
+
+      if (newRow[key] === "") {
+        return [key, null]
+
+      } else if (!isNaN(Number(newRow[key]))) {
+        console.log('1');
+        return [key, Number(newRow[key])];
+
+      } else if (newRow[key] && newRow[key].toLowerCase() === 'no') {
+        console.log('1.1');
+	return [key, false];
+
+      } else if (newRow[key] && newRow[key].toLowerCase() === 'yes') {
+        console.log('1.2');
+	return [key, true];
+
+      } else if (newRow[key] === 'true' || newRow[key] === 'false') {
+        console.log('2');
+        return [key, newRow[key] === 'true'];
+
+      } else if (moment(newRow[key], 'MMM DD, YYYY', true).isValid()) {
+        console.log('3');
+	console.log(key, newRow[key], (moment(newRow[key], 'MMM DD, YYYY', true).isValid()))
+	return [key, moment(newRow[key], 'MMM DD, YYYY').toDate()];
+
+
+      } else if (moment(newRow[key], 'MMMM D, YYYY hh:mma', true).isValid()) {
+        console.log('4');
+	return [key, moment(newRow[key], 'MMMM D, YYYY hh:mma',true).toDate()];
+
+      } else if (moment(newRow[key], 'YYYY-MM-DD', true).isValid()) {
+        console.log('4.5');
+	return [key, moment(newRow[key], 'YYYY-MM-DD', true).toDate()];
+
+      } else if (!newRow[key]) {
+        console.log('5');
+	return [key, null];
+
+//@ts-ignore
+      } else if (newRow[key] === 'N/A' && moreStuff[key].type === 'BIT') {
+        console.log('5.5');
+	return [key, null];
+
+      } else {
+        console.log('6');
+        return [key, `'${newRow[key]}'`]
+      }
+    }));
+
+    for (const item of columns) {
+      console.log('not null', item.name, newRow[item.name])
+      if (!newRow[item.name]) {
+        console.log('Ensuring not null:', item.name)
+	if (item.type === 'BIT') {
+	  newRow[item.name] = false;
         } else {
-          return [key, `'${newRow[key]}'`]
+	  newRow[item.name] = '0';
         }
-      })
-    );
+        console.log('Ensured', newRow[item.name])
+      }
+    }
 
-    const selectString = ColumnKeys.map(
-      (key) => `${newRow[key]} AS ${key}`).join(',');
+
+
+    console.log({newRow});
+
+    let req = new sql.Request();
+
+    const selectString = ColumnKeys.map((key, i) => {
+      req.input(`val${i}`, newRow[key]);
+      return `@val${i} AS [${key}]`
+    }).join(',');
+
     const setString = ColumnKeys.map(
-      (key) => `SET ${key} = ${newRow[key]}`).join(' AND ');
-    const targetString = ColumnKeys.map(
-      (key) => `target.${key} = source.${key}`).join(',');
+    (key, i) => `[${key}] = @val${i}`).join(',');
 
-    const cols = ColumnKeys.join(',');
-    const values = ColumnKeys.map((key) => newRow[key]).join(',');
+    //const targetString = ColumnKeys.map(
+    //      (key) => `target.[Incident ID] = source.[${key}]`).join(' AND ');
+
+    const cols = ColumnKeys.map(key => `[${key}]`).join(',');
+
+    const values = ColumnKeys.map((_, i) => `@val${i}`).join(',');
 
     const query = `MERGE
-      INTO incidents.incidents WITH (HOLDLOCK) AS target
+    INTO ${table} WITH (HOLDLOCK) AS target
       USING (SELECT ${selectString}) AS source
       (${cols})
-      ON (${targetString})
+      ON (target.[Incident ID] = source.[Incident ID])
       WHEN MATCHED
         THEN UPDATE
           SET ${setString}
       WHEN NOT MATCHED
         THEN INSERT (${cols})
-        VALUES (${values})`
-    trace(`SQL Query: %s`, query);
-    await sql.query(query);
+        VALUES (${values});`
+    console.log(`SQL Query: %s`, query);
+    await req.query(query)
   }
 }
 
@@ -996,7 +1104,7 @@ const TableColumns = `
   [What information is still needed?] VARCHAR(max) NULL,
   [Additional Documentation] BIT NOT NULL,`;
 
-const ColumnKeys = [
+let ColumnKeys = [
   'Id',
   'Incident ID',
   'Incident Type',
@@ -1256,3 +1364,267 @@ const ColumnKeys = [
   'What information is still needed?',
   'Additional Documentation'
 ];
+
+let columns = [
+  {name: 'Id', type: 'VARCHAR(100)', isNull: "NOT NULL" },
+  {name: 'Incident ID', type: 'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'Incident Type', type: 'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'Current Status', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'Last Updated At', type:'DATE', isNull: "NOT NULL" },
+  {name: 'Last Updated By', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'Reported By', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'Created At', type:'DATE', isNull: "NOT NULL" },
+  {name: 'Created From', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'community (Community/Business Name)', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'incidentDate (Incident Date/Date of Delivery/Delivery Date)', type:'DATE', isNull: "NOT NULL" },
+  {name: 'Customer Complaint Related', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Still have the product?', type:'BIT', isNull: "NOT NULL" },
+  {name: 'quantityAffected (Quantity Affected/Affected Quantity)', type:'DECIMAL(38, 2)', isNull: "NOT NULL" },
+  {name: 'IMAGE OF SUPPLIER CASE LABEL', type:'BIT', isNull: "NOT NULL" },
+  {name: 'IMAGE(s) OF ISSUE AND QUANTITY AFFECTED', type:'BIT', isNull: "NOT NULL" },
+  {name: 'IMAGE OF DISTRIBUTOR LABEL, if applicable', type:'BIT', isNull: "NOT NULL" },
+  {name: 'PPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Supplier Investigation Report', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Corrective Action Report', type:'BIT', isNull: "NOT NULL" },
+  {name: 'images (Photo of Case Labels & Product/Photos or Documents)', type:'BIT', isNull: "NOT NULL" },
+  {name: 'product (Product GTIN/Product Name GTIN/Material GTIN)', type:'VARCHAR(max)', isNull: "NOT NULL" },
+  {name: 'Invoice Photo', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Incident Photo(s)', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Supplier Label', type:'BIT', isNull: "NOT NULL" },
+  {name: 'DC Pick Label', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Purchase Order Image', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Invoice Image', type:'BIT', isNull: "NOT NULL" },
+  {name: 'SUPPLIER INVESTIGATION REPORT(S)', type:'BIT', isNull: "NOT NULL" },
+  {name: 'CORRECTIVE ACTION REPORTS', type:'BIT', isNull: "NOT NULL" },
+  {name: 'SUPPLIER CREDIT DOCUMENTATION', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Supplier Documentation / Photos', type:'BIT', isNull: "NOT NULL" },
+  {name: 'DC Documentation / Photos', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Corrective Action Document', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Credit note to supplier', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Credit Note', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Produce Supplier + Distributor INVESTIGATION / CORRECTIVE ACTION(S) REPORT', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Produce Supplier + Distributor Investigation/Corrective Action Report', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Supporting Details', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Supporting Document', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Photos or Documents', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Supplier Photos or Documents', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Distribution Center Photos or Documents', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Load/Pallet Issue', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Trailer Number Photo', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Document/BOL', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Case Label', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Other as Necessary', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Evidence of Correction', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Evidence to Reassign', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Combo/Case Label', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Quality Defect', type:'BIT', isNull: "NOT NULL" },
+  {name: 'RCA Documentation', type:'BIT', isNull: "NOT NULL" },
+  {name: 'Additional Documentation', type:'BIT', isNull: "NOT NULL" },
+];
+
+let moreStuff = {
+ 'Due Date': {name: 'Due Date', type:'DATETIME', isNull: 'NULL'},
+ 'Issued By': {name: 'Issued By', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Title': {name: 'Title', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)': {name: 'distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Country': {name: 'Country', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Type of Product Issue': {name: 'Type of Product Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Type of Foreign Material': {name: 'Type of Foreign Material', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Type of Distribution Issue': {name: 'Type of Distribution Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Type of Quality Issue': {name: 'Type of Quality Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Description': {name: 'Description', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Do you still have the foreign object?': {name: 'Do you still have the foreign object?', type:'BIT', isNull: 'NULL'},
+ 'Requesting Credit?': {name: 'Requesting Credit?', type:'BIT', isNull: 'NULL'},
+ 'Invoice Date / Delivery Date': {name: 'Invoice Date / Delivery Date', type:'DATE', isNull: 'NULL'},
+ 'Invoice Number': {name: 'Invoice Number', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Affected Quantity': {name: 'Affected Quantity', type:'DECIMAL(38, 2)', isNull: 'NULL'},
+ 'Unit of Measurement': {name: 'Unit of Measurement', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'productType (Product Name/Product Type/QA Product Category/Material Category)': {name: 'productType (Product Name/Product Type/QA Product Category/Material Category)', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Item Name': {name: 'Item Name', type:'BIT', isNull: 'NULL'},
+ 'sourceMembership (Manufacturer of Product or Distributor Name/Supplier/Product Supplier/Supplier Name)': {name: 'sourceMembership (Manufacturer of Product or Distributor Name/Supplier/Product Supplier/Supplier Name)', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Supplier Status': {name: 'Supplier Status', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Pack Date / Grind Date / Manufacture Date': {name: 'Pack Date / Grind Date / Manufacture Date', type:'BIT', isNull: 'NULL'},
+ 'Run Time': {name: 'Run Time', type:'BIT', isNull: 'NULL'},
+ 'Use By Date / Freeze By Date / Expiration Date': {name: 'Use By Date / Freeze By Date / Expiration Date', type:'DATE', isNull: 'NULL'},
+ 'Production Date / Julian Code / Case Code / Batch Code / Lot Code': {name: 'Production Date / Julian Code / Case Code / Batch Code / Lot Code', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Hold or Isolate': {name: 'Hold or Isolate', type:'BIT', isNull: 'NULL'},
+ 'Confirm Credit Request': {name: 'Confirm Credit Request', type:'BIT', isNull: 'NULL'},
+ 'Review and Action Comments': {name: 'Review and Action Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'supplierLocation (Supplier Location/Supplier Manufacturing Location)': {name: 'supplierLocation (Supplier Location/Supplier Manufacturing Location)', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Supplier Corrective Action': {name: 'Supplier Corrective Action', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Supplier Credit Decision': {name: 'Supplier Credit Decision', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Supplier Credit Approval - Rep Name': {name: 'Supplier Credit Approval - Rep Name', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Quantity Credit Amount (Not Dollars)': {name: 'Quantity Credit Amount (Not Dollars)', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'Quantity Unit of Measure': {name: 'Quantity Unit of Measure', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Comment': {name: 'Comment', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Credit Decision': {name: 'Credit Decision', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Credit Number': {name: 'Credit Number', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Credit Amount': {name: 'Credit Amount', type:'DECIMAL(38, 2)', isNull: 'NULL'},
+ 'Currency': {name: 'Currency', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Hold Product': {name: 'Hold Product', type:'BIT', isNull: 'NULL'},
+ 'Hold Comments': {name: 'Hold Comments', type:'BIT', isNull: 'NULL'},
+ 'Isolate Product': {name: 'Isolate Product', type:'BIT', isNull: 'NULL'},
+ 'Isolate Comments': {name: 'Isolate Comments', type:'BIT', isNull: 'NULL'},
+ 'CM Team Notified': {name: 'CM Team Notified', type:'BIT', isNull: 'NULL'},
+ 'CM Team Activated': {name: 'CM Team Activated', type:'BIT', isNull: 'NULL'},
+ 'Reason for Request': {name: 'Reason for Request', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Please describe further': {name: 'Please describe further', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Enter Product Name': {name: 'Enter Product Name', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Distributor Item Number': {name: 'Distributor Item Number', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Best By/Expiration Date': {name: 'Best By/Expiration Date', type:'DATE', isNull: 'NULL'},
+ 'Do you have enough usable product to last you until next delivery?': {name: 'Do you have enough usable product to last you until next delivery?', type:'BIT', isNull: 'NULL'},
+ 'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? ': {name: 'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? ', type:'BIT', isNull: 'NULL'},
+ 'Please describe why you are not emailing _supplychain@potbelly.com': {name: 'Please describe why you are not emailing _supplychain@potbelly.com', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Lot Code (enter N/A if this was a short)': {name: 'Lot Code (enter N/A if this was a short)', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'product (Product Name Name/Material Name/Product Name)': {name: 'product (Product Name Name/Material Name/Product Name)', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'product (Product Name LOT/Material LOT/Product LOT)': {name: 'product (Product Name LOT/Material LOT/Product LOT)', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reason for DC Denial': {name: 'Reason for DC Denial', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Credit Memo': {name: 'Credit Memo', type:'DECIMAL(38, 2)', isNull: 'NULL'},
+ 'Credit Amount Approved': {name: 'Credit Amount Approved', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'DC Comments': {name: 'DC Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reason for Supplier Denial': {name: 'Reason for Supplier Denial', type:'BIT', isNull: 'NULL'},
+ 'Supplier Comments': {name: 'Supplier Comments', type:'BIT', isNull: 'NULL'},
+ 'Comments': {name: 'Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Credit Decision by DC': {name: 'Credit Decision by DC', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Rejection Reason': {name: 'Rejection Reason', type:'BIT', isNull: 'NULL'},
+ 'Credit Type': {name: 'Credit Type', type:'BIT', isNull: 'NULL'},
+ 'Type of Delivery Incident': {name: 'Type of Delivery Incident', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Still have the product': {name: 'Still have the product', type:'BIT', isNull: 'NULL'},
+ 'Do you still have the foreign object?  If so, please hold for further investigation.': {name: 'Do you still have the foreign object?  If so, please hold for further investigation.', type:'BIT', isNull: 'NULL'},
+ 'Date Product Was Received': {name: 'Date Product Was Received', type:'BIT', isNull: 'NULL'},
+ 'Pack Date / Manufacture Date': {name: 'Pack Date / Manufacture Date', type:'BIT', isNull: 'NULL'},
+ 'Shelf Life Issue': {name: 'Shelf Life Issue', type:'BIT', isNull: 'NULL'},
+ 'Supplier Initial Assessment': {name: 'Supplier Initial Assessment', type:'BIT', isNull: 'NULL'},
+ 'Supplier Credit Number': {name: 'Supplier Credit Number', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'Distribution Company': {name: 'Distribution Company', type:'BIT', isNull: 'NULL'},
+ 'Incident Acknowledged?': {name: 'Incident Acknowledged?', type:'BIT', isNull: 'NULL'},
+ 'Brand': {name: 'Brand', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Restaurant Contact Name': {name: 'Restaurant Contact Name', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Restaurant Phone Number': {name: 'Restaurant Phone Number', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Date Product Received': {name: 'Date Product Received', type:'DATE', isNull: 'NULL'},
+ 'DC Invoice Number': {name: 'DC Invoice Number', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'HAVI Product ID': {name: 'HAVI Product ID', type:'BIT', isNull: 'NULL'},
+ 'Manufacturer Code': {name: 'Manufacturer Code', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'DC Product Code': {name: 'DC Product Code', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'Best By/Use By Date': {name: 'Best By/Use By Date', type:'DATE', isNull: 'NULL'},
+ 'Complaint Type': {name: 'Complaint Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Complaint Subtype - Foreign Object': {name: 'Complaint Subtype - Foreign Object', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Complaint Subtype - Low Piece Count': {name: 'Complaint Subtype - Low Piece Count', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Complaint Subtype - Size and Weight': {name: 'Complaint Subtype - Size and Weight', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Complaint Subtype - Temperature Abuse': {name: 'Complaint Subtype - Temperature Abuse', type:'BIT', isNull: 'NULL'},
+ 'Complaint Subtype - Packaging': {name: 'Complaint Subtype - Packaging', type:'BIT', isNull: 'NULL'},
+ 'Complaint Subtype - Shelf Life': {name: 'Complaint Subtype - Shelf Life', type:'BIT', isNull: 'NULL'},
+ 'Complaint Subtype - Product Performance': {name: 'Complaint Subtype - Product Performance', type:'BIT', isNull: 'NULL'},
+ 'Complaint Subtype - Appearance': {name: 'Complaint Subtype - Appearance', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Complaint Subtype - Fresh Produce': {name: 'Complaint Subtype - Fresh Produce', type:'BIT', isNull: 'NULL'},
+ 'Complaint Details': {name: 'Complaint Details', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Quantity Affected': {name: 'Quantity Affected', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Additional Comments': {name: 'Additional Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Fresh Produce DC Credit Decision': {name: 'Fresh Produce DC Credit Decision', type:'BIT', isNull: 'NULL'},
+ 'Fresh Produce DC Comments': {name: 'Fresh Produce DC Comments', type:'BIT', isNull: 'NULL'},
+ 'Feedback for Supplier': {name: 'Feedback for Supplier', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Supplier Additional Comments': {name: 'Supplier Additional Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reason For Denial': {name: 'Reason For Denial', type:'BIT', isNull: 'NULL'},
+ 'DC Credit Decision': {name: 'DC Credit Decision', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'DC Additional Comments': {name: 'DC Additional Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'DC Reason For Denial': {name: 'DC Reason For Denial', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'DC Corrective Action': {name: 'DC Corrective Action', type:'BIT', isNull: 'NULL'},
+ 'Corrective Action - Distributor Revised': {name: 'Corrective Action - Distributor Revised', type:'BIT', isNull: 'NULL'},
+ 'Produce Supplier + Distributor Credit Decision': {name: 'Produce Supplier + Distributor Credit Decision', type:'BIT', isNull: 'NULL'},
+ 'Quantity Credit Amount (Not currency)': {name: 'Quantity Credit Amount (Not currency)', type:'BIT', isNull: 'NULL'},
+ 'Produce Supplier + Distributor Corrective Action': {name: 'Produce Supplier + Distributor Corrective Action', type:'BIT', isNull: 'NULL'},
+ 'Failure Group': {name: 'Failure Group', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Failure Type': {name: 'Failure Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Severity': {name: 'Severity', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Additional Vendor Batch/Lots': {name: 'Additional Vendor Batch/Lots', type:'BIT', isNull: 'NULL'},
+ 'Quantity': {name: 'Quantity', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'Unit of Measure': {name: 'Unit of Measure', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'PO Number': {name: 'PO Number', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'Inbound Freight Carrier': {name: 'Inbound Freight Carrier', type:'BIT', isNull: 'NULL'},
+ 'Initial Disposition': {name: 'Initial Disposition', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Downtime Caused (when applicable)': {name: 'Downtime Caused (when applicable)', type:'BIT', isNull: 'NULL'},
+ 'Potential for Claim': {name: 'Potential for Claim', type:'BIT', isNull: 'NULL'},
+ 'Root Cause': {name: 'Root Cause', type:'BIT', isNull: 'NULL'},
+ 'Action Plan': {name: 'Action Plan', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Responsible Party': {name: 'Responsible Party', type:'BIT', isNull: 'NULL'},
+ 'Additional Notes': {name: 'Additional Notes', type:'BIT', isNull: 'NULL'},
+ 'Final Disposition': {name: 'Final Disposition', type:'BIT', isNull: 'NULL'},
+ 'Resolution Details': {name: 'Resolution Details', type:'BIT', isNull: 'NULL'},
+ 'Best By Date': {name: 'Best By Date', type:'DATE', isNull: 'NULL'},
+ 'Incident Issue': {name: 'Incident Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Appearance Issue': {name: 'Appearance Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Fatty / Excess Fat Issue': {name: 'Fatty / Excess Fat Issue', type:'BIT', isNull: 'NULL'},
+ 'Foreign Object Issue': {name: 'Foreign Object Issue', type:'BIT', isNull: 'NULL'},
+ 'Fresh Produce Issue': {name: 'Fresh Produce Issue', type:'BIT', isNull: 'NULL'},
+ 'Fresh Produce Credit Decision': {name: 'Fresh Produce Credit Decision', type:'BIT', isNull: 'NULL'},
+ 'Low Piece Count': {name: 'Low Piece Count', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Off Odor / Flavor Issue': {name: 'Off Odor / Flavor Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Packaging Issue': {name: 'Packaging Issue', type:'BIT', isNull: 'NULL'},
+ 'Product Performance Issue': {name: 'Product Performance Issue', type:'BIT', isNull: 'NULL'},
+ 'Size and Weight Issue': {name: 'Size and Weight Issue', type:'BIT', isNull: 'NULL'},
+ 'Temperature Abuse Issue': {name: 'Temperature Abuse Issue', type:'BIT', isNull: 'NULL'},
+ 'Wrong Product Issue': {name: 'Wrong Product Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Incident Details': {name: 'Incident Details', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Supplier Credit Denial Reason': {name: 'Supplier Credit Denial Reason', type:'BIT', isNull: 'NULL'},
+ 'Dine Brands Quality Assurance Feedback': {name: 'Dine Brands Quality Assurance Feedback', type:'BIT', isNull: 'NULL'},
+ 'Distribution Center Credit Decision': {name: 'Distribution Center Credit Decision', type:'BIT', isNull: 'NULL'},
+ 'Distribution Center Credit Denial Reason': {name: 'Distribution Center Credit Denial Reason', type:'BIT', isNull: 'NULL'},
+ 'Distribution Center Additional Comments': {name: 'Distribution Center Additional Comments', type:'BIT', isNull: 'NULL'},
+ 'PO# / STO#': {name: 'PO# / STO#', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'Does your SAP plant number begin with a 2?': {name: 'Does your SAP plant number begin with a 2?', type:'BIT', isNull: 'NULL'},
+ 'Batch Code': {name: 'Batch Code', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Inbound Issue': {name: 'Inbound Issue', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Inbound Issue Details/Comments': {name: 'Inbound Issue Details/Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Quantity Involved': {name: 'Quantity Involved', type:'DECIMAL(38, 0)', isNull: 'NULL'},
+ 'Labor Hours to Correct': {name: 'Labor Hours to Correct', type:'DECIMAL(38, 1)', isNull: 'NULL'},
+ 'Incident Investigator Comments': {name: 'Incident Investigator Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Please provide root cause analysis': {name: 'Please provide root cause analysis', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Root Cause Analysis Resolution': {name: 'Root Cause Analysis Resolution', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'What is the root cause?': {name: 'What is the root cause?', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'What are the corrections you have made?': {name: 'What are the corrections you have made?', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'What are the preventive measures you have taken?': {name: 'What are the preventive measures you have taken?', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'CAPA Resolution': {name: 'CAPA Resolution', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Triage Manager Comments': {name: 'Triage Manager Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Incident Investigator Review Comments': {name: 'Incident Investigator Review Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reporter Review Comments': {name: 'Reporter Review Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reason for incorrect information decision': {name: 'Reason for incorrect information decision', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Please confirm that you received the notification from "info@foodlogiq.com"': {name: 'Please confirm that you received the notification from "info@foodlogiq.com"', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reporter Name': {name: 'Reporter Name', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reporter Phone': {name: 'Reporter Phone', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Internal Supplier': {name: 'Internal Supplier', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Est No': {name: 'Est No', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Defect Group': {name: 'Defect Group', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Appearance/Color Defect Type': {name: 'Appearance/Color Defect Type', type:'BIT', isNull: 'NULL'},
+ 'Describe the Misc. Color': {name: 'Describe the Misc. Color', type:'BIT', isNull: 'NULL'},
+ 'Fat Defect Type': {name: 'Fat Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Foreign Materials Defect Type': {name: 'Foreign Materials Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Indigenous Materials Defect Type': {name: 'Indigenous Materials Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Labeling Defect Type': {name: 'Labeling Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Meat Quality Defect Type': {name: 'Meat Quality Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Off Condition Defect Type': {name: 'Off Condition Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Other Defect Type': {name: 'Other Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Package Condition Defect Type': {name: 'Package Condition Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Packaging Defect Type': {name: 'Packaging Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Product Age/Dating Defect Type': {name: 'Product Age/Dating Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Scheduling Defect Type': {name: 'Scheduling Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Shipping Defect Type': {name: 'Shipping Defect Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Temperature Defect Type': {name: 'Temperature Defect Type', type:'BIT', isNull: 'NULL'},
+ 'Transportation Defect Type': {name: 'Transportation Defect Type', type:'BIT', isNull: 'NULL'},
+ 'Weight/Fill Defect Type': {name: 'Weight/Fill Defect Type', type:'BIT', isNull: 'NULL'},
+ 'Problem Statement': {name: 'Problem Statement', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Do you acknowledge the incident as defined above?': {name: 'Do you acknowledge the incident as defined above?', type:'BIT', isNull: 'NULL'},
+ 'Will you begin investigation of the incident as described above?': {name: 'Will you begin investigation of the incident as described above?', type:'BIT', isNull: 'NULL'},
+ 'Please provide Root Cause': {name: 'Please provide Root Cause', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'What is the preventive measure?': {name: 'What is the preventive measure?', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'FSQA Manager Comments': {name: 'FSQA Manager Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Rejection Action': {name: 'Rejection Action', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reporter Comment': {name: 'Reporter Comment', type:'BIT', isNull: 'NULL'},
+ 'Buyer Final Review': {name: 'Buyer Final Review', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Buyer Final Review Comments': {name: 'Buyer Final Review Comments', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Reporter Final Review': {name: 'Reporter Final Review', type:'BIT', isNull: 'NULL'},
+ 'Protein Type': {name: 'Protein Type', type:'VARCHAR(max)', isNull: 'NULL'},
+ 'Do you have enough information to begin investigation of the incident as defined above?': {name: 'Do you have enough information to begin investigation of the incident as defined above?', type:'BIT', isNull: 'NULL'},
+ 'What information is still needed?': {name: 'What information is still needed?', type:'VARCHAR(max)', isNull: 'NULL'}
+};
