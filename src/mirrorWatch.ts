@@ -450,7 +450,7 @@ async function handleTargetUpdates(change: Change, key: string) {
         break;
       case 'error':
         //@ts-ignore
-        details = value.information;
+        //details = value.information;
         break;
       case 'identified':
       case 'success':
