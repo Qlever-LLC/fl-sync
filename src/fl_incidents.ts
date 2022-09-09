@@ -269,11 +269,14 @@ export async function startIncidents(connection: OADAClient) {
 
 async function ensureTable() {
   const tables = await sql.query`select * from INFORMATION_SCHEMA.TABLES`;
-  const matches = tables.recordset.filter((obj: any) => obj.TABLE_NAME === 'incidents')
-  const TableColumns = Object.values(allColumns).map(c => `[${c.name}] ${c.type} ${c.allowNull ? 'NULL' : 'NOT NULL'}`);
+  const matches = tables.recordset.filter(
+    (obj: any) => obj.TABLE_NAME === 'incidents')
+  const tableColumns = Object.values(allColumns)
+    .map((c) => `[${c.name}] ${c.type} ${c.allowNull ? 'NULL' : 'NOT NULL'}`)
+    .join(', ');
 
   if (matches.length === 0) {
-    const query = `create table incidents (${TableColumns} PRIMARY KEY (Id))`;
+    const query = `create table incidents (${tableColumns} PRIMARY KEY (Id))`;
     await sql.query(query)
     trace(`Creating incidents table: ${query}`);
   }
@@ -407,13 +410,15 @@ async function syncToSql(csvData: any) {
       if (newRow[key] === "" && allColumns[key]!.allowNull) {
         return [key, null]
       } else if (moment.isDate(newRow[key])) {
-	return [key, moment(newRow[key]).toDate()];
+        return [key, moment(newRow[key]).toDate()];
+
       } else if (!isNaN(Number(newRow[key]))) {
         if (Number(newRow[key]) > SQL_MAX_VALUE) {
           return [key, newRow[key].toString()];
 	} else {
 	  return [key, Number(newRow[key])];
         }
+
       } else if (newRow[key] && newRow[key].toLowerCase() === 'no') {
 	return [key, false];
 
@@ -422,11 +427,11 @@ async function syncToSql(csvData: any) {
 
       } else if (typeof newRow[key] === 'string' && (newRow[key].toLowerCase() === 'true' || newRow[key].toLowerCase() === 'false')) {
         return [key, newRow[key].toLowerCase() === 'true'];
+
       } else if (newRow[key] === true || newRow[key] === false) {
         return [key, newRow[key]];
 
       } else if (moment(newRow[key], 'MMM DD, YYYY', true).isValid()) {
-	console.log(key, newRow[key], (moment(newRow[key], 'MMM DD, YYYY', true).isValid()))
 	return [key, moment(newRow[key], 'MMM DD, YYYY').toDate()];
 
 
@@ -891,7 +896,7 @@ interface Column {
 //1) removed [CREDIT NOTE] as duplicate of [Credit Note]
 //2) trimmed the really long potbelly column name that was > 128 characters
 //3) set Id to VARCHAR(100)
-let allColumns: Record<string,Column> = {
+const allColumns: Record<string,Column> = {
   'Id': {name: 'Id', type: 'VARCHAR(100)', allowNull: false },
   'Incident ID': {name: 'Incident ID', type: 'VARCHAR(max)', allowNull: false },
   'Incident Type': {name: 'Incident Type', type: 'VARCHAR(max)', allowNull: false },
