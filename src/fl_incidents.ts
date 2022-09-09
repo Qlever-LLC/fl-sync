@@ -18,7 +18,7 @@
 // Load config first so it can set up env
 import config from './config.js';
 
-import axios, { AxiosRequestConfig } from 'axios';
+import { default as axios, AxiosRequestConfig } from 'axios';
 import _ from 'lodash';
 //@ts-ignore
 import csvjson from 'csvjson';
@@ -28,7 +28,6 @@ import { poll } from '@oada/poll';
 import sql from 'mssql';
 
 import type { JsonObject, OADAClient } from '@oada/client';
-import type { Body } from '@oada/client/lib/client';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 
 import tree from './tree.js';
@@ -85,7 +84,7 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
     if (sync) {
       await oada.put({
         path,
-        data: { 'food-logiq-mirror': item } as unknown as Body,
+        data: { 'food-logiq-mirror': item } as any,
         tree,
       });
       info(`Document synced to mirror: type:${type} _id:${item._id}`);
@@ -540,7 +539,7 @@ export async function handleIncidentType(
     if (sync) {
       await oada.put({
         path,
-        data: { 'food-logiq-mirror': item } as unknown as Body,
+        data: { 'food-logiq-mirror': item } as any,
         tree,
       });
       info(`Document synced to mirror: type:${item.name} _id:${item._id}`);
