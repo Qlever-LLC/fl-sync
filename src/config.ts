@@ -271,6 +271,13 @@ const config = convict({
       env: 'INCIDENTS_SERVER',
       arg: 'incidentsServer',
     },
+    table: {
+      doc: 'table name',
+      format: String,
+      default: null,
+      env: 'INCIDENTS_TABLE',
+      arg: 'incidentsTable',
+    },
     database: {
       doc: 'Database name',
       format: String,
