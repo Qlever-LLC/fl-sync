@@ -551,35 +551,14 @@ export async function initialize({
         config.get('timeouts.mirrorWatch'),
         handleAssessmentJob
       );
-      /*
       svc.addReport(
         'fl-sync-report',
         CONNECTION,
         reportConfig,
         `0 0 0 * * *`,
-        () => {
-          const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
-          return {
-            from: 'noreply@trellis.one',
-            to: {
-              name: 'Sam Noel',
-              email: REPORT_EMAIL,
-            },
-            replyTo: { email: REPORT_EMAIL },
-            subject: `Trellis Automation Report - ${date}`,
-            text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
-            attachments: [
-              {
-                filename: `TrellisAutomationReport-${date}.csv`,
-                type: 'text/csv',
-                content: '',
-              },
-            ],
-          },
-        },
+        prepEmail,
         'document-mirrored'
       )
-      */
 
       // Start the jobs watching service
       const serviceP = svc.start();
@@ -608,6 +587,27 @@ export async function initialize({
     throw cError;
   }
 } // Initialize
+
+function prepEmail() {
+  const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
+  return {
+    from: 'noreply@trellis.one',
+    to: {
+      name: 'Sam Noel',
+      email: REPORT_EMAIL,
+    },
+    replyTo: { email: REPORT_EMAIL },
+    subject: `Trellis Automation Report - ${date}`,
+    text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
+    attachments: [
+      {
+        filename: `TrellisAutomationReport-${date}.csv`,
+        type: 'text/csv',
+        content: '',
+      },
+    ],
+  };
+}
 
 process.on('uncaughtExceptionMonitor', (cError: unknown) => {
   error({ error: cError }, 'Uncaught exception');
