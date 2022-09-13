@@ -574,6 +574,7 @@ __metadata:
     "@types/bluebird": ^3.5.36
     "@types/convict": ^6.1.1
     "@types/convict-format-with-validator": ^6.0.2
+    "@types/cron": ^2
     "@types/debug": ^4.1.7
     "@types/json-pointer": ^1.0.31
     "@types/lodash": ^4.14.184
@@ -592,6 +593,7 @@ __metadata:
     convict: ^6.2.3
     convict-format-with-moment: ^6.2.0
     convict-format-with-validator: ^6.2.0
+    cron: ^2.1.0
     csvjson: ^5.1.0
     date-fns: ^2.29.2
     debug: ^4.3.4
@@ -726,6 +728,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/cron@npm:^2":
+  version: 2.0.0
+  resolution: "@types/cron@npm:2.0.0"
+  dependencies:
+    "@types/luxon": "*"
+    "@types/node": "*"
+  checksum: 392d2cfca51504140397533c30be8facd2196251074eb26ee09232a7e983144ff1d8364cd64922ed22d142686a4724934a70672fc8353b441fea729ac0ed0611
+  languageName: node
+  linkType: hard
+
 "@types/debug@npm:^4.1.7":
   version: 4.1.7
   resolution: "@types/debug@npm:4.1.7"
@@ -816,6 +828,13 @@ __metadata:
   version: 4.14.184
   resolution: "@types/lodash@npm:4.14.184"
   checksum: 6d9a4d67f7f9d0ec3fd21174f3dd3d00629dc1227eb469450eace53adbc1f7e2330699c28d0fe093e5f0fef0f0e763098be1f779268857213224af082b62be21
+  languageName: node
+  linkType: hard
+
+"@types/luxon@npm:*":
+  version: 3.0.1
+  resolution: "@types/luxon@npm:3.0.1"
+  checksum: a81444f9b474ea9b3063ab4cc68b917a2634e38b4e229f86c78c35023a32bf5e8d1044d7c229c011291662c976cb6c4cf109dc3d2077c571790a31779a554178
   languageName: node
   linkType: hard
 
