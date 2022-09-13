@@ -65,6 +65,7 @@ const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
 const REPORT_EMAIL = config.get('trellis.reportEmail');
+const REPORT_REPLYTO_EMAIL = config.get('trellis.reportReplyToEmail');
 const services = config.get('services');
 
 const info = debug('fl-sync:info');
@@ -595,7 +596,7 @@ function prepEmail() {
       name: 'Sam Noel',
       email: REPORT_EMAIL,
     },
-    replyTo: { email: REPORT_EMAIL },
+    replyTo: { email: REPORT_REPLYTO_EMAIL },
     subject: `Trellis Automation Report - ${date}`,
     text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
     attachments: [

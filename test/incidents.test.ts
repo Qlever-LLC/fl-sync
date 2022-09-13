@@ -1,6 +1,7 @@
 //import config from '../dist/config.js';
-import * as flInc from '../dist/fl_incidents.js';
+import * as flInc from '../dist/flIncidentsCsv.js';
 //import moment from 'moment';
+// @ts-ignore
 import test from 'ava';
 /*
 const FL_TOKEN = config.get('foodlogiq.token') || '';
@@ -15,14 +16,28 @@ if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
 }
 */
 
-test.before(async (t) => {
+test.before(async (t: any) => {
   t.timeout(60_000);
 });
 
-
-test('test csv stuff', async (t) => {
+test('test csv stuff', async (t: any) => {
   t.timeout(200_000);
-  const startTime = '2022-08-01';
-  const endTime = '2022-08-25';
+
+  let result = await flInc.ensureTable();
+  console.log(result);
+  t.truthy(result);
+})
+
+test.skip('test big initial load of csv data', async (t: any) => {
+  t.timeout(200_000);
+  const startTime = '2021-09-01';
+  const endTime = '2022-09-13';
+  await flInc.fetchIncidentsCsv({startTime, endTime})
+})
+
+test.skip('test short period of csv data', async (t: any) => {
+  t.timeout(200_000);
+  const startTime = '2022-09-01';
+  const endTime = '2022-09-13';
   await flInc.fetchIncidentsCsv({startTime, endTime})
 })

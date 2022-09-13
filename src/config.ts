@@ -162,6 +162,13 @@ const config = convict({
       env: 'REPORT_EMAIL',
       arg: 'reportEmail',
     },
+    reportReplyToEmail: {
+      doc: 'reply to email listed for the report',
+      format: String,
+      default: null,
+      env: 'REPORT_REPLYTO_EMAIL',
+      arg: 'reportReplyToEmail',
+    },
   },
   foodlogiq: {
     'interval': {
