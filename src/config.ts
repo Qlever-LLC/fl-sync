@@ -260,7 +260,7 @@ const config = convict({
     interval: {
       doc: 'polling interval',
       format: Number,
-      default: 600_000,
+      default: 28_800_000,
       env: 'INCIDENTS_INTERVAL',
       arg: 'incidentsInterval',
     },

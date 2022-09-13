@@ -65,7 +65,6 @@ const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
 const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
 const REPORT_EMAIL = config.get('trellis.reportEmail');
-const LOCAL = config.get('local');
 const services = config.get('services');
 
 const info = debug('fl-sync:info');

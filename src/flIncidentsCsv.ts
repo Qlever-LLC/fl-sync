@@ -20,13 +20,12 @@ import config from './config.js';
 
 import { AxiosRequestConfig, default as axios } from 'axios';
 import moment, { Moment } from 'moment';
-import debug from 'debug';
-import { poll } from '@oada/poll';
-import sql from 'mssql';
-import xlsx from 'xlsx';
-
 import type { OADAClient } from '@oada/client';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
+import debug from 'debug';
+import { poll } from '@oada/poll'
+import sql from 'mssql';
+import xlsx from 'xlsx';
 
 if (process.env.LOCAL) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -76,6 +75,20 @@ export async function fetchIncidentsCsv({
   if (pageIndex) {
     request.params = { pageIndex };
   }
+
+  const sqlConfig = {
+    server,
+    database,
+    user,
+    password,
+    port,
+    options: {
+      encrypt: true,
+      trustServerCertificate: true,
+    },
+  };
+  // @ts-ignore
+  await sql.connect(sqlConfig);
 
   const response = await axios(request);
 
@@ -139,23 +152,27 @@ export async function startIncidents(connection: OADAClient) {
       return r.headers.date;
     }) as unknown as () => Promise<string>,
   });
+
   info('Started fl-sync poller.');
 }
 
-async function ensureTable() {
+export async function ensureTable() {
   const tables = await sql.query`select * from INFORMATION_SCHEMA.TABLES`;
   const matches = tables.recordset.filter(
     (object: any) => object.TABLE_NAME === 'incidents'
   );
-  const tableColumns = Object.values(allColumns)
-    .map((c) => `[${c.name}] ${c.type} ${c.allowNull ? 'NULL' : 'NOT NULL'}`)
-    .join(', ');
 
   if (matches.length === 0) {
+    const tableColumns = Object.values(allColumns)
+      .map((c) => `[${c.name}] ${c.type} ${c.allowNull ? 'NULL' : 'NOT NULL'}`)
+      .join(', ');
     const query = `create table incidents (${tableColumns} PRIMARY KEY (Id))`;
-    await sql.query(query);
+    const response = await sql.query(query);
     trace(`Creating incidents table: ${query}`);
+    return response;
   }
+
+  return true;
 }
 
 const alters = {
@@ -321,20 +338,21 @@ async function syncToSql(csvData: any) {
       })
     );
 
-    for (const item of Object.values(allColumns)) {
-      let value = newRow[item.name];
-      if (value === undefined || value === null) {
-	if (item.type === 'BIT') {
-	  value = false;
-	} else if (item.type.includes('VARCHAR')) {
-	  value = '';
-	} else {
-	  value = '0';
-	}
+    let nonNulls = Object.values(allColumns).filter(col => (newRow[col.name] === null || newRow[col.name] === undefined) && !col.allowNull);
+    for (const { name, type } of nonNulls) {
+      if (type === 'BIT') {
+	newRow[name] = false;
+      } else if (type.includes('VARCHAR')) {
+        newRow[name] = '';
+      } else if (type.includes('DECIMAL')) {
+        newRow[name] = 0;
+      } else if (type === 'DATE') {
+        newRow[name] = newRow['Created At'];
+        console.log('value', newRow['Created At'])
       }
     }
 
-    info({newRow});
+    console.log('this', {newRow});
 
     let req = new sql.Request();
 
@@ -346,9 +364,6 @@ async function syncToSql(csvData: any) {
     const setString = columnKeys.map(
       (key, index) => `[${key}] = @val${index}`
     ).join(',');
-
-    //const targetString = columnKeys.map(
-    //      (key) => `target.[Incident ID] = source.[${key}]`).join(' AND ');
 
     const cols = columnKeys.map(key => `[${key}]`).join(',');
 
@@ -471,8 +486,8 @@ const allColumns: Record<string,Column> = {
     type: 'BIT',
     allowNull: false,
   },
-  'PPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT': {
-    name: 'PPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT',
+  'SUPPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT': {
+    name: 'SUPPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT',
     type: 'BIT',
     allowNull: false,
   },
@@ -1688,7 +1703,7 @@ type Row = {
   'IMAGE OF SUPPLIER CASE LABEL': boolean;
   'IMAGE(s) OF ISSUE AND QUANTITY AFFECTED': boolean;
   'IMAGE OF DISTRIBUTOR LABEL, if applicable': boolean;
-  'PPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT': boolean;
+  'SUPPLIER INVESTIGATION / CORRECTIVE ACTION(S) REPORT': boolean;
   'Supplier Investigation Report': boolean;
   'Corrective Action Report': boolean;
   'images (Photo of Case Labels & Product/Photos or Documents)': boolean;
