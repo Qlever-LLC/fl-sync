@@ -32,7 +32,7 @@ import { Change, JsonObject, OADAClient, connect } from '@oada/client';
 import { ListWatch } from '@oada/list-lib';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import { poll } from '@oada/poll';
-import { startIncidents } from './fl_incidents.js';
+import { startIncidents } from './flIncidentsCsv.js';
 
 import {
   FlObject,
