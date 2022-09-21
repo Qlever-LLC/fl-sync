@@ -20,12 +20,7 @@ import config from './config.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import type { Change, JsonObject, OADAClient } from '@oada/client';
-import type { Job, WorkerFunction } from '@oada/jobs';
-import { JobError, postUpdate } from '@oada/jobs';
-import { Change as ListChange, ListWatch } from '@oada/list-lib';
 import { default as axios, AxiosRequestConfig } from 'axios';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import _ from 'lodash';
 import debug from 'debug';
 import jszip from 'jszip';
@@ -33,6 +28,12 @@ import ksuid from 'ksuid';
 import md5 from 'md5';
 import oError from '@overleaf/o-error';
 import pointer from 'json-pointer';
+
+import type { Change, JsonObject, OADAClient } from '@oada/client';
+import type { Job, WorkerFunction } from '@oada/jobs';
+import { JobError, postUpdate } from '@oada/jobs';
+import { Change as ListChange, ListWatch } from '@oada/list-lib';
+import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 
 import { flToTrellis, fromOadaType } from './conversions.js';
 import { linkAssessmentToDocument, spawnAssessment } from './assessments.js';
@@ -42,8 +43,6 @@ import { getAutoApprove } from './index.js';
 import mirrorTree from './tree.mirrorWatch.js';
 import tree from './tree.js';
 import { validateResult } from './docTypeValidation.js';
-
-if (process.env.LOCAL) process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -491,8 +490,8 @@ async function approveFlDocument(documentId: string, jobId: string) {
 
   await CONNECTION.put({
     path: `/${jobId}`,
-    data: {"foodlogiq-result-status": "approved"}
-  })
+    data: { 'foodlogiq-result-status': 'approved' },
+  });
 } // ApproveFlDoc
 
 /**
@@ -522,7 +521,6 @@ export const handleAssessmentJob: WorkerFunction = async (
 
     if (!item || !isObj(item)) return {};
     if (!item._id || !assessmentToFlId.has(item._id)) {
-
       throw new Error(`assessmentToFlId does not exist for _id ${item._id}`);
     }
 
@@ -972,7 +970,7 @@ async function finishDocument(
 
     const jobObject = await CONNECTION.get({
       path: `/resources/${jobKey}`,
-    }).then(r => r.data as JsonObject)
+    }).then((r) => r.data as JsonObject);
 
     const targetJobs = jobObject['target-jobs'];
     let targetJob = mostRecentKsuid(Object.keys(targetJobs || {}));
@@ -982,7 +980,6 @@ async function finishDocument(
     } else {
       //throw new Error('Target job not found. Could not move result');
     }
-
 
     const { data } = (await CONNECTION.get({
       path: `/resources/${targetJob}`,
@@ -1239,7 +1236,7 @@ async function handleScrapedResult(targetJobKey: string) {
       } as any,
     });
 
-    info('!!!!!!!', validationResult)
+    info('!!!!!!!', validationResult);
 
     // 4a. Validation failed, fail and reject things.
     if (!validationResult || !validationResult.status) {
@@ -1256,7 +1253,7 @@ async function handleScrapedResult(targetJobKey: string) {
         )
       ) {
         //@ts-ignore
-        info('222222!!!!!!!', type, rejectable[type])
+        info('222222!!!!!!!', type, rejectable[type]);
         //@ts-ignore
         if (rejectable[type]) {
           await rejectFlDocument(flId, jobId, validationResult?.message);
@@ -1314,13 +1311,13 @@ async function handleScrapedResult(targetJobKey: string) {
             `Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`
           );
 
-//TODO:This is maybe a problem causing cyclical re-runs of assessments?
-//I think this was originally added because some very old assessments couldn't be modified
-//because they were in an approved/rejected state which cannot be changed. Reposting the assessment
-//to OADA just simulates that the assessment just showed up like that.
-//
-//This is now problematic because 422s are happening on some other assessments
-//and then getting re-dropped over and over
+          //TODO:This is maybe a problem causing cyclical re-runs of assessments?
+          //I think this was originally added because some very old assessments couldn't be modified
+          //because they were in an approved/rejected state which cannot be changed. Reposting the assessment
+          //to OADA just simulates that the assessment just showed up like that.
+          //
+          //This is now problematic because 422s are happening on some other assessments
+          //and then getting re-dropped over and over
           //
           await setTimeout(2000); // Simulate the re-mirroring of the assessment
           await CONNECTION.put({
@@ -1365,7 +1362,11 @@ async function handleScrapedResult(targetJobKey: string) {
 /**
  * rejects fl document
  */
-async function rejectFlDocument(documentId: string, jobId: string, message?: string) {
+async function rejectFlDocument(
+  documentId: string,
+  jobId: string,
+  message?: string
+) {
   info(`Rejecting FL document [${documentId}]. ${message}`);
   // Post message regarding error
   await axios({
@@ -1385,7 +1386,7 @@ async function rejectFlDocument(documentId: string, jobId: string, message?: str
     data: {},
   });
 
-  console.log('3')
+  console.log('3');
   // Reject to FL
   await axios({
     method: 'put',
@@ -1393,14 +1394,14 @@ async function rejectFlDocument(documentId: string, jobId: string, message?: str
     headers: { Authorization: FL_TOKEN },
     data: { status: 'Rejected' },
   });
-  console.log('4')
+  console.log('4');
   await CONNECTION.put({
     path: `/${jobId}`,
     data: {
-      "foodlogiq-result-status": "rejected"
-    }
-  })
-  console.log('done')
+      'foodlogiq-result-status': 'rejected',
+    },
+  });
+  console.log('done');
 } // RejectFlDoc
 
 export async function startJobCreator(oada: OADAClient) {
@@ -1428,8 +1429,8 @@ export async function startJobCreator(oada: OADAClient) {
         throw cError as Error;
       });
 
-    info(`Path: ${SERVICE_PATH}/businesses`)
-    // eslint-disable-next-line no-new
+    info(`Path: ${SERVICE_PATH}/businesses`);
+
     new ListWatch({
       conn: CONNECTION,
       itemsPath: `$.*.documents.*.food-logiq-mirror`,
@@ -1602,11 +1603,7 @@ async function queueAssessmentJob(change: ListChange, path: string) {
       // Reject the FL Document with a supplier message; Reject the document fl-sync job
       if (flSyncJobs.get(documentJob)['allow-rejection'] !== false) {
         if (reasons) {
-          await rejectFlDocument(
-            flDocumentId,
-            `${documentJob}`,
-            message,
-          );
+          await rejectFlDocument(flDocumentId, `${documentJob}`, message);
         }
 
         endJob(
@@ -1639,10 +1636,10 @@ async function postJob(indexConfig: JobConfig, flStatus: string) {
     path: '/resources',
     contentType: 'application/vnd.oada.job.1+json',
     data: {
-      type: 'document-mirrored',
-      service: SERVICE_NAME,
-      config: indexConfig,
-      "foodlogiq-result-status": flStatus
+      'type': 'document-mirrored',
+      'service': SERVICE_NAME,
+      'config': indexConfig,
+      'foodlogiq-result-status': flStatus,
     } as any,
   });
   const jobkey = headers['content-location']!.replace(/^\/resources\//, '');
@@ -1674,7 +1671,7 @@ async function postJob(indexConfig: JobConfig, flStatus: string) {
 }
 
 async function queueDocumentJob(data: ListChange, path: string) {
-  console.log('doc')
+  console.log('doc');
   try {
     // 1. Gather fl indexing, mirror data, and trellis master id
     info(`queueDocumentJob processing mirror change`);
@@ -1725,24 +1722,24 @@ async function queueDocumentJob(data: ListChange, path: string) {
       }). Status: ${status}. id: ${item._id}`
     );
 
-    let jobConf : JobConfig = {
+    let jobConf: JobConfig = {
       status,
       'fl-sync-type': 'document',
       'type': documentType,
       'key': key!,
-      date: item.versionInfo.createdAt,
+      'date': item.versionInfo.createdAt,
       bid,
       '_rev': data._rev as number,
       masterid,
       'mirrorid': fullData._id as string,
       'bname': item.shareSource.sourceBusiness.name,
       'name': item.name,
-      'link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${item._id}`
-    }
+      'link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${item._id}`,
+    };
 
     if (status === 'awaiting-review') {
       // 2a. Create new job and link into jobs list and fl doc meta
-      await postJob(jobConf, "awaiting-review");
+      await postJob(jobConf, 'awaiting-review');
     } else if (approvalUser === FL_TRELLIS_USER) {
       info(`Document ${item._id} approvalUser was Trellis. Calling finishDoc`);
       // 2b. Approved or rejected by us. Finish up the automation
@@ -1757,8 +1754,8 @@ async function queueDocumentJob(data: ListChange, path: string) {
         info(
           `Document ${item._id} bid ${bid} approved by user ${approvalUser}. Ushering document through...`
         );
-        jobConf["allow-rejection"] = false;
-        await postJob(jobConf, "approved");
+        jobConf['allow-rejection'] = false;
+        await postJob(jobConf, 'approved');
       } else {
         // If (status === "rejected" || status === "incomplete") {
         info(

@@ -17,7 +17,8 @@
 
 import config from '../config.js';
 
-import { JsonObject, connect } from '@oada/client';
+import type { JsonObject } from '@oada/client';
+import { connect } from '@oada/client';
 import sql from 'mssql';
 process.env.NODE_TLS_REJECT_AUTHORIZED = '0';
 
@@ -40,7 +41,7 @@ if (production) {
   sqlConfig = {
     server: 'localhost',
     database: 'LFDynamic',
-    user: "trellisprod",
+    user: 'trellisprod',
     port: 3008,
     options: {
       encrypt: true,
@@ -52,7 +53,7 @@ if (production) {
 
 async function main() {
   try {
-    console.log({sqlConfig})
+    console.log({ sqlConfig });
     await sql.connect(sqlConfig);
 
     /*

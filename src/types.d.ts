@@ -16,7 +16,7 @@
  */
 
 declare module 'convict-format-with-moment' {
-  import { Format } from 'convict';
+  import type { Format } from 'convict';
   export const duration: Format;
 }
 

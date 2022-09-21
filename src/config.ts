@@ -25,13 +25,6 @@ convict.addFormat(url);
 convict.addFormat(duration);
 
 const config = convict({
-  local: {
-    doc: 'Whether this is running locally or a deployment',
-    format: Boolean,
-    default: true,
-    env: 'LOCAL',
-    arg: 'local',
-  },
   service: {
     path: {
       doc: 'Base path for the fl-sync service',
@@ -313,7 +306,7 @@ const config = convict({
       env: 'INCIDENTS_PORT',
     },
   },
-  'slack': {
+  slack: {
     posturl: {
       format: 'url',
       // Use a real slack webhook URL

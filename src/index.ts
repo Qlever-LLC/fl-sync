@@ -20,35 +20,34 @@ import config from './config.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import { default as axios, AxiosRequestConfig } from 'axios';
-import moment, { Moment } from 'moment';
+import type { AxiosRequestConfig } from 'axios';
 import Bluebird from 'bluebird';
+import type { Moment } from 'moment';
 import { Service } from '@oada/jobs';
 import _ from 'lodash';
+import { default as axios } from 'axios';
 import debug from 'debug';
 import esMain from 'es-main';
+import moment from 'moment';
 
-import { Change, JsonObject, OADAClient, connect } from '@oada/client';
+import type { Change, JsonObject, OADAClient } from '@oada/client';
 import { ListWatch } from '@oada/list-lib';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
+import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
-import { startIncidents } from './flIncidentsCsv.js';
 
 import {
-  FlObject,
   getLookup,
   handleAssessmentJob,
   handleDocumentJob,
   onTargetChange,
   startJobCreator,
 } from './mirrorWatch.js';
+import type { FlObject } from './mirrorWatch.js';
 import { reportConfig } from './reportConfig.js';
+import { startIncidents } from './flIncidentsCsv.js';
 import tree from './tree.js';
 import { watchTrellisFLBusinesses } from './masterData.js';
-
-if (process.env.LOCAL) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -101,9 +100,10 @@ export async function watchFlSyncConfig() {
   try {
     const response = (await CONNECTION.get({
       path: `${SERVICE_PATH}`,
-    })) as { data: JsonObject }
+    })) as { data: JsonObject };
     data = response.data ?? {};
-  } catch(cError: any) {
+  } catch (cError: unknown) {
+    // @ts-expect-error stupid errors
     if (cError.status === 404) {
       await CONNECTION.put({
         path: `${SERVICE_PATH}`,
@@ -116,7 +116,8 @@ export async function watchFlSyncConfig() {
         tree,
       });
     } else throw cError as Error;
-  };
+  }
+
   if (
     typeof data === 'object' &&
     !Array.isArray(data) &&
@@ -125,6 +126,7 @@ export async function watchFlSyncConfig() {
     setAutoApprove(Boolean(data['autoapprove-assessments']));
   }
 
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const { changes } = await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
     type: 'single',
@@ -152,7 +154,11 @@ async function watchTargetJobs() {
   });
 } // WatchTargetJobs
 
-export async function handleItem(type: string, item: FlObject, oada?: OADAClient) {
+export async function handleItem(
+  type: string,
+  item: FlObject,
+  oada?: OADAClient
+) {
   let bid;
   try {
     let sync;
@@ -203,7 +209,7 @@ export async function handleItem(type: string, item: FlObject, oada?: OADAClient
       // this falls within was changed to .each for the time-being
       await (CONNECTION || oada).put({
         path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
-        data: { 'food-logiq-mirror': item } as any,
+        data: { 'food-logiq-mirror': item } as unknown as JsonObject,
         tree,
       });
       info(
@@ -282,7 +288,7 @@ export async function fetchCommunityResources({
       startTime,
       endTime,
       pageIndex: pageIndex + 1,
-      oada
+      oada,
     });
   }
 }
@@ -335,7 +341,7 @@ export async function pollFl(lastPoll: Moment, end: Moment) {
       ] as const) {
         await CONNECTION.put({
           path: `${SERVICE_PATH}/businesses/${index.business._id}/${type}`,
-          data: {} as any,
+          data: {},
           tree,
         });
       }
@@ -360,9 +366,11 @@ async function fetchAndSync({
   forEach,
 }: {
   from: string;
-  to: string | Function;
+  to:
+    | string
+    | ((input: { business: { _id: string } }) => string | PromiseLike<string>);
   pageIndex?: number;
-  forEach: Function;
+  forEach: (input: { business: { _id: string } }) => PromiseLike<void>;
 }) {
   pageIndex = pageIndex ?? 0;
   try {
@@ -384,14 +392,21 @@ async function fetchAndSync({
         let sync;
         if (to) {
           const path =
-            typeof to === 'function' ? await to(item) : `${to}/${item._id}`;
+            typeof to === 'function'
+              ? await to(item as any)
+              : `${to}/${item._id}`;
           try {
-            const resp = await CONNECTION.get({ path }).then(
-              (r) => r.data as JsonObject
-            );
+            const { data: resp } = await CONNECTION.get({ path });
+            if (
+              typeof resp !== 'object' ||
+              Buffer.isBuffer(resp) ||
+              Array.isArray(resp)
+            ) {
+              throw new TypeError('Not an object');
+            }
 
             // Check for changes to the resources
-            const equals = _.isEqual(resp['food-logiq-mirror'], item);
+            const equals = _.isEqual(resp?.['food-logiq-mirror'], item);
             if (equals)
               info(
                 `No resource difference in FL item [${item._id}]. Skipping...`
@@ -419,13 +434,13 @@ async function fetchAndSync({
           if (sync) {
             await CONNECTION.put({
               path,
-              data: { 'food-logiq-mirror': item } as any,
+              data: { 'food-logiq-mirror': item } as unknown as JsonObject,
               tree,
             });
           }
         }
 
-        if (forEach) await forEach(item);
+        if (forEach) await forEach(item as any);
       },
       { concurrency: 20 }
     );
@@ -516,19 +531,22 @@ export async function initialize({
     // Some queued jobs may depend on the poller to complete, so start it now.
     if (polling === undefined || polling) {
       await poll({
-        //@ts-ignore
         connection: CONNECTION,
         basePath: SERVICE_PATH,
         pollOnStartup: true,
         pollFunc: pollFl,
         interval: INTERVAL_MS,
         name: 'food-logiq-poll',
-        getTime: (async () =>
-          axios({
+        async getTime() {
+          const {
+            headers: { date },
+          } = await axios({
             method: 'head',
             url: `${FL_DOMAIN}/businesses`,
             headers: { Authorization: FL_TOKEN },
-          }).then((r) => r.headers.date)) as unknown as () => Promise<string>
+          });
+          return date!;
+        },
       });
       info('Started fl-sync poller.');
     }
@@ -558,7 +576,7 @@ export async function initialize({
         `0 0 0 * * *`,
         prepEmail,
         'document-mirrored'
-      )
+      );
 
       // Start the jobs watching service
       const serviceP = svc.start();
@@ -618,7 +636,7 @@ process.on('uncaughtExceptionMonitor', (cError: unknown) => {
 
 if (esMain(import.meta)) {
   info('Starting up the service. Calling initialize');
-  await initialize(services)
+  await initialize(services);
 } else {
   info('Just importing fl-sync');
 }
