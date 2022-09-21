@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable no-secrets/no-secrets */
 /* eslint-disable sonarjs/no-duplicate-string */
 
 import type { OADAClient } from '@oada/client';

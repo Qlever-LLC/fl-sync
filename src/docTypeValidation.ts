@@ -17,7 +17,8 @@
 
 /* eslint-disable unicorn/prevent-abbreviations */
 
-import moment, { Moment } from 'moment';
+import type { Moment } from 'moment';
+import moment from 'moment';
 import type { FlObject } from './mirrorWatch.js';
 import debug from 'debug';
 import { fromOadaType } from './conversions.js';
