@@ -75,20 +75,6 @@ export async function fetchIncidentsCsv({
     request.params = { pageIndex };
   }
 
-  const sqlConfig = {
-    server,
-    database,
-    user,
-    password,
-    port,
-    options: {
-      encrypt: true,
-      trustServerCertificate: true,
-    },
-  };
-  // @ts-expect-error
-  await sql.connect(sqlConfig);
-
   const response = await axios(request);
 
   const wb = xlsx.read(response.data, { type: 'string', cellDates: true });
