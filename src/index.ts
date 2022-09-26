@@ -441,7 +441,7 @@ async function fetchAndSync({
           }
         }
 
-        if (forEach) await forEach(item as any);
+        await forEach?.(item as any);
       },
       { concurrency: 20 }
     );
@@ -586,12 +586,14 @@ export async function initialize({
       const p = startJobCreator(CONNECTION);
 
       // Catch errors
-      // eslint-disable-next-line github/no-then
-      await Promise.all([serviceP, p]).catch((cError) => {
+      try {
+        await Promise.all([serviceP, p]);
+      } catch (cError: unknown) {
         error(cError);
         // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
         process.exit(1);
-      });
+      }
+
       info('Started fl-sync mirror handler.');
     }
 
