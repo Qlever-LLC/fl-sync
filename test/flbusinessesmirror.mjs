@@ -14,36 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import _ from 'lodash';
-import chai from 'chai';
-import chaiAsPromised from 'chai-as-promised';
-import oada from '@oada/client';
-import Promise from 'bluebird';
-import moment from 'moment';
-import debug from 'debug';
-import axios from 'axios';
-import SHA256 from 'js-sha256';
 
 // Configuration details
 import config from '../config.default.js';
-import business_tree from './business_tree.js';
+
+import { setTimeout } from 'node:timers/promises';
+
+import SHA256 from 'js-sha256';
+import _ from 'lodash';
+import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
+
+import oada from '@oada/client';
+
 import business_template from './business_template.js';
+import business_tree from './business_tree.js';
+
 const { sha256 } = SHA256;
 
-const trace = debug('fl-sync:trace');
-const info = debug('fl-sync:info');
-const warn = debug('fl-sync:warn');
-const error = debug('fl-sync:error');
-
 let con = false;
-const day = moment().format('YYYY-MM-DD');
 chai.use(chaiAsPromised);
 const { expect } = chai;
 
-const { FL_TOKEN, FL_DOMAIN, DOMAIN, TRELLIS_TOKEN, TEST_DOC_ID } = config;
-const SF_FL_CID = config.sf_buyer.community_id;
-const SF_FL_BID = config.sf_buyer.business_id;
-const DOC_ID = TEST_DOC_ID;
+const { DOMAIN, TRELLIS_TOKEN } = config;
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
@@ -106,9 +99,11 @@ const FL_MIRROR = 'food-logiq-mirror';
  */
 async function cleanUp(OADA) {
   try {
-    Promise.map(PATHS, async (path) => {
-      await OADA.delete({ path });
-    });
+    await Promise.all(
+      PATHS.map(async (path) => {
+        await OADA.delete({ path });
+      })
+    );
   } catch (error) {
     console.log(
       '--> error when deleting a business or trading partner:',
@@ -127,31 +122,29 @@ async function putData(OADA) {
   _data.masterid = '';
   _data.sapid = '';
 
-  await OADA.put({
-    path: _path,
-    tree: business_tree,
-    data: _data,
-  })
-    .then((result) => {
-      console.log('--> business created', _path);
-    })
-    .catch((error) => {
-      console.log('--> error when creating a business', error);
+  try {
+    await OADA.put({
+      path: _path,
+      tree: business_tree,
+      data: _data,
     });
+    console.log('--> business created', _path);
+  } catch (error) {
+    console.log('--> error when creating a business', error);
+  }
 
   _data.masterid = business_hash;
   _data.sapid = business_hash;
-  await OADA.put({
-    path: BS_DEMO_MASTERID,
-    tree: business_tree,
-    data: _data,
-  })
-    .then((result) => {
-      console.log('--> business created', BS_DEMO_MASTERID);
-    })
-    .catch((error) => {
-      console.log('--> error when creating a business', error);
+  try {
+    await OADA.put({
+      path: BS_DEMO_MASTERID,
+      tree: business_tree,
+      data: _data,
     });
+    console.log('--> business created', BS_DEMO_MASTERID);
+  } catch (error) {
+    console.log('--> error when creating a business', error);
+  }
 } // PutData
 
 /**
@@ -187,17 +180,16 @@ async function flBusinessesMirror(OADA) {
       data.email = _business.data[FL_MIRROR].business.email;
       data.phone = _business.data[FL_MIRROR].business.phone;
       console.log('--> data', data);
-      const _tp = await OADA.put({
-        path: _path_tp_id,
-        tree: trellisfw_tp_tree,
-        data,
-      })
-        .then((result) => {
-          console.log('--> business mirrored. ');
-        })
-        .catch((error) => {
-          console.log('--> error when mirroring', error);
+      try {
+        await OADA.put({
+          path: _path_tp_id,
+          tree: trellisfw_tp_tree,
+          data,
         });
+        console.log('--> business mirrored. ');
+      } catch (error) {
+        console.log('--> error when mirroring', error);
+      }
     } // If
   } // For
 } // FlBusinessesMirror
@@ -209,7 +201,7 @@ describe('testing mirror - creating a business.', () => {
     // Await cleanUp(con);
     await putData(con);
     // Await flBusinessesMirror(con);
-    await Promise.delay(2000);
+    await setTimeout(2000);
   });
 
   it('should exist a business in fl-sync/businesses ', async () => {

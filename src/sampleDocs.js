@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/prevent-abbreviations */
-/* eslint-disable unicorn/no-null */
+/* eslint-disable unicorn/prevent-abbreviations, unicorn/no-null, sonarjs/no-duplicate-string */
 
 import attach from './attach.js';
 

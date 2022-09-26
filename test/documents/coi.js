@@ -14,7 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/* eslint-disable unicorn/no-null */
+
 import config from '../../dist/config.js';
+
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
@@ -198,6 +202,4 @@ export const coi = {
   ],
 };
 
-export default {
-  coi,
-};
+export default coi;

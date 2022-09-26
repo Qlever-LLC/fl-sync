@@ -36,7 +36,6 @@ import dummy from './dummyData.js';
 import flSync from './index.js';
 
 chai.use(chaiAsPromised);
-const { expect } = chai;
 
 const TOKEN = config.get('trellis.token');
 const { LOCAL } = process.env;
