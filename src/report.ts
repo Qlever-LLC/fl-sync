@@ -19,7 +19,8 @@ import config from './config.js';
 
 import fs from 'node:fs';
 
-import { OADAClient, connect } from '@oada/client';
+import type { OADAClient } from '@oada/client';
+import { connect } from '@oada/client';
 import _ from 'lodash';
 import { default as axios } from 'axios';
 // @ts-expect-error

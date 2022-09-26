@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//import type { Tree } from '@oada/list-lib';
+// import type { Tree } from '@oada/list-lib';
 
 const docsTree = {
   _type: 'application/vnd.oada.bookmarks.1+json',

@@ -19,12 +19,14 @@ import config from './config.masterdata.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import type { JsonObject, OADAClient } from '@oada/client';
-import { ListWatch } from '@oada/list-lib';
 import SHA256 from 'js-sha256';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import _ from 'lodash';
 import debug from 'debug';
+
+import type { JsonObject, OADAClient } from '@oada/client';
+import { ListWatch } from '@oada/list-lib';
+import type Resource from '@oada/types/oada/resource.js';
+import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 
 import tree from './tree.masterData.js';
 
@@ -47,7 +49,7 @@ const info = debug('fl-sync:master-data:info');
 const error = debug('fl-sync:master-data:error');
 const trace = debug('fl-sync:master-data:trace');
 
-enum SOURCE_TYPE {
+enum SourceType {
   Vendor = 'vendor',
   Business = 'business',
 }
@@ -75,7 +77,11 @@ export async function watchTrellisFLBusinesses(conn: OADAClient) {
  * @param {*} item
  * @param {*} key
  */
-export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
+export async function addTP2Trellis(
+  item: Resource,
+  key: string,
+  conn?: OADAClient
+) {
   info(
     `New FL business detected [${item._id}]. Mapping to trellis trading partner.`
   );
@@ -91,7 +97,7 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
       let expandData: ExpandIndexRecord = _.cloneDeep(expandIndexTemplate);
       // FIXME: need to include a flag when search engine is present
 
-      trace(`Business item: ${item}`);
+      trace(item, 'Business item');
       const _path = item._id;
       if (typeof item[FL_MIRROR] === 'undefined') {
         info(`Getting ${_path} with delay.`);
@@ -147,15 +153,14 @@ export async function addTP2Trellis(item: any, key: string, conn?: OADAClient) {
       // 1. make the resource
       info('--> mirroring the business into trading partners.');
       trace('DATA', data);
-      const resId = await CONNECTION.post({
+      const {
+        headers: { 'content-location': location },
+      } = await CONNECTION.post({
         path: `/resources`,
-        data,
+        data: data as unknown as JsonObject,
         contentType: 'application/vnd.oada.service.1+json',
-      }).then((r: any) => {
-        if (r && r.headers && r.headers['content-location']) {
-          return r.headers['content-location'].replace(/^\//, '');
-        }
       });
+      const resId = location!.replace(/^\//, '');
       const _datum = { _id: resId, _rev: 0 };
       try {
         await CONNECTION.put({
@@ -287,13 +292,16 @@ function assignDataExpandIndex(data: TradingPartner, item: any) {
  * from the received FL business
  * @param expandIndexRecord expand index content
  */
-async function updateExpandIndex(expandIndexRecord: JsonObject, key: string) {
+async function updateExpandIndex(
+  expandIndexRecord: ExpandIndexRecord,
+  key: string
+) {
   try {
     // Expand index
     await CONNECTION.put({
       path: `${TL_TP_EI}`,
       data: {
-        [key]: expandIndexRecord,
+        [key]: expandIndexRecord as unknown as JsonObject,
       },
       tree,
     });
@@ -356,7 +364,7 @@ function setConnection(conn: OADAClient) {
   CONNECTION = conn;
 }
 
-type TradingPartner = {
+interface TradingPartner {
   id: string;
   sapid: string;
   masterid: string;
@@ -369,19 +377,19 @@ type TradingPartner = {
   city: string;
   state: string;
   type: string;
-  source: SOURCE_TYPE;
+  source: SourceType;
   coi_emails: string;
   fsqa_emails: string;
   email: string;
   phone: string;
   foodlogiq?: string;
-};
+}
 type ITradingPartner = Record<string, TradingPartner>;
 const TradingPartners: ITradingPartner = {};
 
 type IExpandIndex = Record<string, ExpandIndexRecord>;
 
-type ExpandIndexRecord = {
+interface ExpandIndexRecord {
   id: string;
   internalid: string;
   masterid: string;
@@ -398,9 +406,9 @@ type ExpandIndexRecord = {
   phone: string;
   state: string;
   type: string;
-  source: SOURCE_TYPE;
+  source: SourceType;
   user: Bookmarks;
-};
+}
 
 const expandIndexTemplate: ExpandIndexRecord = {
   address: '',
@@ -419,7 +427,7 @@ const expandIndexTemplate: ExpandIndexRecord = {
   partnerid: '',
   state: '',
   type: 'CUSTOMER',
-  source: SOURCE_TYPE.Business,
+  source: SourceType.Business,
   user: {
     bookmarks: {
       _id: '',
@@ -427,11 +435,11 @@ const expandIndexTemplate: ExpandIndexRecord = {
   },
 };
 
-type Bookmarks = {
+interface Bookmarks {
   bookmarks: {
     _id: string;
   };
-};
+}
 
 const trellisTPTemplate: TradingPartner = {
   id: '', // Both (vendor and business)
@@ -446,7 +454,7 @@ const trellisTPTemplate: TradingPartner = {
   city: '', // Both
   state: '', // Both
   type: 'CUSTOMER', // Both
-  source: SOURCE_TYPE.Business,
+  source: SourceType.Business,
   coi_emails: '', // Business
   fsqa_emails: '', // Business
   email: '', // Both

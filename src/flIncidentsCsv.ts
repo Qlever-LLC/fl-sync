@@ -18,18 +18,17 @@
 // Load config first so it can set up env
 import config from './config.js';
 
-import { AxiosRequestConfig, default as axios } from 'axios';
-import moment, { Moment } from 'moment';
-import type { OADAClient } from '@oada/client';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
+import type { AxiosRequestConfig } from 'axios';
+import type { Moment } from 'moment';
+import { default as axios } from 'axios';
 import debug from 'debug';
-import { poll } from '@oada/poll';
+import moment from 'moment';
 import sql from 'mssql';
 import xlsx from 'xlsx';
 
-if (process.env.LOCAL) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
+import type { OADAClient } from '@oada/client';
+import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
+import { poll } from '@oada/poll';
 
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
@@ -87,7 +86,7 @@ export async function fetchIncidentsCsv({
       trustServerCertificate: true,
     },
   };
-  // @ts-ignore
+  // @ts-expect-error
   await sql.connect(sqlConfig);
 
   const response = await axios(request);
@@ -176,10 +175,12 @@ export async function ensureTable() {
 }
 
 const alters = {
-  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)': 'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?',
+  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)':
+    'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?',
   'Community': 'community (Community/Business Name)',
   'Affected Quantity': 'quantityAffected (Quantity Affected/Affected Quantity)',
-  'IMAGE OF SUPPLIER CASE LABEL': 'images (Photo of Case Labels & Product/Photos or Documents)',
+  'IMAGE OF SUPPLIER CASE LABEL':
+    'images (Photo of Case Labels & Product/Photos or Documents)',
 };
 /*
   'incidentDate (Incident Date/Delivery Date)': 'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
@@ -221,13 +222,14 @@ function checkSlashThings(row: any) {
       }
     }
   }
+
   return row;
 }
 
 const noDelete = new Set([
   'Affected Quantity',
   'IMAGE OF SUPPLIER CASE LABEL',
-  'incidentDate (Incident Date/Date of Delivery/Delivery Date)'
+  'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
 ]);
 
 // Handle schema changes over time (get csv output for whole history versus a small, recent window and results will vary a lot)
@@ -260,7 +262,6 @@ function prepRow(row: any) {
   return row;
 }
 
-
 async function syncToSql(csvData: any) {
   const sqlConfig = {
     server,
@@ -282,7 +283,7 @@ async function syncToSql(csvData: any) {
     newRow = Object.fromEntries(
       columnKeys.map((key) => {
         if (newRow[key] === '' && allColumns[key]!.allowNull) {
-          return [key, null]
+          return [key, null];
         }
 
         if (moment.isDate(newRow[key])) {
@@ -292,21 +293,25 @@ async function syncToSql(csvData: any) {
         if (!isNaN(Number(newRow[key]))) {
           return [
             key,
-            Number(newRow[key]) > SQL_MAX_VALUE ?
-              newRow[key].toString() : Number(newRow[key])
+            Number(newRow[key]) > SQL_MAX_VALUE
+              ? newRow[key].toString()
+              : Number(newRow[key]),
           ];
         }
 
         if (
-          newRow[key] && (newRow[key].toLowerCase() === 'yes' ||
-        newRow[key].toLowerCase() === 'no')) {
+          newRow[key] &&
+          (newRow[key].toLowerCase() === 'yes' ||
+            newRow[key].toLowerCase() === 'no')
+        ) {
           return [key, newRow[key].toLowerCase() === 'no'];
         }
 
         if (
           typeof newRow[key] === 'string' &&
           (newRow[key].toLowerCase() === 'true' ||
-           newRow[key].toLowerCase() === 'false')) {
+            newRow[key].toLowerCase() === 'false')
+        ) {
           return [key, newRow[key].toLowerCase() === 'true'];
         }
 
@@ -319,7 +324,10 @@ async function syncToSql(csvData: any) {
         }
 
         if (moment(newRow[key], 'MMMM D, YYYY hh:mma', true).isValid()) {
-          return [key, moment(newRow[key], 'MMMM D, YYYY hh:mma',true).toDate()];
+          return [
+            key,
+            moment(newRow[key], 'MMMM D, YYYY hh:mma', true).toDate(),
+          ];
         }
 
         if (moment(newRow[key], 'YYYY-MM-DD', true).isValid()) {
@@ -333,14 +341,19 @@ async function syncToSql(csvData: any) {
         if (newRow[key] === 'N/A' && allColumns[key]!.type === 'BIT') {
           return [key, null];
         }
-        return [key, `'${newRow[key]}'`]
+
+        return [key, `'${newRow[key]}'`];
       })
     );
 
-    let nonNulls = Object.values(allColumns).filter(col => (newRow[col.name] === null || newRow[col.name] === undefined) && !col.allowNull);
+    const nonNulls = Object.values(allColumns).filter(
+      (col) =>
+        (newRow[col.name] === null || newRow[col.name] === undefined) &&
+        !col.allowNull
+    );
     for (const { name, type } of nonNulls) {
       if (type === 'BIT') {
-	newRow[name] = false;
+        newRow[name] = false;
       } else if (type.includes('VARCHAR')) {
         newRow[name] = '';
       } else if (type.includes('DECIMAL')) {
@@ -352,20 +365,22 @@ async function syncToSql(csvData: any) {
 
     trace(`newRow: ${newRow}`);
 
-    let req = new sql.Request();
+    const request = new sql.Request();
 
-    const selectString = columnKeys.map((key, i) => {
-      req.input(`val${i}`, newRow[key]);
-      return `@val${i} AS [${key}]`
-    }).join(',');
+    const selectString = columnKeys
+      .map((key, index) => {
+        request.input(`val${index}`, newRow[key]);
+        return `@val${index} AS [${key}]`;
+      })
+      .join(',');
 
-    const setString = columnKeys.map(
-      (key, index) => `[${key}] = @val${index}`
-    ).join(',');
+    const setString = columnKeys
+      .map((key, index) => `[${key}] = @val${index}`)
+      .join(',');
 
-    const cols = columnKeys.map(key => `[${key}]`).join(',');
+    const cols = columnKeys.map((key) => `[${key}]`).join(',');
 
-    const values = columnKeys.map((_, i) => `@val${i}`).join(',');
+    const values = columnKeys.map((_, index) => `@val${index}`).join(',');
 
     const query = `MERGE
     INTO ${table} WITH (HOLDLOCK) AS target
@@ -377,22 +392,22 @@ async function syncToSql(csvData: any) {
           SET ${setString}
       WHEN NOT MATCHED
         THEN INSERT (${cols})
-        VALUES (${values});`
-    await req.query(query)
+        VALUES (${values});`;
+    await request.query(query);
   }
 }
 
-type Column = {
+interface Column {
   name: string;
   allowNull: boolean;
   type: string;
-};
+}
 
-//Edits to the columns:
-//1) removed [CREDIT NOTE] as duplicate of [Credit Note]
-//2) trimmed the really long potbelly column name that was > 128 characters
-//3) set Id to VARCHAR(100)
-const allColumns: Record<string,Column> = {
+// Edits to the columns:
+// 1) removed [CREDIT NOTE] as duplicate of [Credit Note]
+// 2) trimmed the really long potbelly column name that was > 128 characters
+// 3) set Id to VARCHAR(100)
+const allColumns: Record<string, Column> = {
   'Id': { name: 'Id', type: 'VARCHAR(100)', allowNull: false },
   'Incident ID': {
     name: 'Incident ID',
@@ -434,16 +449,18 @@ const allColumns: Record<string,Column> = {
     type: 'VARCHAR(max)',
     allowNull: false,
   },
-  'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)': {
-    name: 'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)',
-    type: 'VARCHAR(max)',
-    allowNull: false,
-  },
-  'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)': {
-    name: 'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)',
-    type: 'VARCHAR(max)',
-    allowNull: false,
-  },
+  'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)':
+    {
+      name: 'location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)',
+      type: 'VARCHAR(max)',
+      allowNull: false,
+    },
+  'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)':
+    {
+      name: 'location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)',
+      type: 'VARCHAR(max)',
+      allowNull: false,
+    },
   'community (Community/Business Name)': {
     name: 'community (Community/Business Name)',
     type: 'VARCHAR(max)',
@@ -579,11 +596,12 @@ const allColumns: Record<string,Column> = {
     type: 'BIT',
     allowNull: false,
   },
-  'Produce Supplier + Distributor INVESTIGATION / CORRECTIVE ACTION(S) REPORT': {
-    name: 'Produce Supplier + Distributor INVESTIGATION / CORRECTIVE ACTION(S) REPORT',
-    type: 'BIT',
-    allowNull: false,
-  },
+  'Produce Supplier + Distributor INVESTIGATION / CORRECTIVE ACTION(S) REPORT':
+    {
+      name: 'Produce Supplier + Distributor INVESTIGATION / CORRECTIVE ACTION(S) REPORT',
+      type: 'BIT',
+      allowNull: false,
+    },
   'Produce Supplier + Distributor Investigation/Corrective Action Report': {
     name: 'Produce Supplier + Distributor Investigation/Corrective Action Report',
     type: 'BIT',
@@ -684,11 +702,12 @@ const allColumns: Record<string,Column> = {
     type: 'VARCHAR(max)',
     allowNull: true,
   },
-  'distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)': {
-    name: 'distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)',
-    type: 'VARCHAR(max)',
-    allowNull: true,
-  },
+  'distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)':
+    {
+      name: 'distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)',
+      type: 'VARCHAR(max)',
+      allowNull: true,
+    },
   'Country': {
     name: 'Country',
     type: 'VARCHAR(max)',
@@ -749,21 +768,23 @@ const allColumns: Record<string,Column> = {
     type: 'VARCHAR(max)',
     allowNull: true,
   },
-  'productType (Product Name/Product Type/QA Product Category/Material Category)': {
-    name: 'productType (Product Name/Product Type/QA Product Category/Material Category)',
-    type: 'VARCHAR(max)',
-    allowNull: true,
-  },
+  'productType (Product Name/Product Type/QA Product Category/Material Category)':
+    {
+      name: 'productType (Product Name/Product Type/QA Product Category/Material Category)',
+      type: 'VARCHAR(max)',
+      allowNull: true,
+    },
   'Item Name': {
     name: 'Item Name',
     type: 'BIT',
     allowNull: true,
   },
-  'sourceMembership (Manufacturer of Product or Distributor Name/Supplier/Product Supplier/Supplier Name)': {
-    name: 'sourceMembership (Manufacturer of Product or Distributor Name/Supplier/Product Supplier/Supplier Name)',
-    type: 'VARCHAR(max)',
-    allowNull: true,
-  },
+  'sourceMembership (Manufacturer of Product or Distributor Name/Supplier/Product Supplier/Supplier Name)':
+    {
+      name: 'sourceMembership (Manufacturer of Product or Distributor Name/Supplier/Product Supplier/Supplier Name)',
+      type: 'VARCHAR(max)',
+      allowNull: true,
+    },
   'Supplier Status': {
     name: 'Supplier Status',
     type: 'VARCHAR(max)',
@@ -919,11 +940,12 @@ const allColumns: Record<string,Column> = {
     type: 'BIT',
     allowNull: true,
   },
-  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? ': {
-    name: 'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? ',
-    type: 'BIT',
-    allowNull: true,
-  },
+  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? ':
+    {
+      name: 'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? ',
+      type: 'BIT',
+      allowNull: true,
+    },
   'Please describe why you are not emailing _supplychain@potbelly.com': {
     name: 'Please describe why you are not emailing _supplychain@potbelly.com',
     type: 'VARCHAR(max)',
@@ -1004,11 +1026,12 @@ const allColumns: Record<string,Column> = {
     type: 'BIT',
     allowNull: true,
   },
-  'Do you still have the foreign object?  If so, please hold for further investigation.': {
-    name: 'Do you still have the foreign object?  If so, please hold for further investigation.',
-    type: 'BIT',
-    allowNull: true,
-  },
+  'Do you still have the foreign object?  If so, please hold for further investigation.':
+    {
+      name: 'Do you still have the foreign object?  If so, please hold for further investigation.',
+      type: 'BIT',
+      allowNull: true,
+    },
   'Date Product Was Received': {
     name: 'Date Product Was Received',
     type: 'BIT',
@@ -1494,11 +1517,12 @@ const allColumns: Record<string,Column> = {
     type: 'VARCHAR(max)',
     allowNull: true,
   },
-  'Please confirm that you received the notification from "info@foodlogiq.com"': {
-    name: 'Please confirm that you received the notification from "info@foodlogiq.com"',
-    type: 'VARCHAR(max)',
-    allowNull: true,
-  },
+  'Please confirm that you received the notification from "info@foodlogiq.com"':
+    {
+      name: 'Please confirm that you received the notification from "info@foodlogiq.com"',
+      type: 'VARCHAR(max)',
+      allowNull: true,
+    },
   'Reporter Name': {
     name: 'Reporter Name',
     type: 'VARCHAR(max)',
@@ -1669,11 +1693,12 @@ const allColumns: Record<string,Column> = {
     type: 'VARCHAR(max)',
     allowNull: true,
   },
-  'Do you have enough information to begin investigation of the incident as defined above?': {
-    name: 'Do you have enough information to begin investigation of the incident as defined above?',
-    type: 'BIT',
-    allowNull: true,
-  },
+  'Do you have enough information to begin investigation of the incident as defined above?':
+    {
+      name: 'Do you have enough information to begin investigation of the incident as defined above?',
+      type: 'BIT',
+      allowNull: true,
+    },
   'What information is still needed?': {
     name: 'What information is still needed?',
     type: 'VARCHAR(max)',
@@ -1681,7 +1706,7 @@ const allColumns: Record<string,Column> = {
   },
 };
 
-type Row = {
+interface Row {
   'Id': string;
   'Incident ID': string;
   'Incident Type': string;
@@ -1940,4 +1965,4 @@ type Row = {
   'Protein Type': string;
   'Do you have enough information to begin investigation of the incident as defined above?': boolean;
   'What information is still needed?': string;
-};
+}
