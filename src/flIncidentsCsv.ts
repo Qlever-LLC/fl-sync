@@ -23,7 +23,7 @@ import moment, { Moment } from 'moment';
 import type { OADAClient } from '@oada/client';
 import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import debug from 'debug';
-import { poll } from '@oada/poll'
+import { poll } from '@oada/poll';
 import sql from 'mssql';
 import xlsx from 'xlsx';
 
@@ -142,7 +142,7 @@ export async function startIncidents(connection: OADAClient) {
     pollOnStartup: true,
     pollFunc: pollIncidents,
     interval,
-    name: 'food-logiq-incidents',
+    name: 'foodlogiq-incidents',
     getTime: (async () => {
       const r = await axios({
         method: 'head',
@@ -153,7 +153,7 @@ export async function startIncidents(connection: OADAClient) {
     }) as unknown as () => Promise<string>,
   });
 
-  info('Started fl-sync poller.');
+  info('Started foodlogiq-incidents poller.');
 }
 
 export async function ensureTable() {
@@ -275,7 +275,6 @@ async function syncToSql(csvData: any) {
   };
 
   for await (const row of csvData) {
-    info(`Incoming Row: ${row}`);
     let newRow = prepRow(row);
 
     const columnKeys = Object.keys(allColumns).sort();
@@ -348,11 +347,10 @@ async function syncToSql(csvData: any) {
         newRow[name] = 0;
       } else if (type === 'DATE') {
         newRow[name] = newRow['Created At'];
-        console.log('value', newRow['Created At'])
       }
     }
 
-    console.log('this', {newRow});
+    trace(`newRow: ${newRow}`);
 
     let req = new sql.Request();
 
