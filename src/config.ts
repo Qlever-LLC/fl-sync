@@ -149,11 +149,18 @@ const config = convict({
       arg: 'reportInterval',
     },
     reportEmail: {
-      doc: 'Email address to send reports to',
-      format: String,
+      doc: 'Email addresses to send reports to',
+      format: Array,
       default: null,
       env: 'REPORT_EMAIL',
       arg: 'reportEmail',
+    },
+    reportCcEmail: {
+      doc: 'Email address to cc reports to',
+      format: Array,
+      default: null,
+      env: 'REPORT_CC_EMAIL',
+      arg: 'reportCcEmail',
     },
     reportReplyToEmail: {
       doc: 'reply to email listed for the report',
