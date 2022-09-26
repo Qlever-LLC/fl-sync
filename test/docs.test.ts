@@ -14,27 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import test from 'ava';
-import Promise from 'bluebird';
-import { setTimeout } from 'node:timers/promises';
-import { JsonObject, OADAClient, connect } from '@oada/client';
-import type { Body } from '@oada/client/lib/client';
-import moment from 'moment';
-import axios from 'axios';
-import tree from '../dist/tree.js';
-import { initialize as service } from '../dist/index.js';
-import { FlObject, isObj as isObject } from '../dist/mirrorWatch.js';
-import { coi } from './documents/coi.js';
+
+/* eslint-disable unicorn/prevent-abbreviations */
+
 import config from '../dist/config.js';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
+
+import test from 'ava';
+
+import { setTimeout } from 'node:timers/promises';
+
+import axios from 'axios';
+import moment from 'moment';
+
+import type { JsonObject, OADAClient } from '@oada/client';
+import { connect } from '@oada/client';
+
+import type { FlObject } from '../dist/mirrorWatch.js';
+import type { TreeKey } from '@oada/types/oada/tree/v1.js';
+import { coi } from './documents/coi.js';
+import { isObj as isObject } from '../dist/mirrorWatch.js';
+import { initialize as service } from '../dist/index.js';
+import { tree } from '../dist/tree.js';
+
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'
 const FL_TOKEN = config.get('foodlogiq.token') || '';
 const FL_DOMAIN = config.get('foodlogiq.domain') || '';
 const SUPPLIER = config.get('foodlogiq.testSupplier.id');
-const TOKEN = process.env.TOKEN || ''; // || config.get('trellis.token') || '';
+const TOKEN = process.env.TOKEN ?? ''; // || config.get('trellis.token') || '';
 const DOMAIN = config.get('trellis.domain') || '';
 const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 }
@@ -57,17 +67,19 @@ test.before(async (t) => {
       path: `${SERVICE_PATH}/jobs/pending`,
     })
     .then((r) =>
-      Object.keys(r.data || {}).filter((key) => !key.startsWith('_'))
+      Object.keys(r.data ?? {}).filter((key) => !key.startsWith('_'))
     )
     .catch((error) => {
       if (error.status !== 404) throw error;
       return [];
     });
-  await Promise.map(jobKeys, async (jobKey) => {
-    await oada.delete({
-      path: `${SERVICE_PATH}/jobs/pending/${jobKey}`,
-    });
-  });
+  await Promise.all(
+    jobKeys.map(async (jobKey) => {
+      await oada.delete({
+        path: `${SERVICE_PATH}/jobs/pending/${jobKey}`,
+      });
+    })
+  );
 
   // Blow away the existing coi docs created
   const keys = await oada
@@ -81,11 +93,13 @@ test.before(async (t) => {
       if (error.status !== 404) throw error;
       return [];
     });
-  await Promise.map(keys, async (key) => {
-    await oada.delete({
-      path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois/${key}`,
-    });
-  });
+  await Promise.all(
+    keys.map(async (key) => {
+      await oada.delete({
+        path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois/${key}`,
+      });
+    })
+  );
 
   await service({
     polling: true,
@@ -426,11 +440,9 @@ async function postDocument(data: Body, oada: OADAClient) {
     },
   });
   await setTimeout(INTERVAL_MS + 5000);
-  const resp = await oada
-    .get({
-      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
-    })
-    .then((r) => r.data);
+  const { data: resp } = await oada.get({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
+  });
   if (typeof resp !== 'object') throw new Error('Bad data');
   // @ts-expect-error
   const aft = Object.keys(resp).filter((k) => !k.startsWith('_'));
@@ -442,16 +454,22 @@ async function postDocument(data: Body, oada: OADAClient) {
 }
 
 async function getFlDocument(_id: string) {
-  const resp = await oada
-    .get({
-      path: `/${_id}`,
-    })
-    .then((r) => r.data as JsonObject);
-  if (!resp['food-logiq-mirror']) throw new Error('food-logiq-mirror');
-  return trellisMirrorToFlInput(resp['food-logiq-mirror']) as unknown as Body;
+  const { data: resp } = await oada.get({
+    path: `/${_id}`,
+  });
+  if (
+    typeof resp !== 'object' ||
+    Buffer.isBuffer(resp) ||
+    Array.isArray(resp) ||
+    !resp?.['food-logiq-mirror']
+  ) {
+    throw new Error('food-logiq-mirror');
+  }
+
+  return trellisMirrorToFlInput(resp?.['food-logiq-mirror']) as unknown;
 }
 
-async function postAndPause(data: Body, oada: OADAClient) {
+async function postAndPause(data: unknown, oada: OADAClient) {
   const flId = await postDocument(data, oada);
   await setTimeout(15_000);
 
@@ -463,7 +481,7 @@ async function postAndPause(data: Body, oada: OADAClient) {
       if (r && typeof r.data === 'object') {
         // @ts-expect-error
         return Object.keys(r.data)[0];
-      } else return undefined
+      }
     });
   const jobKey = jobId!.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id');
@@ -471,7 +489,7 @@ async function postAndPause(data: Body, oada: OADAClient) {
   return { jobKey, jobId, flId };
 }
 
-async function rerunFlDocument(data: Body, failType: string) {
+async function rerunFlDocument(data: unknown, failType: string) {
   const jobsResultPath = `${SERVICE_PATH}/jobs/failure/${failType}/day-index/${moment().format(
     'YYYY-MM-DD'
   )}`;
@@ -511,8 +529,8 @@ async function trellisMirrorToFlInput(data: any) {
 }
 
 interface FlBody extends FlObject {
-  products: [];
-  locations: [];
+  products: unknown[];
+  locations: unknown[];
   attachments: Record<string, unknown>;
   shareRecipients: [
     {

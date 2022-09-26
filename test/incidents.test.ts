@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { default as axios } from 'axios';
 import config from '../dist/config.js';
 import * as flInc from '../dist/flIncidentsCsv.js';
@@ -25,17 +26,17 @@ test.before(async (t: any) => {
 test('test csv stuff', async (t: any) => {
   t.timeout(200_000);
 
-  let result = await flInc.ensureTable();
+  const result = await ensureTable();
   console.log(result);
   t.truthy(result);
-})
+});
 
 test.skip('test big initial load of csv data', async (t: any) => {
   t.timeout(200_000);
   const startTime = '2021-09-01';
   const endTime = '2022-09-13';
-  await flInc.fetchIncidentsCsv({startTime, endTime})
-})
+  await fetchIncidentsCsv({ startTime, endTime });
+});
 
 test.skip('test short period of csv data', async (t: any) => {
   t.timeout(200_000);
