@@ -337,7 +337,7 @@ function handleTypes(newRow: any) {
         }
       }
 
-      if (allColumns[key].type === 'BIT') {
+      if (allColumns[key]!.type === 'BIT') {
         if (
           newRow[key] &&
           (newRow[key].toLowerCase() === 'yes' ||
