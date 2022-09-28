@@ -270,7 +270,7 @@ async function syncToSql(csvData: any) {
   for await (const row of csvData) {
     trace(`Input Row: ${JSON.stringify(row, null, 2)}`);
     let newRow = handleSchemaChanges(row);
-    newRow = convertCommon(newRow);
+    newRow = handleTypes(newRow);
     newRow = ensureNotNull(newRow);
 
     trace(`newRow: ${JSON.stringify(newRow, null, 2)}`);
@@ -311,68 +311,75 @@ async function syncToSql(csvData: any) {
   }
 }
 
-function convertCommon(newRow: any) {
+function handleTypes(newRow: any) {
   const columnKeys = Object.keys(allColumns).sort();
 
   return Object.fromEntries(
     columnKeys.map((key) => {
+      if (allColumns[key]!.type.includes("DATE")) {
+        if (moment.isDate(newRow[key])) {
+          return [key, moment(newRow[key]).toDate()];
+        }
+
+        if (moment(newRow[key], 'MMM DD, YYYY', true).isValid()) {
+          return [key, moment(newRow[key], 'MMM DD, YYYY').toDate()];
+        }
+
+        if (moment(newRow[key], 'MMMM D, YYYY hh:mma', true).isValid()) {
+          return [
+            key,
+            moment(newRow[key], 'MMMM D, YYYY hh:mma', true).toDate(),
+          ];
+        }
+
+        if (moment(newRow[key], 'YYYY-MM-DD', true).isValid()) {
+          return [key, moment(newRow[key], 'YYYY-MM-DD', true).toDate()];
+        }
+      }
+
+      if (allColumns[key].type === 'BIT') {
+        if (
+          newRow[key] &&
+          (newRow[key].toLowerCase() === 'yes' ||
+            newRow[key].toLowerCase() === 'no')
+        ) {
+          return [key, newRow[key].toLowerCase() === 'no'];
+        }
+
+        if (
+          typeof newRow[key] === 'string' &&
+          (newRow[key].toLowerCase() === 'true' ||
+            newRow[key].toLowerCase() === 'false')
+        ) {
+          return [key, newRow[key].toLowerCase() === 'true'];
+        }
+
+        if (newRow[key] === true || newRow[key] === false) {
+          return [key, newRow[key]];
+        }
+
+        if (newRow[key] === 'N/A') {
+          return [key, null];
+        }
+      }
+
+      if (allColumns[key]!.type.includes('DECIMAL')) {
+        if (!isNaN(Number(newRow[key]))) {
+          return [
+            key,
+            Number(newRow[key]) > SQL_MAX_VALUE
+              ? newRow[key].toString()
+              : Number(newRow[key]),
+          ];
+        }
+      }
+
+      // Handle some other general cases
       if (newRow[key] === '' && allColumns[key]!.allowNull) {
         return [key, null];
       }
 
-      if (moment.isDate(newRow[key])) {
-        return [key, moment(newRow[key]).toDate()];
-      }
-
-      if (!isNaN(Number(newRow[key]))) {
-        return [
-          key,
-          Number(newRow[key]) > SQL_MAX_VALUE
-            ? newRow[key].toString()
-            : Number(newRow[key]),
-        ];
-      }
-
-      if (
-        newRow[key] &&
-        (newRow[key].toLowerCase() === 'yes' ||
-          newRow[key].toLowerCase() === 'no')
-      ) {
-        return [key, newRow[key].toLowerCase() === 'no'];
-      }
-
-      if (
-        typeof newRow[key] === 'string' &&
-        (newRow[key].toLowerCase() === 'true' ||
-          newRow[key].toLowerCase() === 'false')
-      ) {
-        return [key, newRow[key].toLowerCase() === 'true'];
-      }
-
-      if (newRow[key] === true || newRow[key] === false) {
-        return [key, newRow[key]];
-      }
-
-      if (moment(newRow[key], 'MMM DD, YYYY', true).isValid()) {
-        return [key, moment(newRow[key], 'MMM DD, YYYY').toDate()];
-      }
-
-      if (moment(newRow[key], 'MMMM D, YYYY hh:mma', true).isValid()) {
-        return [
-          key,
-          moment(newRow[key], 'MMMM D, YYYY hh:mma', true).toDate(),
-        ];
-      }
-
-      if (moment(newRow[key], 'YYYY-MM-DD', true).isValid()) {
-        return [key, moment(newRow[key], 'YYYY-MM-DD', true).toDate()];
-      }
-
       if (!newRow[key]) {
-        return [key, null];
-      }
-
-      if (newRow[key] === 'N/A' && allColumns[key]!.type === 'BIT') {
         return [key, null];
       }
 
@@ -388,7 +395,6 @@ function ensureNotNull(newRow: any) {
       (newRow[col.name] === null || newRow[col.name] === undefined) &&
       !col.allowNull
   );
-  console.log({nonNulls});
   for (const { name, type } of nonNulls) {
     if (type === 'BIT') {
       newRow[name] = false;
