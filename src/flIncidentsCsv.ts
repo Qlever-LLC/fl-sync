@@ -373,7 +373,7 @@ function handleTypes(newRow: any) {
       }
 
       // Handle some other general cases. Null will be handled in the next step
-      if (['', 'na', 'n/a'].includes(newRow[key].toLowerCase())) {
+      if (typeof newRow[key] === 'string' && ['', 'na', 'n/a'].includes(newRow[key].toLowerCase())) {
         return [key, null];
       }
 
