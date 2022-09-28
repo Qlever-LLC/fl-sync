@@ -1,4 +1,4 @@
-/**
+**
  * @license
  * Copyright 2022 Qlever LLC
  *
@@ -23,7 +23,7 @@ import test from 'ava';
 
 import { setTimeout } from 'node:timers/promises';
 
-import axios from 'axios';
+import {default as axios} from 'axios';
 import moment from 'moment';
 
 import type { JsonObject, OADAClient } from '@oada/client';
@@ -105,7 +105,7 @@ test.before(async (t) => {
     polling: true,
     target: true,
     master: false,
-    service: true,
+    mirrorWatch: true,
     watchConfig: true,
   });
 });
@@ -331,7 +331,7 @@ test.skip(`Shouldn't queue a job if already rejected by non-trellis user.`, asyn
     headers: {
       Authorization: `${FL_TOKEN}`,
     },
-  }).then((r) => {
+  }).then((r: any) => {
     console.log(r);
     return r;
   });
@@ -415,12 +415,12 @@ test.after(async () => {
  */
 });
 
-async function postDocument(data: Body, oada: OADAClient) {
+async function postDocument(data: any, oada: OADAClient) {
   const result = await oada
     .get({
       path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
     })
-    .then((r) => r.data)
+    .then((r: any) => r.data)
     .catch((error) => {
       if (error.status === 404) {
         return {};
@@ -429,7 +429,6 @@ async function postDocument(data: Body, oada: OADAClient) {
       throw error;
     });
   if (typeof result !== 'object') throw new Error('Bad data');
-  // @ts-expect-error
   const bef = new Set(Object.keys(result).filter((k) => !k.startsWith('_')));
   await axios({
     method: 'post',
@@ -477,11 +476,11 @@ async function postAndPause(data: unknown, oada: OADAClient) {
     .get({
       path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta/services/fl-sync/jobs`,
     })
-    .then((r) => {
+    .then((r: any) => {
       if (r && typeof r.data === 'object') {
-        // @ts-expect-error
         return Object.keys(r.data)[0];
       }
+      return undefined;
     });
   const jobKey = jobId!.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id');
