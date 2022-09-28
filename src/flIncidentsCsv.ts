@@ -358,9 +358,7 @@ function handleTypes(newRow: any) {
           return [key, newRow[key]];
         }
 
-        if (newRow[key] === 'N/A') {
-          return [key, null];
-        }
+
       }
 
       if (allColumns[key]!.type.includes('DECIMAL')) {
@@ -374,8 +372,8 @@ function handleTypes(newRow: any) {
         }
       }
 
-      // Handle some other general cases
-      if (newRow[key] === '' && allColumns[key]!.allowNull) {
+      // Handle some other general cases. Null will be handled in the next step
+      if (['', 'na', 'n/a'].includes(newRow[key].toLowerCase())) {
         return [key, null];
       }
 
