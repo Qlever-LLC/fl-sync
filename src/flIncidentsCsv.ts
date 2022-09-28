@@ -38,8 +38,8 @@ const { database, server, user, password, port, interval, table } =
   config.get('incidents');
 const SQL_MAX_VALUE = 9_007_199_254_740_991;
 
-const info = debug('fl-sync:info');
-const trace = debug('fl-sync:trace');
+const info = debug('fl-sync-incidents:info');
+const trace = debug('fl-sync-incidents:trace');
 
 export async function pollIncidents(lastPoll: Moment, end: Moment) {
   // Sync list of suppliers
@@ -48,6 +48,7 @@ export async function pollIncidents(lastPoll: Moment, end: Moment) {
     .format();
   const endTime: string = end.utc().format();
 
+  info('Polling incidents');
   await fetchIncidentsCsv({ startTime, endTime });
 }
 
@@ -160,14 +161,7 @@ export async function ensureTable() {
   return true;
 }
 
-const alters = {
-  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)':
-    'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?',
-  'Community': 'community (Community/Business Name)',
-  'Affected Quantity': 'quantityAffected (Quantity Affected/Affected Quantity)',
-  'IMAGE OF SUPPLIER CASE LABEL':
-    'images (Photo of Case Labels & Product/Photos or Documents)',
-};
+
 /*
   'incidentDate (Incident Date/Delivery Date)': 'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
   'incidentDate (Delivery Date/Incident Date)': 'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
@@ -218,8 +212,17 @@ const noDelete = new Set([
   'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
 ]);
 
+const alters = {
+  'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)':
+    'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?',
+  'Community': 'community (Community/Business Name)',
+  'Affected Quantity': 'quantityAffected (Quantity Affected/Affected Quantity)',
+  'IMAGE OF SUPPLIER CASE LABEL':
+    'images (Photo of Case Labels & Product/Photos or Documents)',
+};
+
 // Handle schema changes over time (get csv output for whole history versus a small, recent window and results will vary a lot)
-function prepRow(row: any) {
+function handleSchemaChanges(row: any) {
   if ('CREDIT NOTE' in row) {
     row['Credit Note'] = row['CREDIT NOTE'];
     delete row['CREDIT NOTE'];
@@ -261,97 +264,20 @@ async function syncToSql(csvData: any) {
     },
   };
 
+  // @ts-expect-error mssql docs show an await on connect...
+  await sql.connect(sqlConfig);
+
   for await (const row of csvData) {
-    let newRow = prepRow(row);
+    trace(`Input Row: ${JSON.stringify(row, null, 2)}`);
+    let newRow = handleSchemaChanges(row);
+    newRow = convertCommon(newRow);
+    newRow = ensureNotNull(newRow);
 
-    const columnKeys = Object.keys(allColumns).sort();
-
-    newRow = Object.fromEntries(
-      columnKeys.map((key) => {
-        if (newRow[key] === '' && allColumns[key]!.allowNull) {
-          return [key, null];
-        }
-
-        if (moment.isDate(newRow[key])) {
-          return [key, moment(newRow[key]).toDate()];
-        }
-
-        if (!isNaN(Number(newRow[key]))) {
-          return [
-            key,
-            Number(newRow[key]) > SQL_MAX_VALUE
-              ? newRow[key].toString()
-              : Number(newRow[key]),
-          ];
-        }
-
-        if (
-          newRow[key] &&
-          (newRow[key].toLowerCase() === 'yes' ||
-            newRow[key].toLowerCase() === 'no')
-        ) {
-          return [key, newRow[key].toLowerCase() === 'no'];
-        }
-
-        if (
-          typeof newRow[key] === 'string' &&
-          (newRow[key].toLowerCase() === 'true' ||
-            newRow[key].toLowerCase() === 'false')
-        ) {
-          return [key, newRow[key].toLowerCase() === 'true'];
-        }
-
-        if (newRow[key] === true || newRow[key] === false) {
-          return [key, newRow[key]];
-        }
-
-        if (moment(newRow[key], 'MMM DD, YYYY', true).isValid()) {
-          return [key, moment(newRow[key], 'MMM DD, YYYY').toDate()];
-        }
-
-        if (moment(newRow[key], 'MMMM D, YYYY hh:mma', true).isValid()) {
-          return [
-            key,
-            moment(newRow[key], 'MMMM D, YYYY hh:mma', true).toDate(),
-          ];
-        }
-
-        if (moment(newRow[key], 'YYYY-MM-DD', true).isValid()) {
-          return [key, moment(newRow[key], 'YYYY-MM-DD', true).toDate()];
-        }
-
-        if (!newRow[key]) {
-          return [key, null];
-        }
-
-        if (newRow[key] === 'N/A' && allColumns[key]!.type === 'BIT') {
-          return [key, null];
-        }
-
-        return [key, `'${newRow[key]}'`];
-      })
-    );
-
-    const nonNulls = Object.values(allColumns).filter(
-      (col) =>
-        (newRow[col.name] === null || newRow[col.name] === undefined) &&
-        !col.allowNull
-    );
-    for (const { name, type } of nonNulls) {
-      if (type === 'BIT') {
-        newRow[name] = false;
-      } else if (type.includes('VARCHAR')) {
-        newRow[name] = '';
-      } else if (type.includes('DECIMAL')) {
-        newRow[name] = 0;
-      } else if (type === 'DATE') {
-        newRow[name] = newRow['Created At'];
-      }
-    }
-
-    trace(`newRow: ${newRow}`);
+    trace(`newRow: ${JSON.stringify(newRow, null, 2)}`);
 
     const request = new sql.Request();
+
+    const columnKeys = Object.keys(allColumns).sort();
 
     const selectString = columnKeys
       .map((key, index) => {
@@ -361,6 +287,7 @@ async function syncToSql(csvData: any) {
       .join(',');
 
     const setString = columnKeys
+    //.filter((key) => key !== 'Id')
       .map((key, index) => `[${key}] = @val${index}`)
       .join(',');
 
@@ -372,15 +299,108 @@ async function syncToSql(csvData: any) {
     INTO ${table} WITH (HOLDLOCK) AS target
       USING (SELECT ${selectString}) AS source
       (${cols})
-      ON (target.[Incident ID] = source.[Incident ID])
+      ON (target.[Id] = source.[Id])
       WHEN MATCHED
         THEN UPDATE
           SET ${setString}
       WHEN NOT MATCHED
         THEN INSERT (${cols})
-        VALUES (${values});`;
+	VALUES (${values});`;
+    trace(`Query: ${query}`);
     await request.query(query);
   }
+}
+
+function convertCommon(newRow: any) {
+  const columnKeys = Object.keys(allColumns).sort();
+
+  return Object.fromEntries(
+    columnKeys.map((key) => {
+      if (newRow[key] === '' && allColumns[key]!.allowNull) {
+        return [key, null];
+      }
+
+      if (moment.isDate(newRow[key])) {
+        return [key, moment(newRow[key]).toDate()];
+      }
+
+      if (!isNaN(Number(newRow[key]))) {
+        return [
+          key,
+          Number(newRow[key]) > SQL_MAX_VALUE
+            ? newRow[key].toString()
+            : Number(newRow[key]),
+        ];
+      }
+
+      if (
+        newRow[key] &&
+        (newRow[key].toLowerCase() === 'yes' ||
+          newRow[key].toLowerCase() === 'no')
+      ) {
+        return [key, newRow[key].toLowerCase() === 'no'];
+      }
+
+      if (
+        typeof newRow[key] === 'string' &&
+        (newRow[key].toLowerCase() === 'true' ||
+          newRow[key].toLowerCase() === 'false')
+      ) {
+        return [key, newRow[key].toLowerCase() === 'true'];
+      }
+
+      if (newRow[key] === true || newRow[key] === false) {
+        return [key, newRow[key]];
+      }
+
+      if (moment(newRow[key], 'MMM DD, YYYY', true).isValid()) {
+        return [key, moment(newRow[key], 'MMM DD, YYYY').toDate()];
+      }
+
+      if (moment(newRow[key], 'MMMM D, YYYY hh:mma', true).isValid()) {
+        return [
+          key,
+          moment(newRow[key], 'MMMM D, YYYY hh:mma', true).toDate(),
+        ];
+      }
+
+      if (moment(newRow[key], 'YYYY-MM-DD', true).isValid()) {
+        return [key, moment(newRow[key], 'YYYY-MM-DD', true).toDate()];
+      }
+
+      if (!newRow[key]) {
+        return [key, null];
+      }
+
+      if (newRow[key] === 'N/A' && allColumns[key]!.type === 'BIT') {
+        return [key, null];
+      }
+
+      return [key, `${newRow[key]}`];
+    })
+  )
+  return newRow;
+}
+
+function ensureNotNull(newRow: any) {
+  const nonNulls = Object.values(allColumns).filter(
+    (col) =>
+      (newRow[col.name] === null || newRow[col.name] === undefined) &&
+      !col.allowNull
+  );
+  console.log({nonNulls});
+  for (const { name, type } of nonNulls) {
+    if (type === 'BIT') {
+      newRow[name] = false;
+    } else if (type.includes('VARCHAR')) {
+      newRow[name] = '';
+    } else if (type.includes('DECIMAL')) {
+      newRow[name] = 0;
+    } else if (type === 'DATE') {
+      newRow[name] = newRow['Created At'];
+    }
+  }
+  return newRow;
 }
 
 interface Column {
