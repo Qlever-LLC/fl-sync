@@ -338,27 +338,23 @@ function handleTypes(newRow: any) {
       }
 
       if (allColumns[key]!.type === 'BIT') {
-        if (
-          newRow[key] &&
-          (newRow[key].toLowerCase() === 'yes' ||
-            newRow[key].toLowerCase() === 'no')
-        ) {
-          return [key, newRow[key].toLowerCase() === 'no'];
-        }
-
-        if (
-          typeof newRow[key] === 'string' &&
-          (newRow[key].toLowerCase() === 'true' ||
-            newRow[key].toLowerCase() === 'false')
-        ) {
-          return [key, newRow[key].toLowerCase() === 'true'];
-        }
-
         if (newRow[key] === true || newRow[key] === false) {
           return [key, newRow[key]];
         }
 
+        if (typeof newRow[key] === 'string') {
+          if (newRow[key].toLowerCase() === 'yes' ||
+            newRow[key].toLowerCase() === 'no') {
+            return [key, newRow[key].toLowerCase() === 'no'];
+          }
 
+          if (newRow[key].toLowerCase() === 'true' ||
+            newRow[key].toLowerCase() === 'false') {
+            return [key, newRow[key].toLowerCase() === 'true'];
+          }
+
+          return [key, null];
+        }
       }
 
       if (allColumns[key]!.type.includes('DECIMAL')) {
@@ -370,6 +366,10 @@ function handleTypes(newRow: any) {
               : Number(newRow[key]),
           ];
         }
+
+	if (typeof newRow[key] === 'string') {
+	  return [key, null]
+	}
       }
 
       // Handle some other general cases. Null will be handled in the next step
@@ -381,7 +381,13 @@ function handleTypes(newRow: any) {
         return [key, null];
       }
 
-      return [key, `${newRow[key]}`];
+      if (allColumns[key]!.type.includes("VARCHAR")) {
+        if (typeof newRow[key] === 'string') {
+	  return [key, newRow[key]];
+	}
+      }
+
+      return [key, null]
     })
   )
   return newRow;
