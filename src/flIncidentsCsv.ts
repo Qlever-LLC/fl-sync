@@ -105,6 +105,7 @@ export async function fetchIncidentsCsv({
 }
 
 export async function startIncidents(connection: OADAClient) {
+  console.log('INTERVAL', interval);
   const sqlConfig = {
     server,
     database,
@@ -139,7 +140,7 @@ export async function startIncidents(connection: OADAClient) {
     }) as unknown as () => Promise<string>,
   });
 
-  info('Started foodlogiq-incidents poller.');
+  info(`Started foodlogiq-incidents poller. Polling interval: ${interval} ms`);
 }
 
 export async function ensureTable() {
@@ -268,12 +269,12 @@ async function syncToSql(csvData: any) {
   await sql.connect(sqlConfig);
 
   for await (const row of csvData) {
-    trace(`Input Row: ${JSON.stringify(row, null, 2)}`);
+    info(`Input Row: ${JSON.stringify(row, null, 2)}`);
     let newRow = handleSchemaChanges(row);
     newRow = handleTypes(newRow);
     newRow = ensureNotNull(newRow);
 
-    trace(`newRow: ${JSON.stringify(newRow, null, 2)}`);
+    info(`newRow: ${JSON.stringify(newRow, null, 2)}`);
 
     const request = new sql.Request();
 
