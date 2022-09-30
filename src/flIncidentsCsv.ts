@@ -105,7 +105,7 @@ export async function fetchIncidentsCsv({
 }
 
 export async function startIncidents(connection: OADAClient) {
-  console.log('INTERVAL', interval);
+  /*
   const sqlConfig = {
     server,
     database,
@@ -122,6 +122,7 @@ export async function startIncidents(connection: OADAClient) {
   await sql.connect(sqlConfig);
 
   await ensureTable();
+  */
 
   await poll({
     connection,
