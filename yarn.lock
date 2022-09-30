@@ -522,16 +522,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/poll@npm:^1.0.1":
-  version: 1.0.1
-  resolution: "@oada/poll@npm:1.0.1"
+"@oada/poll@npm:^1.0.3":
+  version: 1.0.3
+  resolution: "@oada/poll@npm:1.0.3"
   dependencies:
     debug: ^4.3.4
     moment: ^2.29.4
     tslib: ^2.4.0
   peerDependencies:
     "@oada/client": ^4.3.2
-  checksum: 07d34d20d22ca5210ee1073c201450b99bb9e2fde7ca304c01e6621af828b7b1d9140ef67e05022cba685470bb183ca7fc7a11eacc67f2c16bbd99ee325d240a
+  checksum: 51ba8decbb951d038780fd64663bf50721ea88d28df6e9207202345449da5f17270d0212e87f49e87cc72c811ef4a453b199dac71da756833c35590bb582ecc2
   languageName: node
   linkType: hard
 
@@ -580,7 +580,7 @@ __metadata:
     "@oada/client": ^4.3.2
     "@oada/jobs": ^4.1.4
     "@oada/list-lib": 3.0.9
-    "@oada/poll": ^1.0.1
+    "@oada/poll": ^1.0.3
     "@oada/types": ^3.2.1
     "@overleaf/o-error": ^3.4.0
     "@tsconfig/node16": ^1.0.3
