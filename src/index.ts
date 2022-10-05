@@ -613,15 +613,7 @@ function prepEmail() {
   const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
   return {
     from: 'noreply@trellis.one',
-    to: [
-      {
-        name: 'FSQA Supplier',
-        email: REPORT_EMAIL,
-      },
-      {
-        email: REPORT_CC_EMAIL,
-      },
-    ],
+    to: [REPORT_EMAIL, REPORT_CC_EMAIL],
     replyTo: { email: REPORT_REPLYTO_EMAIL },
     subject: `Trellis Automation Report - ${date}`,
     text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
