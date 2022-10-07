@@ -17,6 +17,9 @@
 
 import type { FlObject } from './mirrorWatch.js';
 import _ from 'lodash';
+import debug from 'debug';
+
+const info = debug('fl-sync:mirror-watch:info');
 
 export function fromOadaType(type: string) {
   const vals = Object.values(conversions);
@@ -37,29 +40,31 @@ export async function flToTrellis(flDocument: FlObject) {
       shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
     const flPath = `shareSource.shareSpecificAttributes.${key}`;
     const flValue = _.get(flDocument, flPath);
-    console.log(
+    info(
       `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`
     );
     _.set(document, trellisPath, flValue);
   }
 
+  // Handle any default attributes
   for (const flPath of Object.keys(defaultAttributes).filter(
     (attributePath: string) => _.has(flDocument, attributePath)
   )) {
     const trellisPath =
       defaultAttributes[flPath as keyof typeof defaultAttributes];
     const flValue = _.get(flDocument, flPath);
-    console.log(
+    info(
       `Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`
     );
     _.set(document, trellisPath, flValue);
   }
 
+  //Handle document date separately. This is required for LF.
   if (!document.document_date) {
     document.document_date =
       document.effective_date ||
       _.get(flDocument, 'versionInfo.createdAt').slice(0, 10);
-    console.log(
+    info(
       `Setting document date from effective or create date: ${document.document_date}`
     );
   }
@@ -358,6 +363,7 @@ const defaultAttributes = {
   'auditAttributes.criticalFailures': 'failures',
   'auditAttributes.reAuditDate': 'reaudit_date',
   'auditAttributes.scheme': 'scheme',
+  'expirationDate': 'expire_date',
 };
 
 export function fromName(name: keyof typeof conversions) {
