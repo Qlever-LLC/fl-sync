@@ -150,14 +150,14 @@ const config = convict({
     },
     reportEmail: {
       doc: 'Email addresses to send reports to',
-      format: Array,
+      format: String,
       default: null,
       env: 'REPORT_EMAIL',
       arg: 'reportEmail',
     },
     reportCcEmail: {
       doc: 'Email address to cc reports to',
-      format: Array,
+      format: String,
       default: null,
       env: 'REPORT_CC_EMAIL',
       arg: 'reportCcEmail',
