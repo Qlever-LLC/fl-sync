@@ -630,7 +630,7 @@ export async function postTpDocument({
     responseEncoding: 'binary',
   };
 
-  const file = await axios(request)
+  const zipFile = await axios(request)
     .then((r) => r.data)
     .catch((error_) => {
       if (error_.response.status === 404) {
@@ -640,7 +640,7 @@ export async function postTpDocument({
     });
   trace(`Got attachments for FL mirror ${item._id}`);
 
-  const zip = await new jszip().loadAsync(file);
+  const zip = await new jszip().loadAsync(zipFile);
 
   const files = Object.keys(zip.files);
 
@@ -650,17 +650,34 @@ export async function postTpDocument({
   }
 
   const { document, docType, urlName } = await flToTrellis(item);
-
   trace(`Generated translated partial JSON for mirror with docType ${docType}`);
-  // Link the pdf into the unextracted documents list
-  const documentKey = await oada
-    .post({
+
+  //Generate the document key from the attachment data
+  let hashKey = md5(zipFile);
+  let docResourceKey: string | undefined;
+  //Determine whether that key already exists
+  await oada.get({
+    path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`
+  })
+  .then(async (r) => {
+    docResourceKey = r.headers['content-location']!.replace(/^\/resources\//, '');
+  // if it is there, remove it so it can be re-added to trigger a new target job
+    await oada.delete({
+      path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`,
+    })
+    trace(`Partial JSON already exists at /resources/${docResourceKey}`);
+  })
+  .catch(async (error_) => {
+    if (error_.status !== 404) throw error_;
+    await oada.post({
       path: `/resources`,
       data: document,
       contentType: docType,
+    }).then((r) => {
+      docResourceKey = r.headers['content-location']!.replace(/^\/resources\//, '');
     })
-    .then((r) => r.headers['content-location']!.replace(/^\/resources\//, ''));
-  trace(`Partial JSON created at /resources/${documentKey}`);
+    trace(`Partial JSON created at /resources/${docResourceKey}`);
+  });
 
   // First, overwrite what is currently there if previous pdfs vdocs had been linked
   await axios({
@@ -683,8 +700,6 @@ export async function postTpDocument({
       throw new Error(
         `Failed to acquire file key while handling pending document`
       );
-    // Make a hash of the file name because the file names themselves might not be
-    // safe for oada or client
     const fileHash = md5(fKey);
 
     // 2. Fetch mirror and pdf resource id
@@ -782,7 +797,7 @@ export async function postTpDocument({
     );
 
     await oada.put({
-      path: `resources/${documentKey}/_meta`,
+      path: `resources/${docResourceKey}/_meta`,
       data: {
         vdoc: { pdf: { [fileHash]: { _id: pdfId, _rev: 0 } } },
       },
@@ -793,19 +808,48 @@ export async function postTpDocument({
     );
   }
 
+  // Now that the pdf is in place, drop the document to generate a target job
   await oada.put({
     path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}`,
     data: {
-      [documentKey]: { _id: `resources/${documentKey}`, _rev: 0 },
+      [hashKey]: { _id: `resources/${docResourceKey}`, _rev: 0 },
     },
     tree,
   });
   info(
-    `Created partial JSON in docs list: ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${documentKey}`
+    `Created partial JSON in docs list: ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`
   );
 
+  /* Watch the pdf resource _meta and wait for the target job to arrive
+  const { changes } = await connection.watch({
+    path: `/resources/${pdfId}/_meta`
+    rev: 1, // optional
+  });
+
+  // Async iterator for all changes since the watch was started (or since `rev`)
+  for await (const change of changes) {
+    if (_.has(change, '/services/target/jobs')) {
+      console.log('Found change:', change);
+      let ch = _.get(change, '/services/target/jobs');
+      let jobKey = Object.keys(ch)[0];
+      const { changes: metaChanges } = await connection.watch({
+        path: `/resources/${jobKey}`
+      });
+
+      for await (const metaChange of metaChanges) {
+        await onTargetChange(metaChange, documentKey)
+        // When updates come along, keep watching.
+        // When the status is updated, stop watching because the job is done.
+        metaChanges.return();
+        changes.return();
+        break;
+      })
+    }
+  }
+   */
+
   return {
-    docKey: documentKey,
+    docKey: hashKey,
     docType,
     type,
   };
