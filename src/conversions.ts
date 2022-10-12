@@ -60,10 +60,9 @@ export async function flToTrellis(flDocument: FlObject) {
   }
 
   //Handle document date separately. This is required for LF.
-  if (!document.document_date) {
-    document.document_date =
-      document.effective_date ||
-      _.get(flDocument, 'versionInfo.createdAt').slice(0, 10);
+  if (!document.document_date && document.effective_date) {
+    document.document_date = document.effective_date;// ||
+//      _.get(flDocument, 'versionInfo.createdAt').slice(0, 10);
     info(
       `Setting document date from effective or create date: ${document.document_date}`
     );
