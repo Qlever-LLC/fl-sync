@@ -1,4 +1,4 @@
-**
+/*
  * @license
  * Copyright 2022 Qlever LLC
  *
@@ -23,7 +23,7 @@ import test from 'ava';
 
 import { setTimeout } from 'node:timers/promises';
 
-import {default as axios} from 'axios';
+import { default as axios } from 'axios';
 import moment from 'moment';
 
 import type { JsonObject, OADAClient } from '@oada/client';
@@ -56,23 +56,24 @@ let oada: OADAClient;
 test.before(async (t) => {
   t.timeout(60_000);
   oada = await connect({ domain: DOMAIN, token: TOKEN });
-  oada.put({
+  await oada.put({
     path: `${SERVICE_PATH}/_meta/oada-poll/food-logiq-poll`,
     // Tree,
     data: { lastPoll: moment().subtract(1, 'minutes').utc().format() },
   });
   // Blow away the existing jobs queue
-  const jobKeys = await oada
-    .get({
+  let jobKeys;
+  try {
+    const r = await oada.get({
       path: `${SERVICE_PATH}/jobs/pending`,
-    })
-    .then((r) =>
-      Object.keys(r.data ?? {}).filter((key) => !key.startsWith('_'))
-    )
-    .catch((error) => {
-      if (error.status !== 404) throw error;
-      return [];
     });
+    jobKeys = Object.keys(r.data ?? {}).filter((key) => !key.startsWith('_'));
+  } catch (error: unknown) {
+    // @ts-expect-error error type
+    if (error.status !== 404) throw error;
+    return [];
+  }
+
   await Promise.all(
     jobKeys.map(async (jobKey) => {
       await oada.delete({
@@ -108,6 +109,7 @@ test.before(async (t) => {
     mirrorWatch: true,
     watchConfig: true,
   });
+  return oada;
 });
 
 test.skip('Should fail and warn suppliers when multiple PDFs are attached on COI documents.', async (t) => {
