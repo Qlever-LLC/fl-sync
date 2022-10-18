@@ -37,10 +37,10 @@ import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
 import {
-  getLookup,
+  targetWatchOnAdd,
   handleAssessmentJob,
   handleDocumentJob,
-  onTargetChange,
+  targetWatchOnChange,
   startJobCreator,
 } from './mirrorWatch.js';
 import type { FlObject } from './mirrorWatch.js';
@@ -147,8 +147,8 @@ async function watchTargetJobs() {
     name: `target-jobs-fl-sync`,
     conn: CONNECTION,
     resume: true,
-    onAddItem: getLookup,
-    onChangeItem: onTargetChange,
+    onAddItem: targetWatchOnAdd,
+    onChangeItem: targetWatchOnChange,
   });
   process.on('beforeExit', async () => {
     await watch.stop();
@@ -597,6 +597,8 @@ export async function initialize({
       info('Started fl-sync mirror handler.');
     }
 
+    // Target is watched after restarting any queued fl-sync jobs and setting up
+    // the appropriate watches
     if (target === undefined || target) {
       await watchTargetJobs();
       info('Started target jobs handler.');
