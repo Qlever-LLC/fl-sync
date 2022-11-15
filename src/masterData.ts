@@ -26,14 +26,13 @@ import debug from 'debug';
 import type { JsonObject, OADAClient } from '@oada/client';
 import { ListWatch } from '@oada/list-lib';
 import type Resource from '@oada/types/oada/resource.js';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 
 import tree from './tree.masterData.js';
 
 const { sha256 } = SHA256;
 
-const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
-const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
+const SERVICE_NAME = config.get('service.name');
+const SERVICE_PATH = config.get('service.path');
 // TL_TP: string = config.get('trellis.endpoints.service-tp');
 const TL_TP = `/bookmarks/trellisfw/trading-partners`;
 const TL_TP_MI = `${TL_TP}/masterid-index`;

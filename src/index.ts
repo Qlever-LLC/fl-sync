@@ -32,7 +32,6 @@ import moment from 'moment';
 
 import type { Change, JsonObject, OADAClient } from '@oada/client';
 import { ListWatch } from '@oada/list-lib';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
@@ -60,8 +59,8 @@ const CONCURRENCY = config.get('trellis.concurrency');
 // Const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 // const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; // FL polling interval
-const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
-const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const SERVICE_PATH = config.get('service.path');
+const SERVICE_NAME = config.get('service.name');
 const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
 const REPORT_EMAIL = config.get('trellis.reportEmail');
 const REPORT_CC_EMAIL = config.get('trellis.reportCcEmail');

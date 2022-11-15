@@ -26,7 +26,6 @@ import debug from 'debug';
 import moment from 'moment';
 
 import type { JsonObject, OADAClient } from '@oada/client';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 
 import tree from './tree.js';
 
@@ -35,8 +34,8 @@ const FL_TOKEN = config.get('foodlogiq.token');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 // Const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 // const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
-const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
-const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const SERVICE_PATH = config.get('service.path');
+const SERVICE_NAME = config.get('service.name');
 
 const info = debug('fl-sync:info');
 const error = debug('fl-sync:error');
