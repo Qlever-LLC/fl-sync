@@ -27,13 +27,12 @@ import sql from 'mssql';
 import xlsx from 'xlsx';
 
 import type { OADAClient } from '@oada/client';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 import { poll } from '@oada/poll';
 
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const CO_ID = config.get('foodlogiq.community.owner.id');
-const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
+const SERVICE_PATH = config.get('service.path');
 const { database, server, user, password, port, interval, table } =
   config.get('incidents');
 const SQL_MAX_VALUE = 9_007_199_254_740_991;

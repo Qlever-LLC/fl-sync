@@ -33,7 +33,6 @@ import type { Change, JsonObject, OADAClient } from '@oada/client';
 import type { Job, WorkerFunction } from '@oada/jobs';
 import { JobError, postUpdate } from '@oada/jobs';
 import { Change as ListChange, ListWatch } from '@oada/list-lib';
-import type { TreeKey } from '@oada/list-lib/dist/Tree.js';
 
 import { flToTrellis, fromOadaType } from './conversions.js';
 import { linkAssessmentToDocument, spawnAssessment } from './assessments.js';
@@ -57,8 +56,8 @@ const error = debug('fl-sync:mirror-watch:error');
 const trace = debug('fl-sync:mirror-watch:trace');
 const warn = debug('fl-sync:mirror-watch:warn');
 
-const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
-const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const SERVICE_PATH = config.get('service.path');
+const SERVICE_NAME = config.get('service.name');
 const pending = `${SERVICE_PATH}/jobs/pending`;
 const MASTERID_INDEX_PATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
 const targetToFlSyncJobs = new Map<string, { jobKey: string; jobId: string }>();
@@ -661,7 +660,7 @@ export async function postTpDocument({
   trace(`Generated translated partial JSON for mirror with docType ${docType}`);
 
   //Generate the document key from the attachment data
-  let hashKey = md5(zipFile);
+  let hashKey = md5(JSON.stringify(item));
   let docResourceKey: string | undefined;
 
   // If the trading-partner doc already exists, return the existing key
@@ -680,7 +679,7 @@ export async function postTpDocument({
       // The fl-sync job is probably being resumed, but a target job does not
       // exist. Relink into the trading-partner list. This shouldn't really ever
       // happen though...
-      error(`[postTpDocument] trading-partner doc already exists [key: ${hashKey}], but target job could not be found in the job.`);
+      info(`[postTpDocument] trading-partner doc already exists [key: ${hashKey}], but target job could not be found in the job.`);
       await oada.delete({
         path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`,
       })
@@ -691,6 +690,7 @@ export async function postTpDocument({
         },
         tree,
       })
+      info(`[postTpDocument] deleted and rePUT doc at ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`)
     }
     return type;
   } catch(error_: unknown) {
