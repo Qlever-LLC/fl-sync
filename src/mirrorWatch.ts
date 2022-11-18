@@ -267,7 +267,7 @@ export async function targetWatchOnAdd(item: any, key: string) {
  * @returns
  */
 export async function targetWatchOnChange(change: Change, targetJobKey: string) {
-  trace(`Received update for job [${targetJobKey}]`);
+  trace(`Received Target update for job [${targetJobKey}]`);
 
   //1. Ensure the change is associated to an fl-sync job. If fl-sync restarted
   // after the target job was created, we've lost the opportunity to call onAddItem.
@@ -665,7 +665,7 @@ export async function postTpDocument({
 
   // If the trading-partner doc already exists, return the existing key
   try {
-    let r = await oada.get({
+    let r = await oada.head({
       path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`
     })
     trace(`Partial JSON already exists for hashKey ${hashKey} at /resources/${docResourceKey}`);
@@ -675,6 +675,8 @@ export async function postTpDocument({
     if (targetJobKey) {
       targetToFlSyncJobs.set(targetJobKey, { jobKey, jobId });
       info(`Noted target job ${targetJobKey} in fl-sync job ${jobId} in postTpDocument.`);
+      // TODO: The target job is noted, but what if the target watch is already
+      // beyond the relevant changes. This will never finish...
     } else {
       // The fl-sync job is probably being resumed, but a target job does not
       // exist. Relink into the trading-partner list. This shouldn't really ever
@@ -702,7 +704,7 @@ export async function postTpDocument({
       contentType: docType,
     })
     docResourceKey = r.headers['content-location']!.replace(/^\/resources\//, '');
-    trace(`Partial JSON created at /resources/${docResourceKey}`);
+    trace(`Doc for hashKey ${hashKey} did not exist. Partial JSON created at /resources/${docResourceKey}`);
 
     // First, overwrite what is currently there if previous pdfs vdocs had been linked
     await axios({
@@ -718,7 +720,7 @@ export async function postTpDocument({
         'authorization': `Bearer ${TRELLIS_TOKEN}`,
       },
     });
-    trace(`Reset pdf vdoc reference into FL mirror _meta of FL _id: ${item._id}`);
+    trace(`Reset pdf vdoc reference in mirror metadata of FL _id: ${item._id}`);
 
     for await (const fKey of files) {
       if (!fKey)
@@ -854,7 +856,6 @@ export async function postTpDocument({
     // Async iterator for all changes since the watch was started (or since `rev`)
     for await (const change of changes) {
       if (_.has(change, '/services/target/jobs')) {
-        console.log('Found change:', change);
         let ch = _.get(change, '/services/target/jobs');
         let jobKey = Object.keys(ch)[0];
         // Now, set a watch on the target job
@@ -1010,6 +1011,14 @@ export const handleDocumentJob: WorkerFunction = async (
   }
 }; // HandleDocumentJob
 
+function findMetaJob(metaJobs: string[]) {
+  let matchJobs = [ ...flSyncJobs.keys() ]
+    .map(key => key.replace(/^resources\//, ''))
+    .filter(key => metaJobs.indexOf(key) > -1);
+  if (matchJobs.length > 1) error('Multiple jobs from _meta are currently active. Finishing the most recent one...')
+  return mostRecentKsuid(matchJobs);
+}
+
 // The new one
 async function finishDocument(
   item: FlObject,
@@ -1031,7 +1040,8 @@ async function finishDocument(
 
     if (!jobs || !isObj(jobs))
       throw new Error('Bad _meta target jobs during finishDoc');
-    const jobKey = mostRecentKsuid(Object.keys(jobs));
+    const jobKey = findMetaJob(Object.keys(jobs));
+    //const jobKey = mostRecentKsuid(Object.keys(jobs));
     if (!jobKey || !jobs)
       throw new Error('Most recent KSUID Key had no link _id');
 
@@ -1054,9 +1064,7 @@ async function finishDocument(
     })) as { data: JsonObject };
     const result = data.result as unknown as Record<string, any>;
 
-    // TODO: Move the doc into the trading-partner bookmarks anyways. The thing
-    // was approved, so get it in there
-
+    // TODO: Move the doc into the trading-partner bookmarks anyways.
     let type = Object.keys(result || {})[0];
     if (result && result.name && result.name === 'TimeoutError') {
       type = undefined;
@@ -1087,6 +1095,8 @@ async function finishDocument(
     info(
       `Moving approved document to [${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`
     );
+    //TODO: This is fine as is, but if trading-partners were to change the /shared
+    // document, the /bookmarks version would be approved
     await CONNECTION.put({
       path: `${MASTERID_INDEX_PATH}/${masterid}/bookmarks/trellisfw/documents/${type}`,
       data: {},
@@ -1350,7 +1360,8 @@ async function handleScrapedResult(targetJobKey: string) {
         info(
           `Assessment with id [${assessmentId}] already exists for document _id [${flId}].`
         );
-      } else if (!assessmentId) {
+        assessmentToFlId.set(assessmentId as string, { jobId, mirrorid, flId });
+      } else {
         info(`Assessment does not yet exist for document _id [${flId}.`);
       }
 
@@ -1366,7 +1377,10 @@ async function handleScrapedResult(targetJobKey: string) {
           assessmentId
         );
 
-        if (!assessmentId) assessmentId = assess.data._id;
+        if (!assessmentId) {
+          assessmentId = assess.data._id;
+          assessmentToFlId.set(assessmentId as string, { jobId, mirrorid, flId });
+        }
       } catch (cError: unknown) {
         // @ts-expect-error stupid errors
         if (cError.response.status === 422) {
@@ -1406,7 +1420,6 @@ async function handleScrapedResult(targetJobKey: string) {
       );
 
       if (assessmentId) {
-        assessmentToFlId.set(assessmentId, { jobId, mirrorid, flId });
         await CONNECTION.put({
           path: `/resources/${jobKey}/assessments/${ASSESSMENT_TEMPLATE_ID}`,
           data: { id: assessmentId } as any,
@@ -1419,7 +1432,7 @@ async function handleScrapedResult(targetJobKey: string) {
     }
 
     info(
-      `Job result stored at trading partner ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/${type}/${key}`
+      `Job result stored at trading partner ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${type}/${key}`
     );
   } catch (cError: unknown) {
     error(cError);
