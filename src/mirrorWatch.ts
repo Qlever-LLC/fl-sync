@@ -1331,9 +1331,9 @@ async function handleScrapedResult(targetJobKey: string) {
         )
       ) {
         //@ts-ignore
-        info('222222!!!!!!!', type, rejectable[type]);
         //@ts-ignore
         if (rejectable[type]) {
+          info(`Document type ${type} was rejectable. Rejecting`);
           await rejectFlDocument(flId, jobId, validationResult?.message);
         }
       }

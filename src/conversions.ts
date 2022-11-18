@@ -94,7 +94,12 @@ export async function flToTrellis(flDocument: FlObject) {
   };
 }
 
-export const conversions = {
+const conversions = {
+  'Unidentified': {
+    name: 'Unidentified',
+    urlName: 'unidentified',
+    type: 'application/vnd.trellisfw.unidentified',
+  },
   'ACH Form': {
     name: 'ACH Form',
     urlName: 'ach-forms',
@@ -109,6 +114,9 @@ export const conversions = {
     name: 'Pure Food Guaranty and Indemnification Agreement (LOG)',
     urlName: 'pfgias',
     type: 'application/vnd.trellisfw.pfgia.1+json',
+    alternativeNames: [
+      'Signed Smithfield Pure Food Guaranty and Indemnification Agreement (PFGIA)',
+    ],
   },
   'Letter of Guarantee': {
     name: 'Letter of Guarantee',
@@ -135,7 +143,7 @@ export const conversions = {
   },
   '100g Nutritional Information': {
     name: '100g Nutritional Information',
-    urlName: '100g-nutritional-information',
+    urlName: 'nutritional-information',
     type: 'application/vnd.trellisfw.nutritional-information.1+json',
     alternativeNames: ['Nutrition Information'],
   },
@@ -150,6 +158,11 @@ export const conversions = {
     urlName: 'be-ingredient-statements',
     type: 'application/vnd.trellisfw.be-ingredient-statement.1+json',
   },
+  'Ingredient Statement': {
+    name: 'Ingredient Statement',
+    urlName: 'ingredient-statements',
+    type: 'application/vnd.trellisfw.ingredient-statement.1+json',
+  },
   'California Prop 65 Statement': {
     name: 'California Prop 65 Statement',
     urlName: 'ca-prop-65-statements',
@@ -163,7 +176,7 @@ export const conversions = {
   'Gluten Statement': {
     name: 'Gluten Statement',
     urlName: 'gluten-statements',
-    type: 'application/vnd.trellisfw.gluten-statement.1+json',
+    type: 'application/vnd.trellisfw.gluten-claim-statement.1+json',
     alternativeNames: ['Gluten Claim'],
   },
   'Ingredient Breakdown Range %': {
@@ -200,13 +213,18 @@ export const conversions = {
   },
   'GFSI Certificate': {
     name: 'GFSI Certificate',
-    urlName: 'fsqa-certificates',
-    type: 'application/vnd.trellisfw.fsqa-certificates.1+json',
+    urlName: 'gfsi-certificates',
+    type: 'application/vnd.trellisfw.gfsi-certificate.1+json',
   },
   'Non-Ambulatory (3D/4D) Animal Statement': {
     name: 'Non-Ambulatory (3D/4D) Animal Statement',
     urlName: 'animal-statements',
     type: 'application/vnd.trellisfw.animal-statement.1+json',
+  },
+  'Specified Risk Materials (SRM) Statement / Audit': {
+    name: 'Specified Risk Materials (SRM) Statement / Audit',
+    urlName: 'srm-statements-audits',
+    type: 'application/vnd.trellisfw.srm-statement-audit.1+json',
   },
   'Specified Risk Materials (SRM) Audit': {
     name: 'Specified Risk Materials (SRM) Audit',
@@ -231,7 +249,7 @@ export const conversions = {
   'Foreign Material Control Plan': {
     name: 'Foreign Material Control Plan',
     urlName: 'foreign-material-control-plans',
-    type: 'application/vnd.trellisfw.foreign-material-control-plans.1+json',
+    type: 'application/vnd.trellisfw.foreign-material-control-plan.1+json',
   },
   'Animal Welfare Audit': {
     name: 'Animal Welfare Audit',
@@ -289,15 +307,25 @@ export const conversions = {
     urlName: 'tpa-corrective-actions',
     type: 'application/vnd.trellisfw.tpa-corrective-actions.1+json',
   },
+  'Third Party Food Safety GMP Audit': {
+    name: 'Third Party Food Safety GMP Audit',
+    urlName: 'tpa-food-safety-audits',
+    type: 'application/vnd.trellisfw.tpa-food-safety-audit.1+json',
+  },
+  'Third Party Animal Welfare Audit': {
+    name: 'Third Party Animal Welfare Audit',
+    urlName: 'tpa-animal-welfare-audits',
+    type: 'application/vnd.trellisfw.tpa-animal-welfare-audit.1+json',
+  },
+  'Third Party Animal Welfare Corrective Actions': {
+    name: 'Third Party Animal Welfare Corrective Actions',
+    urlName: 'tpa-animal-welfare-corrective-actions',
+    type: 'application/vnd.trellisfw.tpa-animal-welfare-corrective-actions.1+json',
+  },
   'W-8': {
     name: 'W-8',
     urlName: 'w-8s',
     type: 'application/vnd.trellisfw.w-8.1+json',
-  },
-  'Third Party Food Safety GMP Audit': {
-    name: 'Third Party Food Safety GMP Audit',
-    urlName: 'fsqa-audits',
-    type: 'application/vnd.trellisfw.fsqa-audit.1+json',
   },
   'Animal Welfare Corrective Actions': {
     name: 'Animal Welfare Corrective Actions',
@@ -308,6 +336,11 @@ export const conversions = {
     name: 'Third Party Food Safety GMP Certificate',
     urlName: 'fsqa-certificates',
     type: 'application/vnd.trellisfw.fsqa-certificate.1+json',
+  },
+  'Signed Vendor Acknowledgement Form': {
+    name: 'Signed Vendor Acknowledgement Form',
+    urlName: 'signed-vendor-acknowledgement-forms',
+    type: 'application/vnd.trellisfw.signed-vendor-acknowledgement-form.1+json',
   },
   'Small Business Administration (SBA) Form': {
     name: 'Small Business Administration (SBA) Form',
@@ -323,6 +356,11 @@ export const conversions = {
     name: 'E.Coli 0157:H7 Intervention Statement',
     urlName: 'ecoli-statements',
     type: 'application/vnd.trellisfw.ecoli-statement.1+json',
+  },
+  'E.Coli 0157:H7 Intervention Statement / Audit': {
+    name: 'E.Coli 0157:H7 Intervention Statement / Audit',
+    urlName: 'ecoli-intervention-statements-audits',
+    type: 'application/vnd.trellisfw.ecoli-intervention-statement-audits.1+json',
   },
   'Business License': {
     name: 'Business License',
