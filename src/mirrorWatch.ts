@@ -685,6 +685,12 @@ export async function postTpDocument({
       await oada.delete({
         path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`,
       })
+      //TODO: 11/21/2022 - Two separate puts for now.
+      await oada.put({
+        path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}`,
+        data: {},
+        tree,
+      })
       await oada.put({
         path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}`,
         data: {
@@ -692,6 +698,7 @@ export async function postTpDocument({
         },
         tree,
       })
+
       info(`[postTpDocument] deleted and rePUT doc at ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`)
     }
     return type;
@@ -836,6 +843,12 @@ export async function postTpDocument({
     }
 
     // Now that the pdf is in place, drop the document to generate a target job
+    await oada.put({
+      path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}`,
+      data: {},
+      tree,
+    });
+
     await oada.put({
       path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}`,
       data: {
