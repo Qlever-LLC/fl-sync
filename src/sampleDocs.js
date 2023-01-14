@@ -436,7 +436,7 @@ export default {
               category: 'FSQA',
             },
             approvalInfo: {
-              status: 'awaiting-review',
+              status: 'Awaiting Approval',
               setAt: null,
               setBy: null,
             },
@@ -957,7 +957,7 @@ export default {
               category: 'FSQA',
             },
             approvalInfo: {
-              status: 'awaiting-review',
+              status: 'Awaiting Approval',
               setAt: null,
               setBy: null,
             },

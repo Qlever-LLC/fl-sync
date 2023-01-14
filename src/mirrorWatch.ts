@@ -49,7 +49,9 @@ const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const ASSESSMENT_TEMPLATE_ID = config.get('foodlogiq.assessment-template.id');
 const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
+const APPROVAL_TRELLIS_USER= config.get('foodlogiq.capaTrellisUser');
 const CO_ID = config.get('foodlogiq.community.owner.id');
+const COMMUNITY_ID = config.get('foodlogiq.community.id');
 
 const info = debug('fl-sync:mirror-watch:info');
 const error = debug('fl-sync:mirror-watch:error');
@@ -340,7 +342,7 @@ async function handleTargetStatus(
         item,
         indexConfig.bid,
         indexConfig.masterid,
-        'approved'
+        'Approved'
       );
     }
 
@@ -383,7 +385,7 @@ async function handleTargetStatus(
         item,
         indexConfig.bid,
         indexConfig.masterid,
-        'approved'
+        'Approved'
         // 'failed'// ? or should it be 'rejected'?
       );
       //     }
@@ -445,14 +447,14 @@ async function handleTargetStatus(
 
 async function handleTargetUpdates(change: Change, key: string) {
   for await (const value of Object.values(change?.body?.updates ?? {})) {
-    let details;
+    let comment;
     //@ts-ignore
     switch (value.status) {
       case 'started':
         break;
       case 'error':
         //@ts-ignore
-        //details = value.information;
+        //comment= value.information;
         break;
       case 'identified':
       case 'success':
@@ -461,15 +463,14 @@ async function handleTargetUpdates(change: Change, key: string) {
         break;
     }
 
-    if (details) {
-      info(`Posting new update to FL docId ${key}: ${details}`);
+    if (comment) {
+      info(`Posting new update to FL docId ${key}: ${comment}`);
       await axios({
         method: 'post',
-        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${key}/capa`,
+        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/documents/${key}/comments`,
         headers: { Authorization: FL_TOKEN },
         data: {
-          details,
-          type: 'change_request',
+          comment,
         },
       });
     }
@@ -484,7 +485,7 @@ async function approveFlDocument(documentId: string, jobId: string) {
   info(`Approving associated FL Doc ${documentId}`);
   await axios({
     method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus/approved`,
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
     headers: { Authorization: FL_TOKEN },
     data: {
       status: 'Approved',
@@ -493,7 +494,7 @@ async function approveFlDocument(documentId: string, jobId: string) {
 
   await CONNECTION.put({
     path: `/${jobId}`,
-    data: { 'foodlogiq-result-status': 'approved' },
+    data: { 'foodlogiq-result-status': 'Approved' },
   });
 } // ApproveFlDoc
 
@@ -660,7 +661,7 @@ export async function postTpDocument({
   trace(`Generated translated partial JSON for mirror with docType ${docType}`);
 
   //Generate the document key from the attachment data
-  let hashKey = md5(JSON.stringify(item));
+  let hashKey = md5(JSON.stringify(item)); //unique to every version of that fl document
   let docResourceKey: string | undefined;
 
   // If the trading-partner doc already exists, return the existing key
@@ -668,8 +669,8 @@ export async function postTpDocument({
     let r = await oada.head({
       path: `${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`
     })
-    trace(`Partial JSON already exists for hashKey ${hashKey} at /resources/${docResourceKey}`);
     docResourceKey = r.headers['content-location']!.replace(/^\/resources\//, '');
+    trace(`Partial JSON already exists for hashKey ${hashKey} at /resources/${docResourceKey}`);
     //@ts-expect-error Job type doesn't allow other top-level keys, apparently.
     const targetJobKey = mostRecentKsuid(Object.keys(job.config['target-jobs'] || {}));
     if (targetJobKey) {
@@ -924,7 +925,7 @@ export const handleDocumentJob: WorkerFunction = async (
   const jobId: string = job.oadaId;
   let flType: string;
   try {
-    info('handleDocumentJob processing pending FL document [%s]', key);
+    info('handleDocumentJob processing pending FL document [%s]', `${SERVICE_NAME}/businesses/${bid}/documents/${key}`);
 
     const itemData = await oada
       .get({
@@ -1039,7 +1040,7 @@ async function finishDocument(
   masterid: string,
   status: string
 ) {
-  if (status === 'approved') {
+  if (status === 'Approved') {
     info(`Finishing doc: [${item._id}] with status [${status}] `);
     // 1. Get reference of corresponding pending scraped pdf
     const jobs = await CONNECTION.get({
@@ -1462,35 +1463,22 @@ async function rejectFlDocument(
   message?: string
 ) {
   info(`Rejecting FL document [${documentId}]. ${message}`);
-  // Post message regarding error
-  await axios({
-    method: 'post',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/capa`,
-    headers: { Authorization: FL_TOKEN },
-    data: {
-      details: `${message} Please correct and resubmit or reach out to the Smithfield FSQA team.`,
-      type: 'change_request',
-    },
-  });
-
-  await axios({
-    method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/submitCorrectiveActions`,
-    headers: { Authorization: FL_TOKEN },
-    data: {},
-  });
 
   // Reject to FL
   await axios({
     method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus/rejected`,
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
     headers: { Authorization: FL_TOKEN },
-    data: { status: 'Rejected' },
+    data: { 
+      status: 'Rejected',
+      comment: `${message} Please correct and resubmit or reach out to the Smithfield FSQA team`,
+      visibleForSupplier: true
+    },
   });
   await CONNECTION.put({
     path: `/${jobId}`,
     data: {
-      'foodlogiq-result-status': 'rejected',
+      'foodlogiq-result-status': 'Rejected',
     },
   });
 } // RejectFlDoc
@@ -1616,12 +1604,12 @@ async function queueAssessmentJob(change: ListChange, path: string) {
 
     const status = item.state;
     const approvalUser = item?.lastUpdate?.userId;
-    const usersEqual = approvalUser === FL_TRELLIS_USER;
+    const usersEqual = approvalUser === FL_TRELLIS_USER || approvalUser === APPROVAL_TRELLIS_USER;
     info(
       `approvalInfo user ${
         usersEqual
           ? 'matches our user'
-          : `[${approvalUser}] does not match our user: [${FL_TRELLIS_USER}]`
+          : `[${approvalUser}] does not match our users: [${FL_TRELLIS_USER} or ${APPROVAL_TRELLIS_USER}]`
       }`
     );
 
@@ -1809,7 +1797,8 @@ async function queueDocumentJob(data: ListChange, path: string) {
     const approvalUser = _.get(item, `shareSource.approvalInfo.setBy._id`);
     info(
       `approvalInfo user: ${approvalUser} (${
-        approvalUser === FL_TRELLIS_USER ? 'Was us.' : 'Was NOT us'
+        approvalUser === FL_TRELLIS_USER || approvalUser === APPROVAL_TRELLIS_USER
+          ? 'Was us.' : 'Was NOT us'
       }). Status: ${status}. id: ${item._id}`
     );
 
@@ -1828,29 +1817,30 @@ async function queueDocumentJob(data: ListChange, path: string) {
       'link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${item._id}`,
     };
 
-    if (status === 'awaiting-review') {
+    console.log('STATUS IS', status);
+    if (status === 'Awaiting Approval') {
       // 2a. Create new job and link into jobs list and fl doc meta
-      await postJob(CONNECTION, jobConf, 'awaiting-review');
-    } else if (approvalUser === FL_TRELLIS_USER) {
+      await postJob(CONNECTION, jobConf, 'Awaiting Approval');
+    } else if (approvalUser === FL_TRELLIS_USER || approvalUser === APPROVAL_TRELLIS_USER) {
       info(`Document ${item._id} approvalUser was Trellis. Calling finishDoc`);
       // 2b. Approved or rejected by us. Finish up the automation
       await finishDocument(item, bid, masterid, status);
     } else {
       // 2c. Document handled by others
-      if (status === 'approved') {
+      if (status === 'Approved') {
         info(
-          `Document ${item._id} approvalUser was not us. Status approved. Reprocessing what we can and usering to completion.`
+          `Document ${item._id} approvalUser was not us. Status ${status}. Reprocessing what we can and usering to completion.`
         );
         // Run it through target and move it to trading-partner /bookmarks
         info(
           `Document ${item._id} bid ${bid} approved by user ${approvalUser}. Ushering document through...`
         );
         jobConf['allow-rejection'] = false;
-        await postJob(CONNECTION, jobConf, 'approved');
+        await postJob(CONNECTION, jobConf, status);
       } else {
         // If (status === "rejected" || status === "incomplete") {
         info(
-          `Document ${item._id} approvalUser was not us. status !== approved. Skipping.`
+          `Document ${item._id} approvalUser was not us. status !== Approved. Skipping.`
         );
       }
 
