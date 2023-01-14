@@ -48,7 +48,7 @@ async function generateReport() {
         items: [],
       },
       a4: {
-        description: 'Document awaiting-review',
+        description: 'Document Awaiting Approval',
         count: 0,
         items: [],
       },
@@ -348,7 +348,7 @@ async function generateReport() {
             pointer.get(
               document,
               `/food-logiq-mirror/shareSource/approvalInfo/status`
-            ) === 'awaiting-review'
+            ) === 'Awaiting Approval'
           ) {
             object.a.a4.count++;
             object.a.a4.items.push({

@@ -358,19 +358,19 @@ export async function makeFinalReport() {
           finalReport.missingFlSyncJob,
       },
       awaiting: {
-        'total': finalReport.flStatuses['awaiting-review'].total,
+        'total': finalReport.flStatuses['Awaiting Approval'].total,
         'target-unrecognized': finalReport['job-errors']['target-unrecognized'],
         'target-validation': finalReport['job-errors']['target-validation'],
         'target-other': finalReport['job-errors']['target-other'],
         'missingFlSyncJob':
-          finalReport.flStatuses['awaiting-review'].missingFlSyncJob,
+          finalReport.flStatuses['Awaiting Approval'].missingFlSyncJob,
         'bad-fl-attachments': finalReport['job-errors']['bad-fl-attachments'],
         'otherErrors': finalReport.otherErrors,
         'sum':
           finalReport['job-errors']['target-validation'] +
           finalReport['job-errors']['target-unrecognized'] +
           finalReport['job-errors']['target-other'] +
-          finalReport.flStatuses['awaiting-review'].missingFlSyncJob +
+          finalReport.flStatuses['Awaiting Approval'].missingFlSyncJob +
           finalReport['job-errors']['bad-fl-attachments'] +
           finalReport.otherErrors,
       },
