@@ -83,6 +83,13 @@ const config = convict({
       arg: 'watchConfigService',
     },
   },
+  skipQueueOnStartup: {
+    doc: 'Skip existing jobs queue on startup; useful for debugging',
+    default: false,
+    format: Boolean,
+    env: 'SKIP_JOBS_QUEUE_STARTUP',
+    arg: 'skipQueueOnStartup',
+  },
   delay: {
     doc: 'amount to delay between pages of documents',
     default: 0,

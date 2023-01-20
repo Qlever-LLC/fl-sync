@@ -66,6 +66,7 @@ const REPORT_EMAIL = config.get('trellis.reportEmail');
 const REPORT_CC_EMAIL = config.get('trellis.reportCcEmail');
 const REPORT_REPLYTO_EMAIL = config.get('trellis.reportReplyToEmail');
 const services = config.get('services');
+const skipQueueOnStartup = config.get('skipQueueOnStartup');
 
 const info = debug('fl-sync:info');
 const trace = debug('fl-sync:trace');
@@ -556,6 +557,7 @@ export async function initialize({
       const svc = new Service({
         name: SERVICE_NAME,
         oada: CONNECTION,
+        opts: { skipQueueOnStartup },
       });
 
       // Set the job type handlers
@@ -612,9 +614,11 @@ export async function initialize({
 
 function prepEmail() {
   const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
+  if (!REPORT_EMAIL) throw new Error('REPORT_EMAIL is required for prepEmail');
+  if (!REPORT_REPLYTO_EMAIL) throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
   return {
     from: 'noreply@trellis.one',
-    to: [REPORT_EMAIL, REPORT_CC_EMAIL],
+    to: REPORT_CC_EMAIL ? [REPORT_EMAIL, REPORT_CC_EMAIL] : [REPORT_EMAIL],
     replyTo: { email: REPORT_REPLYTO_EMAIL },
     subject: `Trellis Automation Report - ${date}`,
     text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
