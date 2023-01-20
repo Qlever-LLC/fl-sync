@@ -47,8 +47,8 @@ export async function validateResult(
 ) {
   info(`Validating pending doc [${trellisDocument._id}]; type: [${type}]`);
   try {
-    const flType = fromOadaType(type)!
-      .name as unknown as keyof typeof validation;
+    const flType = fromOadaType(type)
+      ?.name as unknown as keyof typeof validation;
     if (!flType || !validation[flType])
       throw new Error(`Validation of FL Type ${flType} unsupported`);
     return validation[flType](trellisDocument, flMirror);
