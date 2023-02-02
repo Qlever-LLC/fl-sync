@@ -494,23 +494,22 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/jobs@npm:^4.2.0":
+  version: 4.2.0
+  resolution: "@oada/jobs@npm:4.2.0"
   dependencies:
     "@ava/typescript": ^3.0.1
     "@oada/client": ^4.5.0
-    "@oada/list-lib": ^4.2.2
+    "@oada/list-lib": ^4.2.4
     "@oada/oadaify": ^2.1.0
     "@oada/types": ^3.3.0
     "@sindresorhus/is": ^5.3.0
-    "@types/tiny-json-http": ^7.3.1
     ava: ^5.1.1
     bluebird: ^3.7.2
     c8: ^7.12.0
     chalk: ^4.1.2
     clone-deep: ^4.0.1
-    color-json: ^3.0.0
+    color-json: ^3.0.2
     cron: ^2.2.0
     csvjson: ^5.1.0
     debug: ^4.3.4
@@ -518,14 +517,15 @@ __metadata:
     ksuid: ^3.0.0
     minimist: ^1.2.7
     moment: ^2.29.4
-    p-timeout: ^6.0.0
+    p-timeout: ^6.1.0
     serialize-error: ^11.0.0
     tiny-json-http: ^7.4.2
-    tslib: ^2.4.1
+    tslib: ^2.5.0
   bin:
     oada-jobs: ./src/cli.mjs
+  checksum: 3781e47b9b77818bb34f041c12387daa0aa9f302b0409c7a9f9cf348cbcffad77e4df6e580a581eac8baa08cddf27fafbb47199723ddc893e5b9e57d3d448afe
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@oada/list-lib@npm:3.0.9":
   version: 3.0.9
@@ -543,14 +543,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/list-lib@npm:^4.2.2":
-  version: 4.2.2
-  resolution: "@oada/list-lib@npm:4.2.2"
+"@oada/list-lib@npm:^4.2.4":
+  version: 4.2.4
+  resolution: "@oada/list-lib@npm:4.2.4"
   dependencies:
     "@oada/types": ^3.3.0
     abort-controller: ^3.0.0
     debug: ^4.3.4
-    eventemitter3: ^4.0.7
+    eventemitter3: ^5.0.0
     isomorphic-timers-promises: ^1.0.1
     json-ptr: ^3.1.1
     jsonpath-plus: ^7.2.0
@@ -558,7 +558,7 @@ __metadata:
     tslib: ^2.4.1
   peerDependencies:
     "@oada/client": ^4.3.2
-  checksum: 592173b9c9d07aab89cff507c050c1efb2b491bd6978c016f53fd544c97a9da1c7d5036f1a338cd6f1e270484d98fe34d0b648520f589609d227014ebc9629b8
+  checksum: 06d05e4ed5fec831793aa31ce218d327c40ec313820bad42296782dad7350858d21644f8bab78a606022e85b69cf614b72f8a600d43c0939ddf1bd390dc8f6f9
   languageName: node
   linkType: hard
 
@@ -631,7 +631,7 @@ __metadata:
   dependencies:
     "@ava/typescript": ^3.0.1
     "@oada/client": ^4.5.0
-    "@oada/jobs": ^4.1.4
+    "@oada/jobs": ^4.2.0
     "@oada/list-lib": 3.0.9
     "@oada/poll": ^1.0.4
     "@oada/types": ^3.2.1
@@ -982,13 +982,6 @@ __metadata:
   dependencies:
     "@types/node": "*"
   checksum: 6862b43274852aebedd86387ddb2382661240ad417de3a02674b9d38bbe8dfc94754fbb7387c4fb296674fff2144e090ad9fcbc0b073b1b00cea9007304e49d1
-  languageName: node
-  linkType: hard
-
-"@types/tiny-json-http@npm:^7.3.1":
-  version: 7.3.1
-  resolution: "@types/tiny-json-http@npm:7.3.1"
-  checksum: 98ccbb7d8cb43e363dcde88dd13fb5d630fccb8a649936afc1fd294595027bd6517a36515df4ae01b6a68008e24f1be6ae56d1f4f69784edf3446a4870d3d9f4
   languageName: node
   linkType: hard
 
@@ -2260,10 +2253,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"color-json@npm:^3.0.0":
-  version: 3.0.0
-  resolution: "color-json@npm:3.0.0"
-  checksum: 3038b8f2d41da73ca4e3727bf21b20293f27630470025fd17a198fde319d9661ec07d56e8df9e1a820865a0c55ddf4a5e6cf0e79d560043994f8fefc58649203
+"color-json@npm:^3.0.2":
+  version: 3.0.2
+  resolution: "color-json@npm:3.0.2"
+  checksum: 6f0cf2c5a14b4d6f9802a390620c11f7f31a7cc9ce0b81b286ae32b36776923cd0a5bde79b1896e7ab08e61f889c64ffd58ac8dc8844e5362319f5072ff820eb
   languageName: node
   linkType: hard
 
@@ -3519,6 +3512,13 @@ __metadata:
   version: 4.0.7
   resolution: "eventemitter3@npm:4.0.7"
   checksum: 1875311c42fcfe9c707b2712c32664a245629b42bb0a5a84439762dd0fd637fc54d078155ea83c2af9e0323c9ac13687e03cfba79b03af9f40c89b4960099374
+  languageName: node
+  linkType: hard
+
+"eventemitter3@npm:^5.0.0":
+  version: 5.0.0
+  resolution: "eventemitter3@npm:5.0.0"
+  checksum: b974bafbab860e0a5bbb21add4c4e82f9d5691c583c03f2e4c5d44a2d6c4556d79223621bdcfc6c8e14366a4af9df6b5ea9d6caf65fbffc80b66f3e1dceacbc9
   languageName: node
   linkType: hard
 
@@ -5867,10 +5867,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"p-timeout@npm:^6.0.0":
-  version: 6.0.0
-  resolution: "p-timeout@npm:6.0.0"
-  checksum: c61e72678f3d2a9265d44c871e282e199c68b9b739005884d83dc8451ec8fe6581040fb10d9a48b2136e1b0b75042c6b528130a40bbad08eea6a53838a190b45
+"p-timeout@npm:^6.1.0":
+  version: 6.1.0
+  resolution: "p-timeout@npm:6.1.0"
+  checksum: 2f4bfe2a053af2338eac646d3c74fae9089d4d68e692ec0094bf9b73aefc05f5a426b5644243277ca695bcbba55a9cc817bd356d680d2269723944302ac5047d
   languageName: node
   linkType: hard
 
@@ -7195,6 +7195,13 @@ __metadata:
   version: 2.4.1
   resolution: "tslib@npm:2.4.1"
   checksum: 19480d6e0313292bd6505d4efe096a6b31c70e21cf08b5febf4da62e95c265c8f571f7b36fcc3d1a17e068032f59c269fab3459d6cd3ed6949eafecf64315fca
+  languageName: node
+  linkType: hard
+
+"tslib@npm:^2.5.0":
+  version: 2.5.0
+  resolution: "tslib@npm:2.5.0"
+  checksum: ae3ed5f9ce29932d049908ebfdf21b3a003a85653a9a140d614da6b767a93ef94f460e52c3d787f0e4f383546981713f165037dc2274df212ea9f8a4541004e1
   languageName: node
   linkType: hard
 

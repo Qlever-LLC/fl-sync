@@ -813,7 +813,7 @@ export async function postTpDocument({
   await postUpdate(
     oada,
     jobId,
-    `Document [list key:${hashKey}, resource id: resources/${docResourceKey}, doc type: ${docType}] posted to trading partner docs.`,
+    `Document posted to ${MASTERID_INDEX_PATH}/${masterid}/shared/trellisfw/documents/${urlName}/${hashKey} (resources/${docResourceKey}).`,
     'in-progress'
   );
   await oada.put({
@@ -1809,8 +1809,8 @@ async function queueDocumentJob(data: ListChange, path: string) {
         );
       }
 
-      const message = `Document not pending, approval status not set by Trellis. Skipping. Document: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
-      info(message);
+//      const message = `Document not pending, approval status not set by Trellis. Skipping. Document: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
+//      info(message);
       return;
     }
   } catch (cError: unknown) {
