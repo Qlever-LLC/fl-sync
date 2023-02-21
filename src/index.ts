@@ -31,7 +31,7 @@ import esMain from 'es-main';
 import moment from 'moment';
 
 import type { Change, JsonObject, OADAClient } from '@oada/client';
-import { ListWatch } from '@oada/list-lib';
+import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
 import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
@@ -142,16 +142,30 @@ export async function watchFlSyncConfig() {
  */
 async function watchTargetJobs() {
   info(`Started ListWatch on target jobs...`);
-  const watch = new ListWatch({
+  const targetWatch = new ListWatch({
     path: `/bookmarks/services/target/jobs/pending`,
     name: `target-jobs-fl-sync`,
     conn: CONNECTION,
     resume: true,
-    onAddItem: targetWatchOnAdd,
-    onChangeItem: targetWatchOnChange,
+    onNewList: AssumeState.Handled,
   });
+
+  targetWatch.on(ChangeType.ItemAdded, async ({item, pointer}) => {
+    await targetWatchOnAdd({
+      item: (await item) as Change,
+      key: pointer,
+    });
+  });
+
+  targetWatch.on(ChangeType.ItemChanged, async ({change, pointer}) => {
+    await targetWatchOnChange({
+      change: (await change) as Change,
+      targetJobKey: pointer,
+    });
+  });
+
   process.on('beforeExit', async () => {
-    await watch.stop();
+    await targetWatch.stop();
   });
 } // WatchTargetJobs
 
@@ -460,7 +474,8 @@ async function fetchAndSync({
   } catch (cError: unknown) {
     info({ error: cError }, 'getBusinesses Error, Please check error logs');
     throw cError;
-  }
+        //if (key !== 'd4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e') return
+}
 } // FetchAndSync
 
 export function setConnection(conn: OADAClient) {
@@ -525,7 +540,7 @@ export async function initialize({
     }
 
     if (master === undefined || master) {
-      await watchTrellisFLBusinesses(CONNECTION);
+      watchTrellisFLBusinesses(CONNECTION);
       info('Started master data handler.');
     }
 

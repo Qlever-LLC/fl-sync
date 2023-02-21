@@ -24,7 +24,7 @@ import _ from 'lodash';
 import debug from 'debug';
 
 import type { JsonObject, OADAClient } from '@oada/client';
-import { ListWatch } from '@oada/list-lib';
+import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
 import type Resource from '@oada/types/oada/resource.js';
 
 import tree from './tree.masterData.js';
@@ -60,13 +60,16 @@ export async function watchTrellisFLBusinesses(conn: OADAClient) {
   info(`Setting masterData ListWatch on FL Businesses`);
   setConnection(conn);
   // eslint-disable-next-line no-new
-  new ListWatch({
+  const watch = new ListWatch({
     path: `${SERVICE_PATH}/businesses`,
     name: `fl-sync-master-data-businesses`,
     conn,
     tree,
     resume: true,
-    onAddItem: addTP2Trellis,
+    onNewList: AssumeState.Handled,
+  });
+  watch.on(ChangeType.ItemAdded, async ({ item, pointer }) => {
+    await addTP2Trellis((await item) as Resource, pointer, conn);
   });
 } // WatchTrellisFLBusinesses
 
