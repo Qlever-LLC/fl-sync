@@ -18,29 +18,32 @@
 // Load config first so it can set up env
 import config from './config.js';
 
+import '@oada/pino-debug';
+
 import { setTimeout } from 'node:timers/promises';
 
-import type { AxiosRequestConfig } from 'axios';
 import Bluebird from 'bluebird';
 import type { Moment } from 'moment';
 import { Service } from '@oada/jobs';
-import _ from 'lodash';
-import { default as axios } from 'axios';
 import debug from 'debug';
+import deepEqual from 'fast-deep-equal';
 import esMain from 'es-main';
+import got from 'got';
 import moment from 'moment';
 
-import type { Change, JsonObject, OADAClient } from '@oada/client';
+// TODO: Add custom prometheus metrics
+import '@oada/lib-prom';
 import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
+import type { Change, JsonObject, OADAClient } from '@oada/client';
 import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
 import {
-  targetWatchOnAdd,
   handleAssessmentJob,
   handleDocumentJob,
-  targetWatchOnChange,
   startJobCreator,
+  targetWatchOnAdd,
+  targetWatchOnChange,
 } from './mirrorWatch.js';
 import type { FlObject } from './mirrorWatch.js';
 import { reportConfig } from './reportConfig.js';
@@ -84,8 +87,8 @@ let CONNECTION: OADAClient;
 async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
   for await (const change of changes) {
     try {
-      if (_.has(change.body, 'autoapprove-assessments')) {
-        setAutoApprove(Boolean(change.body!['autoapprove-assessments']));
+      if (change.body && 'autoapprove-assessments' in change.body) {
+        setAutoApprove(Boolean(change.body['autoapprove-assessments']));
       }
     } catch (cError: unknown) {
       error({ error: cError }, 'mirror watchCallback error');
@@ -127,7 +130,6 @@ export async function watchFlSyncConfig() {
     setAutoApprove(Boolean(data['autoapprove-assessments']));
   }
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const { changes } = await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
     type: 'single',
@@ -150,16 +152,16 @@ async function watchTargetJobs() {
     onNewList: AssumeState.Handled,
   });
 
-  targetWatch.on(ChangeType.ItemAdded, async ({item, pointer}) => {
+  targetWatch.on(ChangeType.ItemAdded, async ({ item, pointer }) => {
     await targetWatchOnAdd({
       item: (await item) as Change,
       key: pointer,
     });
   });
 
-  targetWatch.on(ChangeType.ItemChanged, async ({change, pointer}) => {
+  targetWatch.on(ChangeType.ItemChanged, async ({ change, pointer }) => {
     await targetWatchOnChange({
-      change: (await change) as Change,
+      change,
       targetJobKey: pointer,
     });
   });
@@ -174,18 +176,12 @@ export async function handleItem(
   item: FlObject,
   oada?: OADAClient
 ) {
-  let bid;
+  const bid =
+    type === 'assessments'
+      ? item?.performedOnBusiness?._id ?? undefined
+      : item?.shareSource?.sourceBusiness?._id ?? undefined;
   try {
     let sync;
-    if (type === 'assessments') {
-      bid = _.has(item, 'performedOnBusiness._id')
-        ? item.performedOnBusiness._id
-        : undefined;
-    } else {
-      bid = _.has(item, 'shareSource.sourceBusiness._id')
-        ? item.shareSource.sourceBusiness._id
-        : undefined;
-    }
 
     if (!bid) {
       error(`FL BID undefined for this [${type}] item with _id [${item._id}].`);
@@ -199,7 +195,7 @@ export async function handleItem(
       };
 
       // Check for changes to the resources
-      const equals = _.isEqual(resp['food-logiq-mirror'], item);
+      const equals = deepEqual(resp['food-logiq-mirror'], item);
       if (!equals || FL_FORCE_WRITE) {
         info(
           `Document difference in FL doc [${item._id}] detected. Syncing...`
@@ -265,21 +261,17 @@ export async function fetchCommunityResources({
     type === 'assessments'
       ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${startTime}..${endTime}`
       : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&versionUpdated=${startTime}..${endTime}`;
-  const request: AxiosRequestConfig = {
+  const data = await got({
     method: `get`,
     url,
     headers: { Authorization: FL_TOKEN },
-  };
-  if (pageIndex) {
-    request.params = { pageIndex };
-  }
-
-  const response = await axios(request);
+    searchParams: pageIndex ? { pageIndex } : undefined,
+  }).json<FlPage>();
   const delay = 0;
 
   // Manually check for changes; Only update the resource if it has changed!
   try {
-    for await (const item of response.data.pageItems as FlObject[]) {
+    for await (const item of data.pageItems) {
       let retries = 5;
       // eslint-disable-next-line no-await-in-loop
       while (retries-- > 0 && !(await handleItem(type, item, oada)));
@@ -290,11 +282,11 @@ export async function fetchCommunityResources({
   }
 
   // Repeat for additional pages of FL results
-  if (response.data.hasNextPage && pageIndex < 1000) {
+  if (data.hasNextPage && pageIndex < 1000) {
     info(
       `Finished page ${pageIndex}. Item ${
-        response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`
+        data.pageItemCount * (pageIndex + 1)
+      }/${data.totalItemCount}`
     );
     if (type === 'documents') info(`Pausing for ${delay / 60_000} minutes`);
     if (type === 'documents') await setTimeout(delay);
@@ -369,8 +361,15 @@ export async function pollFl(lastPoll: Moment, end: Moment) {
   }
 } // PollFl
 
+export interface FlPage<I = Record<string, unknown>> {
+  pageItems: Array<I & FlObject>;
+  pageItemCount: number;
+  hasNextPage: boolean;
+  totalItemCount: number;
+}
+
 /**
- * fetches and synchronizes
+ * Fetches and synchronizes
  * @param {*} param0
  * @returns
  */
@@ -389,21 +388,17 @@ async function fetchAndSync({
 }) {
   pageIndex = pageIndex ?? 0;
   try {
-    const request: AxiosRequestConfig = {
+    const data = await got({
       method: `get`,
       url: from,
       headers: { Authorization: FL_TOKEN },
-    };
-    if (pageIndex) {
-      request.params = { pageIndex };
-    }
-
-    const response = await axios(request);
+      searchParams: pageIndex ? { pageIndex } : undefined,
+    }).json<FlPage>();
 
     // Manually check for changes; Only update the resource if it has changed!
     await Bluebird.map(
-      response.data.pageItems,
-      async (item: FlObject) => {
+      data.pageItems,
+      async (item) => {
         let sync;
         if (to) {
           const path =
@@ -421,7 +416,7 @@ async function fetchAndSync({
             }
 
             // Check for changes to the resources
-            const equals = _.isEqual(resp?.['food-logiq-mirror'], item);
+            const equals = deepEqual(resp?.['food-logiq-mirror'], item);
             if (equals)
               info(
                 `No resource difference in FL item [${item._id}]. Skipping...`
@@ -461,11 +456,11 @@ async function fetchAndSync({
     );
 
     // Repeat for additional pages of FL results
-    if (response.data.hasNextPage) {
+    if (data.hasNextPage) {
       info(
         `fetchAndSync Finished page ${pageIndex}. Item ${
-          response.data.pageItemCount * (pageIndex + 1)
-        }/${response.data.totalItemCount}`
+          data.pageItemCount * (pageIndex + 1)
+        }/${data.totalItemCount}`
       );
       await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach });
     }
@@ -474,8 +469,8 @@ async function fetchAndSync({
   } catch (cError: unknown) {
     info({ error: cError }, 'getBusinesses Error, Please check error logs');
     throw cError;
-        //if (key !== 'd4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e') return
-}
+    // If (key !== 'd4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e') return
+  }
 } // FetchAndSync
 
 export function setConnection(conn: OADAClient) {
@@ -540,7 +535,8 @@ export async function initialize({
     }
 
     if (master === undefined || master) {
-      watchTrellisFLBusinesses(CONNECTION);
+      // TODO: Handle rejections of this promise?
+      void watchTrellisFLBusinesses(CONNECTION);
       info('Started master data handler.');
     }
 
@@ -556,7 +552,7 @@ export async function initialize({
         async getTime() {
           const {
             headers: { date },
-          } = await axios({
+          } = await got({
             method: 'head',
             url: `${FL_DOMAIN}/businesses`,
             headers: { Authorization: FL_TOKEN },
@@ -630,7 +626,8 @@ export async function initialize({
 function prepEmail() {
   const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
   if (!REPORT_EMAIL) throw new Error('REPORT_EMAIL is required for prepEmail');
-  if (!REPORT_REPLYTO_EMAIL) throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
+  if (!REPORT_REPLYTO_EMAIL)
+    throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
   return {
     from: 'noreply@trellis.one',
     to: REPORT_CC_EMAIL ? [REPORT_EMAIL, REPORT_CC_EMAIL] : [REPORT_EMAIL],

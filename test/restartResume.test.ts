@@ -28,7 +28,12 @@ import { connect } from '@oada/client';
 
 import type { JobConfig } from '../dist/mirrorWatch.js';
 import type { TreeKey } from '@oada/types/oada/tree/v1.js';
-import { isObj, postJob, handleDocumentJob, mostRecentKsuid } from '../dist/mirrorWatch.js';
+import {
+  handleDocumentJob,
+  isObj,
+  mostRecentKsuid,
+  postJob,
+} from '../dist/mirrorWatch.js';
 import { initialize as service } from '../dist/index.js';
 import { tree } from '../dist/tree.js';
 
@@ -54,7 +59,7 @@ test.before(async (t) => {
   });
   return oada;
   /*
-  await oada.put({
+  Await oada.put({
     path: `${SERVICE_PATH}/_meta/oada-poll/food-logiq-poll`,
     // Tree,
     data: { lastPoll: moment().subtract(1, 'minutes').utc().format() },
@@ -151,9 +156,9 @@ test('A job that is started should be resumed on restart of the service', async 
     path,
   }));
 
-
   // @ts-expect-error Job bleh
-  if (!isObj(job) || !isObj(job.config['target-jobs'])) throw new Error('Not object');
+  if (!isObj(job) || !isObj(job.config['target-jobs']))
+    throw new Error('Not object');
   // @ts-expect-error something
   const targetJobBefore = Object.keys(job.config['target-jobs'])[0];
 
@@ -175,7 +180,8 @@ test('A job that is started should be resumed on restart of the service', async 
   }));
 
   // @ts-expect-error something
-  if (!isObj(job) || !isObj(job.config['target-jobs'])) throw new Error('Not object');
+  if (!isObj(job) || !isObj(job.config['target-jobs']))
+    throw new Error('Not object');
   // @ts-expect-error something
   const targetJobAfter = Object.keys(job.config['target-jobs'])[0];
 
@@ -220,8 +226,7 @@ export async function targetWatchOnAdd(item: any, key: string) {
     const flJobKeys = Object.keys(data?.services?.['fl-sync']?.jobs || {});
 
     const jobKey = mostRecentKsuid(flJobKeys);
-    if (!jobKey)
-      return undefined;
+    if (!jobKey) return;
 
     // @ts-expect-error
     const jobId = data?.services?.['fl-sync']?.jobs?.[jobKey]!._id;
@@ -251,9 +256,5 @@ export async function targetWatchOnAdd(item: any, key: string) {
         [key]: { _id },
       },
     });
-
-    return undefined;
-  } catch (cError: unknown) {
-    return undefined;
-  }
+  } catch {}
 }

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import _ from 'lodash';
 import debug from 'debug';
+import findIndex from 'lodash.findindex';
 
 import type { FlAssessment } from './mirrorWatch.js';
 
@@ -74,13 +74,13 @@ const checkAssessments = new Map(
       const failed = assessment.sections.map((section) =>
         section.subsections.map((subsection) =>
           subsection.questions.map((question) => {
-            const umbrellaIndex = _.findIndex(
+            const umbrellaIndex = findIndex(
               question.productEvaluationOptions.columns,
               ['name', 'Umbrella Coverage']
             );
             const { _id } =
               question.productEvaluationOptions.columns[umbrellaIndex]!;
-            const umbrella = _.findIndex(
+            const umbrella = findIndex(
               question.productEvaluationOptions.answerRows[0]!.answers,
               ['column', _id]
             );
@@ -96,7 +96,7 @@ const checkAssessments = new Map(
                 column.name !== 'Umbrella Coverage' &&
                 column.type === 'numeric'
               ) {
-                const answerIndex = _.findIndex(
+                const answerIndex = findIndex(
                   question.productEvaluationOptions.answerRows[0]!.answers,
                   ['column', column._id]
                 );
@@ -142,7 +142,7 @@ const checkAssessments = new Map(
                   );
                   reasons.push(reason);
                 } else if (column.type === 'bool') {
-                  const answerIndex = _.findIndex(
+                  const answerIndex = findIndex(
                     question.productEvaluationOptions.answerRows[0]!.answers,
                     ['column', column._id]
                   );

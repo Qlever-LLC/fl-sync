@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/prevent-abbreviations */
-
 import type { Moment } from 'moment';
 import moment from 'moment';
 import type { FlObject } from './mirrorWatch.js';

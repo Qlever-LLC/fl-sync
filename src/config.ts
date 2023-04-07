@@ -248,8 +248,8 @@ const config = convict({
     'token': {
       doc: 'Food Logiq API token',
       format: String,
-      default: '-----',
       env: 'FL_TOKEN',
+      default: null as unknown as string,
     },
     'trellisUser': {
       doc: 'User ID used by Trellis automation',

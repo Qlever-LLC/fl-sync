@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/prevent-abbreviations */
-
 import config from '../dist/config.js';
 
 import test from 'ava';
@@ -482,7 +480,6 @@ async function postAndPause(data: unknown, oada: OADAClient) {
       if (r && typeof r.data === 'object') {
         return Object.keys(r.data)[0];
       }
-      return undefined;
     });
   const jobKey = jobId!.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id');

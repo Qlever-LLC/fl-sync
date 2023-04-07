@@ -18,16 +18,16 @@
 // Load config first so it can set up env
 import config from './config.js';
 
-import type { AxiosRequestConfig } from 'axios';
 import type { Moment } from 'moment';
-import { default as axios } from 'axios';
 import debug from 'debug';
+import got from 'got';
 import moment from 'moment';
 import sql from 'mssql';
 import xlsx from 'xlsx';
 
 import type { OADAClient } from '@oada/client';
 import { poll } from '@oada/poll';
+import { FlPage } from './index.js';
 
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
@@ -66,18 +66,14 @@ export async function fetchIncidentsCsv({
 }) {
   pageIndex = pageIndex ?? 0;
   const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?updated=${startTime}..${endTime}`;
-  const request: AxiosRequestConfig = {
+  const data = await got({
     method: `get`,
     url,
     headers: { Authorization: FL_TOKEN },
-  };
-  if (pageIndex) {
-    request.params = { pageIndex };
-  }
+    searchParams: pageIndex ? { pageIndex } : undefined,
+  }).json<FlPage>();
 
-  const response = await axios(request);
-
-  const wb = xlsx.read(response.data, { type: 'string', cellDates: true });
+  const wb = xlsx.read(data, { type: 'string', cellDates: true });
   const sheetname = wb.SheetNames[0];
   if (sheetname === undefined) return;
   const sheet = wb.Sheets[String(sheetname)];
@@ -89,11 +85,11 @@ export async function fetchIncidentsCsv({
   }
 
   // Repeat for additional pages of FL results
-  if (response.data.hasNextPage && pageIndex < 1000) {
+  if (data.hasNextPage && pageIndex < 1000) {
     info(
       `Finished page ${pageIndex}. Item ${
-        response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`
+        data.pageItemCount * (pageIndex + 1)
+      }/${data.totalItemCount}`
     );
     await fetchIncidentsCsv({
       startTime,
@@ -105,7 +101,7 @@ export async function fetchIncidentsCsv({
 
 export async function startIncidents(connection: OADAClient) {
   /*
-  const sqlConfig = {
+  Const sqlConfig = {
     server,
     database,
     user,
@@ -131,7 +127,7 @@ export async function startIncidents(connection: OADAClient) {
     interval,
     name: 'foodlogiq-incidents',
     getTime: (async () => {
-      const r = await axios({
+      const r = await got({
         method: 'head',
         url: `${FL_DOMAIN}/businesses`,
         headers: { Authorization: FL_TOKEN },
@@ -161,7 +157,6 @@ export async function ensureTable() {
 
   return true;
 }
-
 
 /*
   'incidentDate (Incident Date/Delivery Date)': 'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
@@ -288,7 +283,7 @@ async function syncToSql(csvData: any) {
       .join(',');
 
     const setString = columnKeys
-    //.filter((key) => key !== 'Id')
+      // .filter((key) => key !== 'Id')
       .map((key, index) => `[${key}] = @val${index}`)
       .join(',');
 
@@ -317,7 +312,7 @@ function handleTypes(newRow: any) {
 
   return Object.fromEntries(
     columnKeys.map((key) => {
-      if (allColumns[key]!.type.includes("DATE")) {
+      if (allColumns[key]!.type.includes('DATE')) {
         if (moment.isDate(newRow[key])) {
           return [key, moment(newRow[key]).toDate()];
         }
@@ -344,13 +339,17 @@ function handleTypes(newRow: any) {
         }
 
         if (typeof newRow[key] === 'string') {
-          if (newRow[key].toLowerCase() === 'yes' ||
-            newRow[key].toLowerCase() === 'no') {
+          if (
+            newRow[key].toLowerCase() === 'yes' ||
+            newRow[key].toLowerCase() === 'no'
+          ) {
             return [key, newRow[key].toLowerCase() === 'no'];
           }
 
-          if (newRow[key].toLowerCase() === 'true' ||
-            newRow[key].toLowerCase() === 'false') {
+          if (
+            newRow[key].toLowerCase() === 'true' ||
+            newRow[key].toLowerCase() === 'false'
+          ) {
             return [key, newRow[key].toLowerCase() === 'true'];
           }
 
@@ -368,13 +367,16 @@ function handleTypes(newRow: any) {
           ];
         }
 
-	if (typeof newRow[key] === 'string') {
-	  return [key, null]
-	}
+        if (typeof newRow[key] === 'string') {
+          return [key, null];
+        }
       }
 
       // Handle some other general cases. Null will be handled in the next step
-      if (typeof newRow[key] === 'string' && ['', 'na', 'n/a'].includes(newRow[key].toLowerCase())) {
+      if (
+        typeof newRow[key] === 'string' &&
+        ['', 'na', 'n/a'].includes(newRow[key].toLowerCase())
+      ) {
         return [key, null];
       }
 
@@ -382,15 +384,16 @@ function handleTypes(newRow: any) {
         return [key, null];
       }
 
-      if (allColumns[key]!.type.includes("VARCHAR")) {
-        if (typeof newRow[key] === 'string') {
-	  return [key, newRow[key]];
-	}
+      if (
+        allColumns[key]!.type.includes('VARCHAR') &&
+        typeof newRow[key] === 'string'
+      ) {
+        return [key, newRow[key]];
       }
 
-      return [key, null]
+      return [key, null];
     })
-  )
+  );
   return newRow;
 }
 
@@ -411,6 +414,7 @@ function ensureNotNull(newRow: any) {
       newRow[name] = newRow['Created At'];
     }
   }
+
   return newRow;
 }
 

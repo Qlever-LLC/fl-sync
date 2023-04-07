@@ -20,11 +20,11 @@ import config from './config.masterdata.js';
 import { setTimeout } from 'node:timers/promises';
 
 import SHA256 from 'js-sha256';
-import _ from 'lodash';
+import cloneDeep from 'clone-deep';
 import debug from 'debug';
 
-import type { JsonObject, OADAClient } from '@oada/client';
 import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
+import type { JsonObject, OADAClient } from '@oada/client';
 import type Resource from '@oada/types/oada/resource.js';
 
 import tree from './tree.masterData.js';
@@ -59,7 +59,7 @@ enum SourceType {
 export async function watchTrellisFLBusinesses(conn: OADAClient) {
   info(`Setting masterData ListWatch on FL Businesses`);
   setConnection(conn);
-  // eslint-disable-next-line no-new
+
   const watch = new ListWatch({
     path: `${SERVICE_PATH}/businesses`,
     name: `fl-sync-master-data-businesses`,
@@ -93,21 +93,21 @@ export async function addTP2Trellis(
 
   const _key: string = key.slice(1);
   try {
-    if (typeof TradingPartners[key] === 'undefined') {
+    if (TradingPartners[key] === undefined) {
       // Adds the business as trading partner
-      let data = _.cloneDeep(trellisTPTemplate);
-      let expandData: ExpandIndexRecord = _.cloneDeep(expandIndexTemplate);
+      let data = cloneDeep(trellisTPTemplate);
+      let expandData: ExpandIndexRecord = cloneDeep(expandIndexTemplate);
       // FIXME: need to include a flag when search engine is present
 
       trace(item, 'Business item');
       const _path = item._id;
-      if (typeof item[FL_MIRROR] === 'undefined') {
+      if (item[FL_MIRROR] === undefined) {
         info(`Getting ${_path} with delay.`);
         // FIXME: find a more robust way to retrieve business content
         let fl_mirror_content: unknown = item[FL_MIRROR];
         let tries = 0;
         // Retry until it gets a body with FL_MIRROR
-        while (typeof fl_mirror_content === 'undefined') {
+        while (fl_mirror_content === undefined) {
           // eslint-disable-next-line no-await-in-loop
           await setTimeout(500);
           try {
@@ -116,7 +116,7 @@ export async function addTP2Trellis(
               path: _path,
             });
             fl_mirror_content = (result.data as JsonObject)[FL_MIRROR];
-            if (typeof fl_mirror_content === 'undefined') {
+            if (fl_mirror_content === undefined) {
               info(
                 `ListWatch did not return a complete object for business ${key}. Retrying ...`
               );
@@ -210,7 +210,7 @@ export async function addTP2Trellis(
 
     // return TradingPartners[key].masterid;
   } catch (error_: unknown) {
-    error('--> error ', error_);
+    error({ error: error_ }, '--> error when mirroring');
     throw error_ as Error;
   }
 } // AddTP2Trellis
@@ -226,7 +226,7 @@ function assignData(data: TradingPartner, item: any) {
   try {
     let _id = sha256(JSON.stringify(item[FL_MIRROR]));
     if (
-      typeof item[FL_MIRROR].internalid !== 'undefined' ||
+      item[FL_MIRROR].internalid !== undefined ||
       item[FL_MIRROR].internalid !== ''
     ) {
       _id = item[FL_MIRROR].internalid;
@@ -265,10 +265,10 @@ function assignData(data: TradingPartner, item: any) {
  */
 function assignDataExpandIndex(data: TradingPartner, item: any) {
   // FIXME: NEED type for item
-  const _expandIndexData: ExpandIndexRecord = _.cloneDeep(expandIndexTemplate);
+  const _expandIndexData: ExpandIndexRecord = cloneDeep(expandIndexTemplate);
   let _id = sha256(JSON.stringify(item[FL_MIRROR]));
   if (
-    typeof item[FL_MIRROR].internalid !== 'undefined' &&
+    item[FL_MIRROR].internalid !== undefined &&
     item[FL_MIRROR].internalid !== ''
   ) {
     _id = item[FL_MIRROR].internalid;

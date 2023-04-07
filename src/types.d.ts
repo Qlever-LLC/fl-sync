@@ -23,3 +23,23 @@ declare module 'convict-format-with-moment' {
 declare module 'es-main' {
   export default function (value: unknown): boolean;
 }
+
+declare module 'csvjson' {
+  import type { JsonValue } from 'type-fest';
+  export type JsonRow<K extends string, V extends JsonValue> = Record<K, V>;
+  export type JsonCsv<K = string, V = JsonValue> = Array<JsonRow<K, V>>;
+  export function toCSV<K = string, V = JsonValue>(
+    json: string | JsonCsv<K, V>,
+    options?: {
+      /** @default ',' */
+      delimiter?: string;
+      /** @default false */
+      wrap?: string | boolean;
+      headers?: 'full' | 'none' | 'relative' | 'key';
+      /** @default '.' */
+      objectDenote?: string;
+      /** @default '[]' */
+      arrayDenote?: string;
+    }
+  ): string;
+}

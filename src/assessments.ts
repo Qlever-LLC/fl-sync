@@ -18,9 +18,9 @@
 import config from './config.js';
 
 import type { FlAssessment } from './mirrorWatch.js';
-import _ from 'lodash';
-import { default as axios } from 'axios';
+import cloneDeep from 'clone-deep';
 import debug from 'debug';
+import got from 'got';
 
 import type { JsonObject } from '@oada/client';
 
@@ -44,7 +44,7 @@ interface AssessmentType {
   InternalAudit: string;
 }
 
-const AssessmentType: AssessmentType = Object.freeze({
+const assessmentType: AssessmentType = Object.freeze({
   SupplierAudit: 'supplier_audit',
   SupplierQuestionnaire: 'supplier_questionnaire',
   InternalAudit: 'internal_audit',
@@ -52,7 +52,7 @@ const AssessmentType: AssessmentType = Object.freeze({
 
 // TODO: need to polish this code
 // left here for reference
-const assessment_template = {
+const assessmentTemplate = {
   assessmentTemplate: {
     _id: ASSESSMENT_TEMPLATE_ID,
     name: ASSESSMENT_TEMPLATE_NAME,
@@ -77,7 +77,7 @@ const assessment_template = {
   },
 
   name: 'Insurance Requirements',
-  type: AssessmentType.SupplierAudit,
+  type: assessmentType.SupplierAudit,
 };
 
 interface Answer {
@@ -133,32 +133,46 @@ export async function spawnAssessment(
   } = content;
   const PATH_SPAWN_ASSESSMENT = `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment`;
   let PATH_TO_UPDATE_ASSESSMENT = PATH_SPAWN_ASSESSMENT;
-  const _assessment_template = _.cloneDeep(assessment_template);
+  const _assessment_template = cloneDeep(assessmentTemplate);
   _assessment_template.performedOnBusiness._id = bid;
   _assessment_template.performedOnBusiness.name = bname;
 
   // Spawning the assessment with some (not all) values
-  const result = await axios({
+  const result = await got<{
+    _id: string;
+    state: string;
+    questionInteractionCounts: {
+      answered: number;
+      percentageCompleted: number;
+    };
+    sections: Array<{
+      subsections: Array<{
+        questions: Array<{
+          productEvaluationOptions: { answerRows: {} };
+        }>;
+      }>;
+    }>;
+  }>({
     method: updateFlId ? 'get' : 'post',
     url: updateFlId
       ? `${PATH_SPAWN_ASSESSMENT}/${updateFlId}`
       : PATH_SPAWN_ASSESSMENT,
     headers: { Authorization: FL_TOKEN },
-    data: _assessment_template,
+    json: _assessment_template,
+    responseType: 'json',
   }).catch((cError: unknown) => {
-    error('--> Error when spawning an assessment.');
-    error(cError);
+    error({ error: cError }, '--> Error when spawning an assessment.');
     throw cError as Error;
   });
 
   // Setting the assessment if to be modified
-  const SPAWNED_ASSESSMENT_ID = result ? result.data._id : updateFlId;
-  const ASSESSMENT_BODY = result.data;
+  const SPAWNED_ASSESSMENT_ID = result ? result.body._id : updateFlId;
+  const ASSESSMENT_BODY = result.body;
   const answers_template = [];
 
   // Populating answers in the COI assessment
   // TODO: Do all of these others need to be null??
-  const answer_content: AnswerContent = {
+  const answerContent: AnswerContent = {
     _id: '6091a3bed4e9d21beb000001',
     answers: [
       {
@@ -207,9 +221,9 @@ export async function spawnAssessment(
   };
 
   // Including the answers in the answer array
-  answers_template.push(answer_content);
+  answers_template.push(answerContent);
   // Attaching the answers into the assessment template body
-  ASSESSMENT_BODY.sections[0].subsections[0].questions[0].productEvaluationOptions.answerRows =
+  ASSESSMENT_BODY.sections[0]!.subsections[0]!.questions[0]!.productEvaluationOptions.answerRows =
     answers_template;
   // Updating percentage completed
   ASSESSMENT_BODY.state = 'In Progress';
@@ -242,11 +256,11 @@ export async function linkAssessmentToDocument(
     `Creating FL Link from assessment [${assessment._id}] to document [${document._id}]`
   );
 
-  return axios({
+  return got({
     method: 'post',
     url: PATH_LINK_ASSESSMENT,
     headers: { Authorization: FL_TOKEN },
-    data: [
+    json: [
       {
         businessId: bid,
         from: assessment,
@@ -255,33 +269,34 @@ export async function linkAssessmentToDocument(
         to: document,
       },
     ],
-  }).catch((cError: Error) => {
-    error(cError);
   });
 } // LinkAssessmentToDocument
 
 /**
  * updates the content of a spawned assessment
  * @param path spawned assessment url
- * @param data complete content of the assessment
+ * @param json complete content of the assessment
  */
-async function updateAssessment(path: string, data: FlAssessment) {
-  trace(`Updating assessment [${data._id}] after creation`);
+async function updateAssessment(path: string, json: { _id: string }) {
+  trace(`Updating assessment [${json._id}] after creation`);
   try {
-    const result = await axios({
+    const result = await got<{ _id: string }>({
       method: 'put',
       url: path,
       headers: { Authorization: FL_TOKEN },
-      data,
+      json,
+      responseType: 'json',
     });
 
-    info('--> assessment created. ', result.data._id);
+    info('--> assessment created. ', result.body._id);
     return result;
   } catch (cError: unknown) {
-    error({ error: cError }, '--> Error when updating the assessment.');
-    error('Request was:', { url: path, data: JSON.stringify(data) });
+    error(
+      { error: cError, url: path, data: json },
+      'Error when updating the assessment.'
+    );
     throw cError as Error;
   }
 } // UpdateAssessment
 
-export { assessment_template };
+export { assessmentTemplate as assessment_template };

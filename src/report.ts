@@ -17,17 +17,24 @@
 
 import config from './config.js';
 
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 
-import type { OADAClient } from '@oada/client';
-import { connect } from '@oada/client';
-import _ from 'lodash';
-import { default as axios } from 'axios';
-// @ts-expect-error
-import csvjson from 'csvjson';
-import debug from 'debug';
+import csvjson, { type JsonCsv } from 'csvjson';
+import type { JsonValue } from 'type-fest';
+import _debug from 'debug';
+import got from 'got';
 import ksuid from 'ksuid';
 import moment from 'moment';
+
+import { type OADAClient, connect } from '@oada/client';
+import type Job from '@oada/types/oada/service/job.js';
+import type Jobs from '@oada/types/oada/service/jobs.js';
+import type { NonOADAKey } from '@oada/types/oada/service/jobs.js';
+
+const info = _debug('fl-sync:info');
+const debug = _debug('fl-sync:debug');
+const trace = _debug('fl-sync:trace');
+const error = _debug('fl-sync:error');
 
 const DOMAIN = config.get('trellis.domain');
 const TOKEN = config.get('trellis.token');
@@ -37,9 +44,6 @@ const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
-const info = debug('fl-sync:info');
-// Const trace = debug('fl-sync:trace');
-// const error = debug('fl-sync:error');
 
 const humanReadableJobError = {
   'target-other': 'Other target errors',
@@ -53,10 +57,10 @@ const humanReadableJobError = {
     'The PDF contained multiple document extractable results, but this is current not supported.',
   'bad-fl-attachments':
     'Attachments corrupt or can no longer be retrieved from Amazon S3',
-};
+} as const;
 
 export async function makeFinalReport() {
-  const spreadsheet: any[] = [];
+  const spreadsheet: JsonCsv = [];
   const otherReport: any = {
     otherErrors: {},
     notInLaserfiche: {},
@@ -91,7 +95,7 @@ export async function makeFinalReport() {
   try {
     // 1. Iterate over the docs
     const mint = setInterval(() => {
-      info(`ping`);
+      trace('ping');
     }, 3000);
     const oada = await connect({
       domain: `https://${DOMAIN}`,
@@ -128,11 +132,18 @@ export async function makeFinalReport() {
           .then((r) => r.data)
           .catch(() => {});
 
-        if (!document) {
+        if (
+          !document ||
+          typeof document !== 'object' ||
+          Buffer.isBuffer(document) ||
+          Array.isArray(document)
+        ) {
           return;
         }
 
-        const type = _.get(document, 'food-logiq-mirror.shareSource.type.name');
+        const type =
+          // @ts-expect-error TODO: type interface of document
+          document?.['food-logiq-mirror']?.shareSource?.type?.name as JsonValue;
         if (type !== 'Certificate of Insurance') {
           return;
         }
@@ -149,51 +160,51 @@ export async function makeFinalReport() {
           return;
         }
 
-        const documentName = _.get(document, 'food-logiq-mirror.name');
-        const busName = _.get(
-          document,
-          'food-logiq-mirror.shareSource.sourceBusiness.name'
-        );
-        const status = _.get(
-          document,
-          'food-logiq-mirror.shareSource.approvalInfo.status'
-        );
-        const user = _.get(
-          document,
-          'food-logiq-mirror.shareSource.approvalInfo.setBy._id'
-        );
-        const createDate = _.get(
-          document,
-          'food-logiq-mirror.versionInfo.createdAt'
-        );
+        // @ts-expect-error TODO: type interface of document
+        const documentName = document?.['food-logiq-mirror']?.name as JsonValue;
+        const busName =
+          // @ts-expect-error TODO: type interface of document
+          document?.['food-logiq-mirror']?.shareSource?.sourceBusiness
+            ?.name as JsonValue;
+        const status =
+          // @ts-expect-error TODO: type interface of document
+          document?.['food-logiq-mirror']?.shareSource?.approvalInfo
+            ?.status as string;
+        const user =
+          // @ts-expect-error TODO: type interface of document
+          document?.['food-logiq-mirror']?.shareSource?.approvalInfo?.setBy
+            ?._id as JsonValue;
+        const createDate =
+          // @ts-expect-error TODO: type interface of document
+          document?.['food-logiq-mirror']?.versionInfo?.createdAt as JsonValue;
         if (status) {
-          finalReport.flStatuses[status] = finalReport.flStatuses[status] || {};
+          finalReport.flStatuses[status] = finalReport.flStatuses[status] ?? {};
           finalReport.flStatuses[status].total =
-            finalReport.flStatuses[status].total || 0;
+            finalReport.flStatuses[status].total ?? 0;
           finalReport.flStatuses[status].total++;
         }
 
         if (status && user && user === FL_TRELLIS_USER) {
           finalReport.flStatuses[status].byUs =
-            finalReport.flStatuses[status].byUs || 0;
+            finalReport.flStatuses[status].byUs ?? 0;
           finalReport.flStatuses[status].byUs++;
         }
 
         try {
-          await axios({
+          await got({
             method: 'head',
             url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docid}`,
             headers: {
               Authorization: `${FL_TOKEN}`,
             },
           });
-        } catch (error: unknown) {
+        } catch (cError: unknown) {
           // @ts-expect-error stupid errors
-          if (error.response.status === 404) {
-            console.log(`Document has been deleted in FL`, { docid, bid });
+          if (cError.response.status === 404) {
+            error({ docid, bid }, 'Document has been deleted in FL');
             otherReport.flDeleted[docid] = { docid, bid, status, user };
             finalReport.flDeleted++;
-          } else throw error as Error;
+          } else throw cError as Error;
         }
 
         // 2. Get the associated job
@@ -206,7 +217,8 @@ export async function makeFinalReport() {
           return;
         }
 
-        const jobs = _.get(meta, 'services.fl-sync.jobs') ?? {};
+        // @ts-expect-error TODO: type interface of document
+        const jobs = (meta?.services?.['fl-sync']?.jobs ?? {}) as Jobs;
         if (Object.keys(jobs).length <= 0) {
           finalReport.missingFlSyncJob = finalReport.missingFlSyncJob ?? 0;
           finalReport.missingFlSyncJob++;
@@ -223,10 +235,7 @@ export async function makeFinalReport() {
             user,
           };
           if (status === 'approved') {
-            console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-            console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-            console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-            console.log({ docid, bid, status, user });
+            debug({ docid, bid, status, user }, 'approved but no job');
             otherReport.approvedButNoJob[docid] = { docid, bid, status, user };
           }
 
@@ -235,16 +244,14 @@ export async function makeFinalReport() {
 
         const jobkey = mostRecentKsuid(Object.keys(jobs));
         if (!jobkey) return;
-        const jobid = jobs[jobkey]._id;
+        const jobId = jobs[jobkey as NonOADAKey]!._id;
 
-        const job: any = await oada
-          .get({
-            path: `/${jobid}`,
-          })
-          .then((r) => r.data);
+        const { data: job } = (await oada.get({
+          path: `/${jobId}`,
+        })) as unknown as { data: Job };
 
         // 3. Find the reason for failure
-        const jobError: string = _.get(job, 'result.JobError');
+        const jobError = job?.result?.JobError as string;
         if (jobError) {
           finalReport['job-errors'][jobError] =
             finalReport['job-errors'][jobError] || 0;
@@ -282,10 +289,10 @@ export async function makeFinalReport() {
             'FoodLogiQ Document ID': docid,
             'FoodLogiQ Supplier ID': bid,
           });
-          console.log({ docid, jobid, status: job.status });
+          trace({ docid, jobid: jobId, status: job.status });
         } else {
           finalReport.otherErrors++;
-          otherReport.otherErrors[docid] = { docid, bid, jobid };
+          otherReport.otherErrors[docid] = { docid, bid, jobid: jobId };
           spreadsheet.push({
             'Document Name': documentName,
             'Document Type': type,
@@ -300,16 +307,17 @@ export async function makeFinalReport() {
           return;
         }
 
-        const coiId = _.get(job, 'trellisDoc.key');
+        // @ts-expect-error TODO: better type for our jobs
+        const coiId = job?.trellisDoc?.key as string;
 
         if (coiId) {
-          const coiMeta = await oada
-            .get({
-              path: `/resources/${coiId}/_meta`,
-            })
-            .then((r) => r.data);
+          const { data: coiMeta } = await oada.get({
+            path: `/resources/${coiId}/_meta`,
+          });
 
-          const entryId = _.get(coiMeta, 'services.lf-sync.LaserficheEntryID');
+          // @ts-expect-error TODO: better types
+          const entryId = coiMeta?.services?.['lf-sync']
+            ?.LaserficheEntryID as string;
           if (entryId) {
             finalReport.inLaserfiche++;
           } else {
@@ -317,12 +325,12 @@ export async function makeFinalReport() {
             finalReport.flStatuses[status].notInLaserfiche =
               finalReport.flStatuses[status].notInLaserfiche || 0;
             finalReport.flStatuses[status].notInLaserfiche++;
-            otherReport.notInLaserfiche[docid] = { docid, bid, jobid };
+            otherReport.notInLaserfiche[docid] = { docid, bid, jobid: jobId };
             if (status === 'approved') {
               otherReport.approvedNotInLaserfiche[docid] = {
                 docid,
                 bid,
-                jobid,
+                jobid: jobId,
               };
             }
           }
@@ -333,12 +341,12 @@ export async function makeFinalReport() {
       }
     }
 
-    console.log(finalReport);
-    fs.writeFileSync(
+    trace(finalReport);
+    await fs.writeFile(
       './scripts/finalReportDocs-Prod.json',
       JSON.stringify(otherReport)
     );
-    fs.writeFileSync(
+    await fs.writeFile(
       './scripts/finalReport-Prod.json',
       JSON.stringify(finalReport)
     );
@@ -381,22 +389,25 @@ export async function makeFinalReport() {
     };
     info(finalReport);
     let csv = csvjson.toCSV(spreadsheet, { delimiter: ',', wrap: false });
-    csv = fixHeaders(csv, Object.keys(spreadsheet[0]));
-    fs.writeFileSync('./scripts/finalReport-Prod.csv', csv);
+    csv = fixHeaders(csv, Object.keys(spreadsheet[0]!));
+    await fs.writeFile('./scripts/finalReport-Prod.csv', csv);
     info('Done with CSV');
 
     clearInterval(mint);
     return csv;
-  } catch (error: unknown) {
-    console.log(error);
+  } catch (cError: unknown) {
+    error(cError);
+    return null;
   }
 }
 
-function fixHeaders(csv: string, headers: string[]) {
+function fixHeaders(csv: string, headers: readonly string[]) {
   for (const h of headers) {
     const pattern = new RegExp(`\\[\\]\\.${h}`);
     csv = csv.replace(pattern, h);
   }
+
+  return csv;
 }
 
 function mostRecentKsuid(keys: string[]) {
@@ -410,7 +421,7 @@ function mostRecentKsuid(keys: string[]) {
 export function extraStuff(oada: OADAClient) {
   // 1. Check every X minutes to see if it is time to run the report
   setInterval(() => {
-    isItTime(oada);
+    void isItTime(oada);
   }, 600_000);
   // 2. Run the report
   // 3. Write the report out to OADA in some day-index (if there is content)
@@ -436,7 +447,7 @@ export async function isItTime(oada: OADAClient) {
   ) {
     currentlyReporting = true;
     const report = await makeFinalReport();
-    await postEmailJob(report, oada);
+    await postEmailJob(report!, oada);
   }
 }
 
