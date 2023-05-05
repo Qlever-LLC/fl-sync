@@ -1,7 +1,7 @@
 /*eslint-disable*/
 /**
  * @license
- * Copyright 2022 Qlever LLC
+ * Copyright 2023 Qlever LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,6 +43,8 @@ import { getAutoApprove } from './index.js';
 import mirrorTree from './tree.mirrorWatch.js';
 import tree from './tree.js';
 import { validateResult } from './docTypeValidation.js';
+import { handleNewBusiness } from './masterData2.js';
+import { doJob } from '@oada/client';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -1766,10 +1768,19 @@ async function queueDocumentJob(fullData: JsonObject, path: string) {
       error(`No trading partner found for business ${bid}.`);
       if (bus['food-logiq-mirror']) {
         error(`Calling AddTP2Trellis now for business ${bid}.`);
+        /*
         await addTP2Trellis(bus, `/${bid}`, CONNECTION);
         bus = await CONNECTION.get({
           path: `${SERVICE_PATH}/businesses/${bid}`,
         }).then((r) => r.data);
+        */
+       bus = await doJob(CONNECTION, {
+         service: SERVICE_NAME,
+         type: 'business-lookup',
+         config: {
+          'fl-business': bus
+         } 
+      });
       } else {
         //TODO: Go get the mirror data?????
         error(`No mirror data for business ${bid}`);
@@ -1971,6 +1982,75 @@ export interface FlObject {
   history: {
     [k: string]: FlDocHistoryItem[]
   };
+}
+
+export type FlBusiness = {
+  "_id": string,
+  "auditors": any,
+  "business": {
+    "_id": string,
+    "address": {
+      "addressLineOne": string,
+      "addressLineThree":string,  
+      "addressLineTwo": string,  
+      "city": string, 
+      "country": string,
+      "latLng": {
+        "latitude": number,
+        "longitude": number,
+        "warnings": any[],
+      },
+      "postalCode": string, 
+      "region": string,
+    },
+    "email": string,
+    "heroURL": string,
+    "iconURL": string,
+    "name": string,
+    "phone": string,
+    "website": string
+  },
+  "buyers": {
+      "_id": string,
+      "email": string,
+      "firstName": string,
+      "lastName": string,
+      "phone": string,
+      "phoneExt": string,
+      "mobile": string
+    }[],
+  "community": {
+    "_id": string,
+    "iconURL": string,
+    "name": string,
+    "replyToEmail": string
+  },
+  "createdAt": string,
+  "eventSubmissionStats": string | undefined,
+  "expirationDate": string | undefined,
+  "expiredRecently": boolean,
+  "expiredSoon": boolean,
+  "expires": boolean,
+  "hasExpiredEntities": boolean,
+  "hasExpiringEntities": boolean,
+  "internalId": string,
+  "locationGroup": {
+    "_id": string,
+    "name": string
+  },
+  "overallRating": number,
+  "productGroup": {
+    "_id": string,
+    "name": string
+  },
+  "ratings": Record<string, any>,
+  "status": string, //TODO: enum
+  "statusCategory": string, //TODO: enum
+  "statusSetAt": string,
+  "statusSetBy": string,
+  "todoCount": number,
+  "traceabilityOptions": any
+  "updatedAt": string
 }
 
 interface FlDocHistoryItem {
