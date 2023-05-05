@@ -44,9 +44,11 @@ import {
 } from './mirrorWatch.js';
 import type { FlObject } from './mirrorWatch.js';
 import { reportConfig } from './reportConfig.js';
+//import { businessesReportConfig } from './businessesReportConfig.js';
 import { startIncidents } from './flIncidentsCsv.js';
 import tree from './tree.js';
 import { watchTrellisFLBusinesses } from './masterData.js';
+import { handleNewBusiness } from './masterData2.js';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -586,6 +588,11 @@ export async function initialize({
         config.get('timeouts.mirrorWatch'),
         handleAssessmentJob
       );
+      svc.on(
+        'business-lookup',
+        config.get('timeouts.mirrorWatch'),
+        handleNewBusiness
+      );
       svc.addReport(
         'fl-sync-report',
         CONNECTION,
@@ -595,6 +602,16 @@ export async function initialize({
         'document-mirrored'
       );
 
+      /*
+      svc.addReport(
+        'fl-sync-businesses-report',
+        CONNECTION,
+        businessesReportConfig,
+        `0 0 7 * * 1`,
+        prepEmail,
+        'business-created',
+      );
+      */
       // Start the jobs watching service
       const serviceP = svc.start();
 
