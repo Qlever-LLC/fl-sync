@@ -39,6 +39,12 @@ const config = convict({
       arg: 'service_name',
     },
   },
+  'tp-manager': {
+    doc: 'name of the service managing trading-partners',
+    default: 'test-trellis-data-manager',
+    env: 'TP_MANAGER_SERVICE',
+    arg: 'tp_manager_service',
+  },
   services: {
     mirrorWatch: {
       doc: 'Enable/disable mirrorWatch subservice',
@@ -337,6 +343,43 @@ const config = convict({
       default: 86_400_000 as unknown as number,
       env: 'MIRROR_WATCH_TIMEOUT',
       arg: 'mirror-watch-timeout',
+    },
+  },
+  'lfdynamic': {
+    password: {
+      doc: 'password for accessing LFDynamic MSSQL Table',
+      format: String,
+      default: '',
+      env: 'LFDYNAMIC_PASS',
+      arg: 'lfdynamic-pass',
+    },
+    port: {
+      doc: 'port for accessing LFDynamic',
+      format: Number,
+      default: 0,
+      env: 'LFDYNAMIC_PORT',
+      arg: 'lfdynamic-DB',
+    },
+    database: {
+      doc: 'Database for accessing LFDynamic',
+      format: String,
+      default: '',
+      env: 'LFDYNAMIC_DB',
+      arg: 'lfdynamic-db',
+    },
+    user: {
+      doc: 'Username for accessing LFDynamic',
+      format: String,
+      default: '',
+      env: 'LFDYNAMIC_USER',
+      arg: 'lfdynamic-user',
+    },
+    server: {
+      doc: 'Username for accessing LFDynamic',
+      format: String,
+      default: '',
+      env: 'LFDYNAMIC_SERVER',
+      arg: 'lfdynamic-server',
     },
   },
 });

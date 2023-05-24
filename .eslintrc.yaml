@@ -91,7 +91,18 @@ overrides:
           },
         ]
       '@typescript-eslint/consistent-type-definitions': [warn, interface]
-
+      "unicorn/prevent-abbreviations": [
+        "error",
+        {
+          "allowList": {
+            "prod": true,
+            "dev": true,
+            "doc": true,
+            "docs": true,
+            "copyProdData": true,
+          }
+        }
+      ]
 rules:
   notice/notice:
     - error

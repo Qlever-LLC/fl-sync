@@ -19,17 +19,22 @@ import config from '../config.js';
 
 import type { JsonObject } from '@oada/client';
 import { connect } from '@oada/client';
+import fs from 'node:fs';
 import sql from 'mssql';
+import xlsx from 'xlsx';
 process.env.NODE_TLS_REJECT_AUTHORIZED = '0';
 
-const DOMAIN = config.get('trellis.domain');
-const TOKEN = config.get('trellis.token');
+const { domain, token } = config.get('trellis');
+const { database, password, port, server, user } = config.get('lfdynamic');
+const VENDOR_SHEET = 'LFA1';
+const NAME_COL = 'Name 1';
 
 let sqlConfig = {
-  server: 'localhost',
-  database: 'LFDynamic',
-  user: 'trellisdev',
-  port: 3002,
+  server,
+  database,
+  user,
+  password,
+  port,
   options: {
     encrypt: true,
     trustServerCertificate: true,
@@ -39,45 +44,93 @@ let sqlConfig = {
 const production = false;
 if (production) {
   sqlConfig = {
-    server: 'localhost',
-    database: 'LFDynamic',
-    user: 'trellisprod',
-    port: 3008,
+    server,
+    database,
+    user,
+    port,
+    password,
     options: {
       encrypt: true,
       trustServerCertificate: true,
     },
   };
 }
-// Let sqlString = 'Server=localhost,3003;TrustServerCertificate=true;Database=LFDynamic;User Id=trellisdev;Password=1S0wH9VhED^q;Encrypt=true'
+// Let sqlString = 'Server=localhost,3003;TrustServerCertificate=true;Database=LFDynamic;User Id=trellisdev;Encrypt=true'
+
+function grabVendors() {
+  const wb = xlsx.readFile('./SAPDATA.xlsx');
+  const sheet = wb.Sheets[VENDOR_SHEET];
+  // @ts-expect-error thing
+  let rows: SAPVendor[] = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+  // Eliminate Blocked vendors
+  rows = rows.filter((r) => !r[NAME_COL].startsWith('BLK'));
+  // Handle duplicates...
+  // rows = Array.from(new Map(rows.map((m) => [m[NAME_COL], m])).values());
+  return rows.map((r) => mapVendor(r));
+}
+
+function mapVendor(vendor: SAPVendor) {
+  return {
+    externalIds: [
+      `sap:${vendor.Vendor}`,
+      `ein:${vendor['Tax Number 1']}`,
+      `ein:${vendor['Tax Number 2']}`,
+    ].filter(Boolean),
+    city: vendor.City,
+    state: vendor.Region,
+    country: vendor.Country,
+    name: vendor['Name 1'],
+    phone: vendor['Telephone 1'],
+    address: vendor.Street,
+  };
+}
+
+interface SAPVendor {
+  'Account group': string;
+  'Central deletion flag': string;
+  'City': string;
+  'Country': string;
+  'Name 1': string;
+  'P.O. Box Postal Code': string;
+  'PO Box': string;
+  'Postal Code': string;
+  'Region': string;
+  'Street': string;
+  'Tax Number 1': string;
+  'Tax Number 2': string;
+  'Telephone 1': string;
+  'Telephone 2': string;
+  'Vendor': string;
+}
+
+function fixCapitalization(text: string) {
+  return text.toLowerCase()
+    .split(' ')
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(' ');
+}
 
 async function main() {
   try {
     console.log({ sqlConfig });
     await sql.connect(sqlConfig);
 
-    /*
-    // Const qresult = await sql.query`select * from SYSOBJECTS WHERE xtype = 'U'`
+    // const qresult = await sql.query`select * from SYSOBJECTS WHERE xtype = 'U'`
     // const qresult = await sql.query`select * from LFDynamic.INFORMATION_SCHEMA.TABLES`
-    let qresult = (await sql.query`select * from SFI_Entities`)
-      .recordset as unknown as sqlEntry[];
-    const trellisList = await fetchTradingPartners();
+    let { recordset: qresult } = await sql.query`select * from SFI_Entities`;
+    //const trellisList = await fetchTradingPartners();
 
-    await handleEntities(trellisList, qresult);
-    console.log('before', qresult);
-    qresult = (await sql.query`select * from SFI_Entities`)
-      .recordset as unknown as sqlEntry[];
-    console.log('after', qresult);
-    console.log('SQL LIST:', qresult.length, 'TRELLIS:', trellisList.length);
-    */
+    //await handleEntities(trellisList, qresult);
+    //qresult = (await sql.query`select * from SFI_Entities`)
+    //  .recordset as unknown as sqlEntry[];
+    //console.log('after', qresult);
+    //console.log('SQL LIST:', qresult.length, 'TRELLIS:', trellisList.length);
   } catch (error) {
     console.log(error);
   }
 
   process.exit();
 }
-
-process.exit();
 
 /*
 Async function addRemove(list: Array<sqlEntry>, name: string) {
@@ -110,8 +163,8 @@ async function addEntity(name: string) {
 
 async function fetchTradingPartners() {
   const CONNECTION = await connect({
-    domain: DOMAIN,
-    token: TOKEN,
+    domain,
+    token,
   });
 
   const { data: tps } = await CONNECTION.get({
@@ -142,3 +195,7 @@ interface trellisEntry {
   name: string;
   masterid: string;
 }
+
+//await main();
+const rows = grabVendors();
+console.log(rows);

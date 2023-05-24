@@ -18,12 +18,11 @@
 import config from './config.js';
 
 import fs from 'node:fs';
-
+import { default as axios, AxiosRequestConfig } from 'axios';
 import type { OADAClient } from '@oada/client';
 import { JsonPointer } from 'json-ptr';
 import { connect, doJob } from '@oada/client';
 import _ from 'lodash';
-import { default as axios } from 'axios';
 // @ts-expect-error
 import csvjson from 'csvjson';
 import debug from 'debug';
@@ -33,8 +32,10 @@ import moment from 'moment';
 import type { JsonObject } from '@oada/client';
 import type { FlBusiness } from './mirrorWatch.js';
 import { mapTradingPartner } from './masterData2.js';
+import { setTimeout } from 'node:timers/promises';
 import type { TradingPartner } from './masterData2.js';
 import tree from './tree.masterData.js';
+import { tree as flTree } from './tree.js';
 
 const { domain, token } = config.get('trellis');
 const SERVICE_PATH = config.get('service.path');
@@ -401,6 +402,49 @@ async function fixVendors(oada: OADAClient, matches: any[]) {
   }
 }
 
+async function handleReportResponses(oada: OADAClient, rows: any[]) {
+  for await (const tp of rows) {
+    // 1. lookup the trading-partner
+    const bid = tp['FL ID'];
+    const sapid = tp['SAP ID'];
+    const job = await doJob(oada, {
+      service: 'trellis-data-manager',
+      type: 'trading-partners-query',
+      config: {
+        element: {
+          externalIds: [`foodlogiq:${tp['FL ID']}`],
+        },
+      },
+    });
+
+    // 2. assign the sapids
+    if (!job.result?.exact) {
+      throw new Error('Exact match should have been found');
+    }
+
+    // 3. Get it to flow to LF sync
+    const { data: flBus } = (await oada.get({
+      path: `/bookmarks/services/fl-sync/${bid}`,
+    })) as unknown as { data: { 'food-logiq-mirror': { _id: string } } };
+
+    const memberId = flBus['food-logiq-mirror']._id;
+    const { data: member } = await axios({
+      method: 'get',
+      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/memberships/${memberId}`,
+      headers: { Authorization: FL_TOKEN },
+    });
+    member.internalId = sapid;
+    await axios({
+      method: 'put',
+      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/memberships/${memberId}`,
+      headers: { Authorization: FL_TOKEN },
+      data: member,
+    });
+  }
+}
+
+// This was the original plans for how to handle merging trading
+// partners after Chris' responses.
 async function processReportResponses() {
   const conn = await connect({
     domain: 'localhost:3010',
@@ -416,7 +460,7 @@ async function processReportResponses() {
   await fixVendors(oada, matches);
 }
 
-async function vendorPrep() {
+async function vendorPrepPriorToHandleReport() {
    const prod = await connect({
     domain: 'localhost:3006',
     token: 'e5983f91726e41a4956918932e547048',
@@ -442,18 +486,6 @@ async function vendorPrep() {
 
     const bus = data['food-logiq-mirror'] as unknown as FlBusiness;
     const tpid = data.masterid as unknown as string;
-    const flid = `foodlogiq:${bid}`;
-
-    let fromTP = await doJob(oada, {
-      service: 'trellis-data-manager',
-      type: 'trading-partners-query',
-      config: { element: { externalIds: [flid] } },
-    });
-
-    // @ts-expect-error 
-    if (fromTP.matches.length === 1 && fromTP.matches[0].item.externalIds.includes(flid)) {
-      continue;
-    }
 
     if (!tpid) {
       //Cant really fix the current prod thing...
@@ -469,15 +501,29 @@ async function vendorPrep() {
       //throw new Error(`No masterid for business ${bid}`);
     }
 
+    const flid = `foodlogiq:${bid}`;
+
+    let fromTP = await doJob(oada, {
+      service: 'trellis-data-manager',
+      type: 'trading-partners-query',
+      config: { element: { externalIds: [flid] } },
+    });
+
+    // @ts-expect-error 
+    if (fromTP.matches.length === 1 && fromTP.matches[0].item.externalIds.includes(flid)) {
+      continue;
+    }
+
     const { data: tp } = (await prod.get({
       path: `/bookmarks/trellisfw/trading-partners/masterid-index/${tpid}`,
     })) as { data: JsonObject };
-    const real_masterid = tp._id;
+    const realMasterid = tp._id;
 
+    // Fix the existing prod list
     await prod.put({
       path: `/bookmarks/trellisfw/trading-partners/masterid-index/${tpid}`,
       data: {
-        masterid: real_masterid,
+        masterid: realMasterid,
         externalIds: [flid],
       },
     });
@@ -493,9 +539,129 @@ async function vendorPrep() {
   }
 }
 
+function filterOadaKeys(object: JsonObject) {
+  return Object.fromEntries(
+    Object.entries(object).filter(([key, _]) => !key.startsWith('_'))
+  );
+}
+
+async function copyProdData() {
+  const dev = await connect({
+    domain: 'http://localhost:3002',
+    token: 'god',
+  });
+  const prod = await connect({
+    domain: 'localhost:3006',
+    token: 'e5983f91726e41a4956918932e547048',
+  });
+
+  // Copy FL businesses
+  /*
+  const { data: businesses } = (await prod.get({
+    path: `/bookmarks/services/fl-sync/businesses`,
+  })) as { data: JsonObject };
+
+  const businessKeys = Object.keys(businesses).filter(
+    (key) => !key.startsWith('_')
+  );
+
+  let passed = false;
+  for await (const bid of businessKeys) {
+    if (bid === '641085b1137b5a000f95b71b') passed = true;
+    console.log({ bid, passed });
+    if (!passed) continue;
+    let { data: flBus } = (await prod.get({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}`,
+    })) as { data: JsonObject };
+
+    flBus = Object.fromEntries(
+      Object.entries(flBus).filter(([k, _]) => !k.startsWith('_'))
+    );
+
+    await dev.put({
+      path: `/bookmarks/services/fl-sync/businesses/${bid}`,
+      data: flBus,
+      tree: flTree,
+    });
+    await setTimeout(500);
+  }
+  */
+
+  // Copy Trading Partner data
+  const { data: tps } = (await prod.get({
+    path: `/bookmarks/trellisfw/trading-partners`,
+  })) as { data: JsonObject };
+
+  const tpKeys = Object.keys(tps)
+    .filter((k) => !k.startsWith('_'))
+    .filter((k) => !['masterid-index', 'expand-index'].includes(k));
+
+  let passed = false;
+  for await (const tpKey of tpKeys) {
+    console.log({ tpKey });
+    if (tpKey === '5ddd8032343c9b000126f0f8') passed = true;
+    if (!passed) continue;
+    let { data: tp } = (await prod.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
+    })) as { data: JsonObject };
+
+    tp = Object.fromEntries(
+      Object.entries(tp)
+        .filter(([k, _]) => !k.startsWith('_'))
+        .filter(([k, _]) => !['bookmarks', 'shared'].includes(k))
+    );
+    await dev.put({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
+      data: tp,
+    });
+    await setTimeout(700);
+
+    const { data: docs } = (await prod.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents`,
+    })) as { data: JsonObject };
+    const docTypeKeys = Object.keys(docs).filter((k) => !k.startsWith('_'));
+
+    for await (const docTypeKey of docTypeKeys) {
+      const { data: docType } = (await prod.get({
+        path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}`,
+      })) as { data: JsonObject };
+      const docKeys = Object.keys(docType).filter((k) => !k.startsWith('_'));
+
+      for await (const docKey of docKeys) {
+        let { data: doc } = (await prod.get({
+          path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
+        })) as { data: JsonObject };
+
+        doc = Object.fromEntries(
+          Object.entries(doc).filter(([k, _]) => !k.startsWith('_'))
+        );
+        console.log({ doc }, `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`);
+        try {
+          await dev.head({
+            path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
+          });
+        } catch (err: any) {
+          if (err.status !== 404) throw err;
+          try {
+            await dev.put({
+              path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
+              data: doc,
+              tree,
+            });
+          } catch(errorThing: any) {
+            console.log(errorThing)
+          }
+          await setTimeout(500);
+        }
+      }
+    }
+  }
+}
+
 //await loadVendors();
 //await makeVendors();
 //await makeReport();
 //validateReportResponses();
 //processReportResponses();
-await vendorPrep();
+//await vendorPrepPriorToHandleReport();
+await copyProdData();

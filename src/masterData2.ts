@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import config from './config.masterdata.js';
+import config from './config.js';
 
 import _ from 'lodash';
 import debug from 'debug';
@@ -32,11 +32,8 @@ import type { FlBusiness } from './mirrorWatch.js';
 
 const SERVICE_NAME = config.get('service.name');
 const SERVICE_PATH = config.get('service.path');
-// TL_TP: string = config.get('trellis.endpoints.service-tp');
+const TP_MANAGER_SERVICE = config.get('tp-manager');
 const TL_TP = `/bookmarks/trellisfw/trading-partners`;
-const TL_TP_MI = `${TL_TP}/masterid-index`;
-const TL_TP_EI = `${TL_TP}/expand-index`;
-const FL_MIRROR = `food-logiq-mirror`;
 
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
@@ -102,32 +99,15 @@ export interface TradingPartnerNoLinks {
 //@ts-ignore
 export const handleNewBusiness: WorkerFunction = async (job, { oada }) => {
   //1. Make the query to the trellis trading partners
-  // @ts-ignore
+  // @ts-expect-error fl-bus doesn't exist on Json
   const element = mapTradingPartner(job.config['fl-business']);
 
-  let ensureJob;
-  try {
-    ensureJob = await doJob(oada, {
-      type: 'trading-partners-ensure',
-      service: 'trellis-data-manager',
-      config: { element },
-    });
-
-    //Ensure needs to handle 'entry', 'new' and 'matches'
-
-    /* This is getting eliminated. We don't want to cache anything outside of 
-    the trellis-data-manager! Look it up when you need it!
-    await updateMasterId(
-      // @ts-ignore
-      job.config['fl-business'],
-      (ensureJob?.result as TradingPartner).masterid,
-      oada
-    );
-    */
-  } catch (error_: unknown) {
-    error(error_);
-    throw error_;
-  }
+  // 1. Check for sapid
+  const ensureJob = await doJob(oada, {
+    type: 'trading-partners-ensure',
+    service: TP_MANAGER_SERVICE,
+    config: { element },
+  });
 
   return ensureJob.result;
 };
@@ -138,6 +118,8 @@ export const handleNewBusiness: WorkerFunction = async (job, { oada }) => {
  * @returns
  */
 export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
+  const externalIds = [`foodlogiq:${bus.business._id}`];
+  if (bus.internalId) externalIds.push(`sap:${bus.internalId}`);
   return {
     ..._.cloneDeep(trellisTPTemplate),
     name: bus.business.name || '',
@@ -146,7 +128,7 @@ export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
     state: bus.business.address.region || '',
     email: bus.business.email || '',
     phone: bus.business.phone || '',
-    externalIds: [`foodlogiq:${bus.business._id}`]
+    externalIds,
   };
 }
 

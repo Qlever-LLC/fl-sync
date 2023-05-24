@@ -23,8 +23,11 @@ const temporary = {
     '_rev': 0,
     'documents': {
       '_type': 'application/vnd.oada.trellisfw.documents.1+json',
-      '*': {
-        _type: 'application/vnd.oada.trellisfw.document.1+json',
+      '*': { // Document type list
+        '_type': 'application/vnd.oada.trellisfw.documents.1+json',
+        '*': { // Document list
+          _type: 'application/vnd.oada.trellisfw.document.1+json',
+        },
       },
     },
     'fsqa-audits': {
