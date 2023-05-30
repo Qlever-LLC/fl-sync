@@ -432,110 +432,75 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/client@npm:^4.5.0, @oada/client@npm:^4.5.4":
+  version: 4.5.4
+  resolution: "@oada/client@npm:4.5.4"
   dependencies:
     "@oada/jobs": ^4.2.5
-    "@oada/types": ^3.4.6
+    "@oada/types": ^3.5.2
     abort-controller: ^3.0.0
     buffer: ^6.0.3
-    bufferutil: ^4.0.6
-    cross-fetch: ^3.1.5
+    bufferutil: ^4.0.7
+    cross-fetch: ^3.1.6
     debug: ^4.3.4
-    deep-clone: ^3.0.3
+    deep-clone: ^4.0.0
     encoding: ^0.1.13
     event-iterator: ^2.0.0
-    eventemitter3: ^4.0.7
+    eventemitter3: ^5.0.1
     fetch-h2: ^3.0.2
-    file-type: ^18.0.0
+    file-type: ^18.5.0
     isomorphic-timers-promises: ^1.0.1
     isomorphic-ws: ^5.0.0
     json-ptr: ^3.1.1
     jsonpath-plus: ^7.2.0
     media-type: ^0.3.1
     object-assign-deep: ^0.4.0
-    p-queue: ^7.3.0
+    p-queue: ^7.3.4
     reconnecting-websocket: ^4.4.0
     resolve-alpn: ^1.2.1
     serialize-error: ^11.0.0
-    supports-color: ^9.2.3
-    tslib: ^2.5.0
-    utf-8-validate: ^5.0.9
-    ws: ^8.9.0
+    supports-color: ^9.3.1
+    tslib: ^2.5.3
+    utf-8-validate: ^6.0.3
+    ws: ^8.13.0
     xksuid: ^0.0.3
+  checksum: 2790819f676167cadcfc89fafcb3ddd98cd98237634a45d2c2e23d96ab879b77cc8a57bd6812e4630b80428bbd23b2641c13cec19cdffe35acfba6fe9c50aa5b
+  languageName: node
+  linkType: hard
+
+"@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+  dependencies:
+    "@ava/typescript": ^3.0.1
+    "@oada/client": ^4.5.0
+    "@oada/list-lib": ^4.2.6
+    "@oada/oadaify": ^2.1.0
+    "@oada/types": ^3.4.5
+    "@sindresorhus/is": ^5.3.0
+    ava: ^5.1.1
+    bluebird: ^3.7.2
+    c8: ^7.12.0
+    chalk: ^4.1.2
+    clone-deep: ^4.0.1
+    color-json: ^3.0.2
+    cron: ^2.2.0
+    csvjson: ^5.1.0
+    debug: ^4.3.4
+    eventemitter3: ^5.0.0
+    json-pointer: ^0.6.2
+    jsonpath-plus: ^7.2.0
+    ksuid: ^3.0.0
+    minimist: ^1.2.7
+    moment: ^2.29.4
+    p-timeout: ^6.1.0
+    serialize-error: ^11.0.0
+    tiny-json-http: ^7.4.2
+    tslib: ^2.5.0
+  bin:
+    oada-jobs: ./src/cli.mjs
   languageName: node
   linkType: soft
-
-"@oada/jobs@npm:^4.2.3":
-  version: 4.2.3
-  resolution: "@oada/jobs@npm:4.2.3"
-  dependencies:
-    "@ava/typescript": ^3.0.1
-    "@oada/client": ^4.5.0
-    "@oada/list-lib": ^4.2.6
-    "@oada/oadaify": ^2.1.0
-    "@oada/types": ^3.4.5
-    "@sindresorhus/is": ^5.3.0
-    ava: ^5.1.1
-    bluebird: ^3.7.2
-    c8: ^7.12.0
-    chalk: ^4.1.2
-    clone-deep: ^4.0.1
-    color-json: ^3.0.2
-    cron: ^2.2.0
-    csvjson: ^5.1.0
-    debug: ^4.3.4
-    eventemitter3: ^5.0.0
-    json-pointer: ^0.6.2
-    jsonpath-plus: ^7.2.0
-    ksuid: ^3.0.0
-    minimist: ^1.2.7
-    moment: ^2.29.4
-    p-timeout: ^6.1.0
-    serialize-error: ^11.0.0
-    tiny-json-http: ^7.4.2
-    tslib: ^2.5.0
-  bin:
-    oada-jobs: ./src/cli.mjs
-  checksum: fd153d21c2472151378e9b405aa41cf57612f7d8c3296b9f6e71faf0cffeb1bf2f18f31dbb48d10c256db6a8f77bde348782278094026aea87c8d8767b3f9e9f
-  languageName: node
-  linkType: hard
-
-"@oada/jobs@npm:^4.2.5":
-  version: 4.2.5
-  resolution: "@oada/jobs@npm:4.2.5"
-  dependencies:
-    "@ava/typescript": ^3.0.1
-    "@oada/client": ^4.5.0
-    "@oada/list-lib": ^4.2.6
-    "@oada/oadaify": ^2.1.0
-    "@oada/types": ^3.4.5
-    "@sindresorhus/is": ^5.3.0
-    ava: ^5.1.1
-    bluebird: ^3.7.2
-    c8: ^7.12.0
-    chalk: ^4.1.2
-    clone-deep: ^4.0.1
-    color-json: ^3.0.2
-    cron: ^2.2.0
-    csvjson: ^5.1.0
-    debug: ^4.3.4
-    eventemitter3: ^5.0.0
-    json-pointer: ^0.6.2
-    jsonpath-plus: ^7.2.0
-    ksuid: ^3.0.0
-    minimist: ^1.2.7
-    moment: ^2.29.4
-    p-timeout: ^6.1.0
-    serialize-error: ^11.0.0
-    tiny-json-http: ^7.4.2
-    tslib: ^2.5.0
-  bin:
-    oada-jobs: ./src/cli.mjs
-  checksum: 74d521db9ff618540504de06372cbe30dc9b9153c7ae05716d7dfc1e9df8b0506bb52274deb304a25676b6ac7283500c62823a62bd1724355b78f58070e74558
-  languageName: node
-  linkType: hard
 
 "@oada/list-lib@npm:4.2.6, @oada/list-lib@npm:^4.2.6":
   version: 4.2.6
@@ -617,6 +582,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@oada/types@npm:^3.5.2":
+  version: 3.5.2
+  resolution: "@oada/types@npm:3.5.2"
+  dependencies:
+    ajv: 8.12.0
+    ajv-formats: ^2.1.1
+    ajv-formats-draft2019: ^1.6.1
+    tslib: ^2.5.0
+  checksum: 1d238bc9d284a37b49b56af6306c046503b9e86bcec3deeeb9c802d305219aa8946dd37768c911f92e363fe8c3be14c657f7a3895dcb8c677c57aff55a095990
+  languageName: node
+  linkType: hard
+
 "@opentelemetry/api@npm:^1.0.1":
   version: 1.1.0
   resolution: "@opentelemetry/api@npm:1.1.0"
@@ -636,7 +613,7 @@ __metadata:
   resolution: "@qlever-llc/fl-sync@workspace:."
   dependencies:
     "@ava/typescript": ^3.0.1
-    "@oada/client": ^4.5.0
+    "@oada/client": ^4.5.4
     "@oada/jobs": ^4.2.3
     "@oada/list-lib": 4.2.6
     "@oada/poll": ^1.0.4
@@ -696,6 +673,7 @@ __metadata:
     eslint-plugin-security: ^1.5.0
     eslint-plugin-sonarjs: ^0.15.0
     eslint-plugin-unicorn: ^43.0.2
+    form-data: ^4.0.0
     fuse.js: ^6.6.2
     js-sha256: ^0.9.0
     json-pointer: ^0.6.2
@@ -1849,13 +1827,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"bufferutil@npm:^4.0.6":
-  version: 4.0.6
-  resolution: "bufferutil@npm:4.0.6"
+"bufferutil@npm:^4.0.7":
+  version: 4.0.7
+  resolution: "bufferutil@npm:4.0.7"
   dependencies:
     node-gyp: latest
     node-gyp-build: ^4.3.0
-  checksum: dd107560947445280af7820c3d0534127b911577d85d537e1d7e0aa30fd634853cef8a994d6e8aed3d81388ab1a20257de776164afe6a6af8e78f5f17968ebd6
+  checksum: f75aa87e3d1b99b87a95f60a855e63f70af07b57fb8443e75a2ddfef2e47788d130fdd46e3a78fd7e0c10176082b26dfbed970c5b8632e1cc299cafa0e93ce45
   languageName: node
   linkType: hard
 
@@ -2480,12 +2458,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cross-fetch@npm:^3.1.5":
-  version: 3.1.5
-  resolution: "cross-fetch@npm:3.1.5"
+"cross-fetch@npm:^3.1.6":
+  version: 3.1.6
+  resolution: "cross-fetch@npm:3.1.6"
   dependencies:
-    node-fetch: 2.6.7
-  checksum: f6b8c6ee3ef993ace6277fd789c71b6acf1b504fd5f5c7128df4ef2f125a429e29cd62dc8c127523f04a5f2fa4771ed80e3f3d9695617f441425045f505cf3bb
+    node-fetch: ^2.6.11
+  checksum: 704b3519ab7de488328cc49a52cf1aa14132ec748382be5b9557b22398c33ffa7f8c2530e8a97ed8cb55da52b0a9740a9791d361271c4591910501682d981d9c
   languageName: node
   linkType: hard
 
@@ -2585,10 +2563,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"deep-clone@npm:^3.0.3":
-  version: 3.0.3
-  resolution: "deep-clone@npm:3.0.3"
-  checksum: 186e73b2115a6a219465b61a7a31794370330d7b74ae3960bf89660c55087997fef956d4720295c8bda677caa1c85fda352296683370e14b614c3688233dbdda
+"deep-clone@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "deep-clone@npm:4.0.0"
+  checksum: 1068fe32728dcd438e3f8b5d93868d6cea593f35feb3c4c4a23f9270b12ec6789f58d8df7c3b35adef08d50502e9f1fa3c89c9d775b24d4c15b63c8fb93fb62d
   languageName: node
   linkType: hard
 
@@ -3543,6 +3521,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"eventemitter3@npm:^5.0.1":
+  version: 5.0.1
+  resolution: "eventemitter3@npm:5.0.1"
+  checksum: 543d6c858ab699303c3c32e0f0f47fc64d360bf73c3daf0ac0b5079710e340d6fe9f15487f94e66c629f5f82cd1a8678d692f3dbb6f6fcd1190e1b97fcad36f8
+  languageName: node
+  linkType: hard
+
 "events@npm:^3.0.0":
   version: 3.3.0
   resolution: "events@npm:3.3.0"
@@ -3668,14 +3653,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"file-type@npm:^18.0.0":
-  version: 18.2.0
-  resolution: "file-type@npm:18.2.0"
+"file-type@npm:^18.5.0":
+  version: 18.5.0
+  resolution: "file-type@npm:18.5.0"
   dependencies:
     readable-web-to-node-stream: ^3.0.2
     strtok3: ^7.0.0
     token-types: ^5.0.1
-  checksum: 6bbb072fb03eee8c3a8ad6bbaa97a81051abaf31f372e42a634dffaec319ae57de06ea632ee47d80c34a501bb1068892a8f8dc2cbcc5efd127784d38f0377712
+  checksum: d2bc81d842b110970a0ca9d90356ce4e9738c1c05596ce8931f2af334477856d92bcecd0742dc6646e13a970c0125150ad4415898688d1901d80e972d90ab1ca
   languageName: node
   linkType: hard
 
@@ -5529,7 +5514,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"node-fetch@npm:2.6.7, node-fetch@npm:^2.6.7":
+"node-fetch@npm:^2.6.11":
+  version: 2.6.11
+  resolution: "node-fetch@npm:2.6.11"
+  dependencies:
+    whatwg-url: ^5.0.0
+  peerDependencies:
+    encoding: ^0.1.0
+  peerDependenciesMeta:
+    encoding:
+      optional: true
+  checksum: 249d0666a9497553384d46b5ab296ba223521ac88fed4d8a17d6ee6c2efb0fc890f3e8091cafe7f9fba8151a5b8d925db2671543b3409a56c3cd522b468b47b3
+  languageName: node
+  linkType: hard
+
+"node-fetch@npm:^2.6.7":
   version: 2.6.7
   resolution: "node-fetch@npm:2.6.7"
   dependencies:
@@ -5860,13 +5859,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"p-queue@npm:^7.3.0":
-  version: 7.3.0
-  resolution: "p-queue@npm:7.3.0"
+"p-queue@npm:^7.3.4":
+  version: 7.3.4
+  resolution: "p-queue@npm:7.3.4"
   dependencies:
     eventemitter3: ^4.0.7
     p-timeout: ^5.0.2
-  checksum: eda8b8d4dac9456d1722c8ee0892bbb2e7f7b79d1f90b6cc1bac5fb9dcf3120285f90c28a68dc2f66bc9e46c7d7d42ad206a2c4d83e7aad27a0226ae042081ee
+  checksum: a21b8a4dd75f64a4988e4468cc344d1b45132506ddd2c771932d3de446d108ee68713b629e0d3f0809c227bc10eafc613edde6ae741d9f60db89b6031e40921c
   languageName: node
   linkType: hard
 
@@ -6980,7 +6979,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"supports-color@npm:^9.2.3":
+"supports-color@npm:^9.3.1":
   version: 9.3.1
   resolution: "supports-color@npm:9.3.1"
   checksum: 00c4d1082a7ba0ee21cba1d4e4a466642635412e40476777b530aa5110d035e99a420cd048e1fb6811f2254c0946095fbb87a1eccf1af1d1ca45ab0a4535db93
@@ -7205,6 +7204,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"tslib@npm:^2.5.3":
+  version: 2.5.3
+  resolution: "tslib@npm:2.5.3"
+  checksum: 88902b309afaf83259131c1e13da1dceb0ad1682a213143a1346a649143924d78cf3760c448b84d796938fd76127183894f8d85cbb3bf9c4fddbfcc140c0003c
+  languageName: node
+  linkType: hard
+
 "tsutils@npm:^3.21.0":
   version: 3.21.0
   resolution: "tsutils@npm:3.21.0"
@@ -7354,13 +7360,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"utf-8-validate@npm:^5.0.9":
-  version: 5.0.9
-  resolution: "utf-8-validate@npm:5.0.9"
+"utf-8-validate@npm:^6.0.3":
+  version: 6.0.3
+  resolution: "utf-8-validate@npm:6.0.3"
   dependencies:
     node-gyp: latest
     node-gyp-build: ^4.3.0
-  checksum: 90117f1b65e0a1256c83dfad529983617263b622f2379745311d0438c7ea31db0d134ebd0dca84c3f5847a3560a3d249644e478a9109c616f63c7ea19cac53dc
+  checksum: 5e21383c81ff7469c1912119ca69d07202d944c73ddd8a54b84dddcc546b939054e5101c78c294e494d206fe93bd43428adc635a0660816b3ec9c8ec89286ac4
   languageName: node
   linkType: hard
 
@@ -7524,9 +7530,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.9.0":
-  version: 8.12.0
-  resolution: "ws@npm:8.12.0"
+"ws@npm:^8.13.0":
+  version: 8.13.0
+  resolution: "ws@npm:8.13.0"
   peerDependencies:
     bufferutil: ^4.0.1
     utf-8-validate: ">=5.0.2"
@@ -7535,7 +7541,7 @@ __metadata:
       optional: true
     utf-8-validate:
       optional: true
-  checksum: 818ff3f8749c172a95a114cceb8b89cedd27e43a82d65c7ad0f7882b1e96a2ee6709e3746a903c3fa88beec0c8bae9a9fcd75f20858b32a166dfb7519316a5d7
+  checksum: 53e991bbf928faf5dc6efac9b8eb9ab6497c69feeb94f963d648b7a3530a720b19ec2e0ec037344257e05a4f35bd9ad04d9de6f289615ffb133282031b18c61c
   languageName: node
   linkType: hard
 

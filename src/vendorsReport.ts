@@ -27,7 +27,6 @@ import _ from 'lodash';
 import csvjson from 'csvjson';
 import debug from 'debug';
 import Fuse from 'fuse.js';
-import ksuid from 'ksuid';
 import moment from 'moment';
 import type { JsonObject } from '@oada/client';
 import type { FlBusiness } from './mirrorWatch.js';
@@ -38,7 +37,8 @@ import tree from './tree.masterData.js';
 import { tree as flTree } from './tree.js';
 
 const { domain, token } = config.get('trellis');
-const SERVICE_PATH = config.get('service.path');
+const SERVICE_NAME = config.get('service.name');
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const SUPPLIER = config.get('foodlogiq.testSupplier.id');
 const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
 const CO_ID = config.get('foodlogiq.community.owner.id');
@@ -446,22 +446,7 @@ async function handleReportResponses(oada: OADAClient, rows: any[]) {
 // This was the original plans for how to handle merging trading
 // partners after Chris' responses.
 async function processReportResponses() {
-  const conn = await connect({
-    domain: 'localhost:3010',
-    token: '77961fb1fc3c4d1d81bc59cd8a5eb822',
-  });
-  const oada = await connect({
-    domain,
-    token,
-  });
-  const { matches } = validateReportResponses();
-
-  console.log(matches);
-  await fixVendors(oada, matches);
-}
-
-async function vendorPrepPriorToHandleReport() {
-   const prod = await connect({
+  const prod = await connect({
     domain: 'localhost:3006',
     token: 'e5983f91726e41a4956918932e547048',
   });
@@ -469,74 +454,9 @@ async function vendorPrepPriorToHandleReport() {
     domain,
     token,
   });
+  const { matches } = validateReportResponses();
 
-  // Copy food logiq vendors over to dev for testing
-  const { data: businesses } = (await prod.get({
-    path: `/bookmarks/services/fl-sync/businesses`,
-  })) as { data: JsonObject };
-
-  const businessKeys = Object.keys(businesses).filter(
-    (key) => !key.startsWith('_')
-  );
-
-  for await (const bid of businessKeys) {
-    const { data } = (await prod.get({
-      path: `/bookmarks/services/fl-sync/businesses/${bid}`,
-    })) as { data: JsonObject };
-
-    const bus = data['food-logiq-mirror'] as unknown as FlBusiness;
-    const tpid = data.masterid as unknown as string;
-
-    if (!tpid) {
-      //Cant really fix the current prod thing...
-      /*
-      // Create a trading partner and fill in the flid
-      const element = mapTradingPartner(bus);
-      await doJob(oada, {
-        service: 'trellis-data-manager',
-        type: 'trading-partners-generate',
-        config: { element },
-      });
-      */
-      //throw new Error(`No masterid for business ${bid}`);
-    }
-
-    const flid = `foodlogiq:${bid}`;
-
-    let fromTP = await doJob(oada, {
-      service: 'trellis-data-manager',
-      type: 'trading-partners-query',
-      config: { element: { externalIds: [flid] } },
-    });
-
-    // @ts-expect-error 
-    if (fromTP.matches.length === 1 && fromTP.matches[0].item.externalIds.includes(flid)) {
-      continue;
-    }
-
-    const { data: tp } = (await prod.get({
-      path: `/bookmarks/trellisfw/trading-partners/masterid-index/${tpid}`,
-    })) as { data: JsonObject };
-    const realMasterid = tp._id;
-
-    // Fix the existing prod list
-    await prod.put({
-      path: `/bookmarks/trellisfw/trading-partners/masterid-index/${tpid}`,
-      data: {
-        masterid: realMasterid,
-        externalIds: [flid],
-      },
-    });
-
-    fromTP = await doJob(oada, {
-      service: 'trellis-data-manager',
-      type: 'trading-partners-query',
-      config: { element: { externalIds: [flid] } },
-    });
-
-    console.log({fromTP})
-
-  }
+//  await fixVendors(prod, matches);
 }
 
 function filterOadaKeys(object: JsonObject) {
@@ -658,10 +578,108 @@ async function copyProdData() {
   }
 }
 
+async function tradingPartnerPrep06142023() {
+  const prod = await connect({
+    domain: 'localhost:3006',
+    token: 'e5983f91726e41a4956918932e547048',
+  });
+  const oada = await connect({
+    domain,
+    token,
+  });
+
+  // Copy food logiq vendors over to dev for testing
+  const { data: tps } = (await prod.get({
+    path: `/bookmarks/trellisfw/trading-partners`,
+  })) as { data: JsonObject };
+
+  const tpKeys = Object.keys(tps)
+    .filter((key) => !key.startsWith('_'))
+    .filter((key) => !key.includes('index'));
+
+  for await (const tpKey of tpKeys) {
+    console.log({tpKey});
+    const { data: tp } = (await prod.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
+    })) as unknown as { data: OldTradingPartner };
+    const data: TradingPartner = {
+      masterid: tp._id,
+      companycode: tp.companycode ?? '',
+      vendorid: tp.vendorid ?? '',
+      partnerid: tp.partnerid ?? '',
+      name: tp.name ?? '',
+      address: tp.address ?? '',
+      city: tp.city ?? '',
+      state: tp.state ?? '',
+      coi_emails: tp.coi_emails ?? '',
+      fsqa_emails: tp.fsqa_emails ?? '',
+      email: tp.email ?? '',
+      phone: tp.phone ?? '',
+      externalIds: [],
+      bookmarks: tp.bookmarks,
+      shared: tp.shared,
+      frozen: false,
+    };
+    if (tp.foodlogiq?._id) {
+      data.externalIds = [...data.externalIds, `foodlogiq:${tp.foodlogiq._id}`];
+    }
+
+    await prod.put({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
+      //@ts-expect-error data is fine...
+      data,
+    });
+    await prod.delete({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}/id`,
+    });
+    await prod.delete({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}/foodlogiq`,
+    });
+    console.log('done with tp');
+  }
+
+  await prod.delete({
+    path: `/bookmarks/trellisfw/trading-partners/masterid-index`,
+  });
+  await prod.delete({
+    path: `/bookmarks/trellisfw/trading-partners/expand-index`,
+  });
+}
+
 //await loadVendors();
 //await makeVendors();
 //await makeReport();
 //validateReportResponses();
 //processReportResponses();
 //await vendorPrepPriorToHandleReport();
-await copyProdData();
+//await copyProdData();
+
+//await tradingPartnerPrep06142023();
+
+type OldTradingPartner = {
+  sapid?: string;
+  id?: string;
+  type?: string;
+  source?: string;
+  vendorid?: string;
+  partnerid?: string;
+  companycode?: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  coi_emails: string;
+  fsqa_emails: string;
+  email: string;
+  phone: string;
+  foodlogiq: {
+    _id: string;
+  };
+  bookmarks: {
+    _id: string;
+  };
+  shared: {
+    _id: string;
+  };
+  _id: string;
+};

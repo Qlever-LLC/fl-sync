@@ -34,8 +34,8 @@ const FL_TOKEN = config.get('foodlogiq.token');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 // Const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 // const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
-const SERVICE_PATH = config.get('service.path');
 const SERVICE_NAME = config.get('service.name');
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 
 const info = debug('fl-sync:info');
 const error = debug('fl-sync:error');

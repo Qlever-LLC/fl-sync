@@ -31,7 +31,8 @@ import moment from 'moment';
 
 const DOMAIN = config.get('trellis.domain');
 const TOKEN = config.get('trellis.token');
-const SERVICE_PATH = config.get('service.path');
+const SERVICE_NAME = config.get('service.name');
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const SUPPLIER = config.get('foodlogiq.testSupplier.id');
 const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
 const CO_ID = config.get('foodlogiq.community.owner.id');
@@ -399,7 +400,7 @@ function fixHeaders(csv: string, headers: string[]) {
   }
 }
 
-function mostRecentKsuid(keys: string[]) {
+export function mostRecentKsuid(keys: string[]) {
   return keys.length > 0
     ? keys
         .map((k) => ksuid.parse(k))

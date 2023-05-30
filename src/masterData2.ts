@@ -29,9 +29,10 @@ import type Resource from '@oada/types/oada/resource.js';
 import tree from './tree.masterData.js';
 //import type TradingPartner from '@oada/types/trellis/trading-partners/trading-partner.js';
 import type { FlBusiness } from './mirrorWatch.js';
+import { postUpdate } from '@oada/jobs';
 
 const SERVICE_NAME = config.get('service.name');
-const SERVICE_PATH = config.get('service.path');
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const TP_MANAGER_SERVICE = config.get('tp-manager');
 const TL_TP = `/bookmarks/trellisfw/trading-partners`;
 
@@ -41,7 +42,7 @@ if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
 
 const info = debug('fl-sync:master-data:info');
 const error = debug('fl-sync:master-data:error');
-const trace = debug('fl-sync:master-data:trace');
+const warn = debug('fl-sync:master-data:warn');
 
 enum SourceType {
   Vendor = 'vendor',
@@ -67,7 +68,6 @@ export interface TradingPartner {
   fsqa_emails: string;
   email: string;
   phone: string;
-  foodlogiq?: string;
   bookmarks: {
     _id: string;
   };
@@ -78,38 +78,108 @@ export interface TradingPartner {
   frozen: boolean;
 }
 
-export interface TradingPartnerNoLinks {
-  masterid: string;
-  companycode?: string;
-  vendorid?: string;
-  partnerid?: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  coi_emails: string;
-  fsqa_emails: string;
-  email: string;
-  phone: string;
-  foodlogiq?: string;
-  externalIds: string[];
-  frozen: boolean;
-}
+export type TradingPartnerNoLinks = Omit<
+  TradingPartner,
+  'bookmarks' | 'shared'
+>;
 
-//@ts-ignore
-export const handleNewBusiness: WorkerFunction = async (job, { oada }) => {
-  //1. Make the query to the trellis trading partners
+// Because we're calling ensure on foodlogiq externalId, we can eliminate several
+// edge cases, e.g., multiple matches really should not occur.
+export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
+  // 1. Make the query to the trellis trading partners
   // @ts-expect-error fl-bus doesn't exist on Json
   const element = mapTradingPartner(job.config['fl-business']);
 
-  // 1. Check for sapid
-  const ensureJob = await doJob(oada, {
+  const ensureJob = (await doJob(oada, {
     type: 'trading-partners-ensure',
     service: TP_MANAGER_SERVICE,
-    config: { element },
+    config: {
+      element: {
+        ...element,
+        // Really, we just want to match on foodlogiq externalId here
+        externalIds: [element.externalIds[0]!],
+      },
+    },
+  })) as unknown as { result: EnsureResult; _id: string };
+
+  await oada.put({
+    path: `/${job.oadaId}`,
+    data: {
+      'ensure-job': {
+        _id: ensureJob._id,
+      },
+    },
   });
 
-  return ensureJob.result;
+  /*
+  if ((ensureJob?.result?.matches ?? []).length > 1) {
+    info(
+      // @ts-expect-error fl-bus doesn't exist on Json
+      `Food Logiq Business [${job.config['fl-business'].business._id}] inputs returned multiple trading-partner matches`
+    );
+    await postUpdate(oada, job.oadaId, `Multiple results on ensure request. See job /ensure-job for details.`, 'multiple-ensure-results');
+
+    const match = ensureJob.result.matches?.find((m) =>
+      m.externalIds.includes(
+        element.externalIds.find((k) => k.startsWith('foodlogiq'))
+      )
+    )
+    if (match) {
+      return {
+        ...ensureJob.result,
+        entry: match,
+      };
+    }
+  }
+  */
+
+  // @ts-expect-error annoying Json type
+  if (!job.config['fl-business'].internalId && ensureJob.result.new) {
+    await postUpdate(oada, job.oadaId, `New FL Business missing an 'internalId' detected.`, 'fl-business-incomplete');
+  }
+
+  // Add the externalIds if they are present
+  if (
+    // @ts-expect-error annoying Json type
+    job.config['fl-business'].internalId &&
+    !element.externalIds
+      .filter((k) => k.startsWith('sap'))
+      .every((k) => k.indexOf(ensureJob?.result?.entry.externalIds) > 0)
+  ) {
+    try {
+      const { result: updateResult } = await doJob(oada, {
+        type: 'trading-partners-update',
+        service: TP_MANAGER_SERVICE,
+        config: {
+          element: {
+            masterid: ensureJob.result.entry.masterid,
+            externalIds: element.externalIds,
+          },
+        },
+      });
+      const updateXids = (updateResult?.externalIds ?? []) as string[];
+      if (updateXids.length !== element.externalIds.length) {
+        const xids = element.externalIds.filter((xid) =>
+          !updateXids.includes(xid)
+        );
+        await postUpdate(oada, job.oadaId, `The following externalIds failed to update for trading-partner ${ensureJob.result.entry.masterid}: ${xids.join(', ')}`, 'fl-business-incomplete');
+      } else {
+        await postUpdate(oada, job.oadaId, `Updated trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`, 'tp-updated');
+      }
+      return {
+        ...ensureJob.result,
+        entry: updateResult,
+      };
+    } catch(err) {
+      warn(
+        // @ts-expect-error fl-bus doesn't exist on Json
+        `Food Logiq Business [${job.config['fl-business'].business._id}] externalID update failed.`
+      );
+      await postUpdate(oada, job.oadaId, `Failed to update trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`, 'tp-update-failed');
+    }
+  }
+
+  return ensureJob.result.entry;
 };
 
 /**
@@ -118,8 +188,11 @@ export const handleNewBusiness: WorkerFunction = async (job, { oada }) => {
  * @returns
  */
 export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
-  const externalIds = [`foodlogiq:${bus.business._id}`];
-  if (bus.internalId) externalIds.push(`sap:${bus.internalId}`);
+  let externalIds = [`foodlogiq:${bus.business._id}`];
+  if (bus.internalId) {
+    const iids = bus.internalId.split(',').map((iid) => `sap:${iid}`);
+    externalIds = [...externalIds, ...iids];
+  }
   return {
     ..._.cloneDeep(trellisTPTemplate),
     name: bus.business.name || '',
@@ -205,3 +278,9 @@ export async function watchTrellisFLBusinesses(conn: OADAClient, service: Servic
   });
 } // WatchTrellisFLBusinesses
 */
+export type EnsureResult = {
+  entry?: any;
+  matches?: any[];
+  exact?: boolean;
+  new?: boolean;
+};
