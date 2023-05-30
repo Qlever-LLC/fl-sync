@@ -36,19 +36,17 @@ import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
 import {
-  targetWatchOnAdd,
   handleAssessmentJob,
   handleDocumentJob,
-  targetWatchOnChange,
   startJobCreator,
 } from './mirrorWatch.js';
 import type { FlObject } from './mirrorWatch.js';
-import { reportConfig } from './reportConfig.js';
+import { docReportConfig, tpReportConfig, tpReportFilter } from './reportConfig.js';
 //import { businessesReportConfig } from './businessesReportConfig.js';
 import { startIncidents } from './flIncidentsCsv.js';
 import tree from './tree.js';
 import { watchTrellisFLBusinesses } from './masterData.js';
-import { handleNewBusiness } from './masterData2.js';
+import { handleFlBusiness } from './masterData2.js';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -61,8 +59,8 @@ const CONCURRENCY = config.get('trellis.concurrency');
 // Const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
 // const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; // FL polling interval
-const SERVICE_PATH = config.get('service.path');
 const SERVICE_NAME = config.get('service.name');
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
 const REPORT_EMAIL = config.get('trellis.reportEmail');
 const REPORT_CC_EMAIL = config.get('trellis.reportCcEmail');
@@ -138,38 +136,6 @@ export async function watchFlSyncConfig() {
   info('Watching %s for changes to the config', SERVICE_PATH);
   void handleConfigChanges(changes);
 } // WatchFlSyncConfig
-
-/**
- * watches target jobs
- */
-async function watchTargetJobs() {
-  info(`Started ListWatch on target jobs...`);
-  const targetWatch = new ListWatch({
-    path: `/bookmarks/services/target/jobs/pending`,
-    name: `target-jobs-fl-sync`,
-    conn: CONNECTION,
-    resume: true,
-    onNewList: AssumeState.Handled,
-  });
-
-  targetWatch.on(ChangeType.ItemAdded, async ({item, pointer}) => {
-    await targetWatchOnAdd({
-      item: (await item) as Change,
-      key: pointer,
-    });
-  });
-
-  targetWatch.on(ChangeType.ItemChanged, async ({change, pointer}) => {
-    await targetWatchOnChange({
-      change: (await change) as Change,
-      targetJobKey: pointer,
-    });
-  });
-
-  process.on('beforeExit', async () => {
-    await targetWatch.stop();
-  });
-} // WatchTargetJobs
 
 export async function handleItem(
   type: string,
@@ -499,14 +465,12 @@ async function getToken() {
 
 export async function initialize({
   polling = false,
-  target = false,
   master = false,
   mirrorWatch = false,
   watchConfig = false,
   incidents = false,
 }: {
   polling?: boolean;
-  target?: boolean;
   master?: boolean;
   mirrorWatch?: boolean;
   watchConfig?: boolean;
@@ -520,7 +484,7 @@ export async function initialize({
     // Connect to oada
     try {
       const conn = await connect({
-        domain: `https://${DOMAIN}`,
+        domain: DOMAIN,
         token: TOKEN,
         concurrency: CONCURRENCY,
       });
@@ -591,27 +555,24 @@ export async function initialize({
       svc.on(
         'business-lookup',
         config.get('timeouts.mirrorWatch'),
-        handleNewBusiness
+        handleFlBusiness
       );
-      svc.addReport(
-        'fl-sync-report',
-        CONNECTION,
-        reportConfig,
-        `0 0 0 * * *`,
-        prepEmail,
-        'document-mirrored'
-      );
+      svc.addReport({
+        name: 'fl-sync-report',
+        reportConfig: docReportConfig,
+        frequency: `0 0 0 * * *`,
+        email: prepEmail,
+        type: 'document-mirrored',
+      });
+      svc.addReport({
+        name: 'businesses-report',
+        reportConfig: tpReportConfig,
+        frequency: `0 0 0 * * 1`,
+        email: prepTpEmail,
+        type: 'business-lookup',
+        filter: tpReportFilter,
+      });
 
-      /*
-      svc.addReport(
-        'fl-sync-businesses-report',
-        CONNECTION,
-        businessesReportConfig,
-        `0 0 7 * * 1`,
-        prepEmail,
-        'business-created',
-      );
-      */
       // Start the jobs watching service
       const serviceP = svc.start();
 
@@ -628,13 +589,6 @@ export async function initialize({
       }
 
       info('Started fl-sync mirror handler.');
-    }
-
-    // Target is watched after restarting any queued fl-sync jobs and setting up
-    // the appropriate watches
-    if (target === undefined || target) {
-      await watchTargetJobs();
-      info('Started target jobs handler.');
     }
 
     info('Initialize complete. Service running...');
@@ -657,6 +611,27 @@ function prepEmail() {
     attachments: [
       {
         filename: `TrellisAutomationReport-${date}.csv`,
+        type: 'text/csv',
+        content: '',
+      },
+    ],
+  };
+}
+
+export function prepTpEmail() {
+  const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
+  if (!REPORT_EMAIL) throw new Error('REPORT_EMAIL is required for prepEmail');
+  if (!REPORT_REPLYTO_EMAIL)
+    throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
+  return {
+    from: 'noreply@trellis.one',
+    to: REPORT_CC_EMAIL ? [REPORT_EMAIL, REPORT_CC_EMAIL] : [REPORT_EMAIL],
+    replyTo: { email: REPORT_REPLYTO_EMAIL },
+    subject: `Trellis Automation Report - ${date}`,
+    text: `Attached is the daily Trellis Automation Report for the FoodLogiQ documents process on ${date}.`,
+    attachments: [
+      {
+        filename: `VendorsReportWeekly-${date}.csv`,
         type: 'text/csv',
         content: '',
       },

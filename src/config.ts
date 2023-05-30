@@ -26,12 +26,6 @@ convict.addFormat(duration);
 
 const config = convict({
   service: {
-    path: {
-      doc: 'Base path for the fl-sync service',
-      default: '/bookmarks/services/fl-sync',
-      env: 'SERVICE_PATH',
-      arg: 'service_path',
-    },
     name: {
       doc: 'Name of the service; used by jobs lib; helps configuring tests separately',
       default: 'fl-sync',

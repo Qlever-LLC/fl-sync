@@ -28,15 +28,16 @@ import { connect } from '@oada/client';
 
 import type { JobConfig } from '../dist/mirrorWatch.js';
 import type { TreeKey } from '@oada/types/oada/tree/v1.js';
-import { isObj, postJob, handleDocumentJob, mostRecentKsuid } from '../dist/mirrorWatch.js';
+import { isObj, postJob, handleDocumentJob } from '../dist/mirrorWatch.js';
+import { mostRecentKsuid } from '../dist/report.js';
 import { initialize as service } from '../dist/index.js';
 import { tree } from '../dist/tree.js';
 
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'
 const TOKEN = process.env.TOKEN ?? ''; // || config.get('trellis.token') || '';
 const DOMAIN = config.get('trellis.domain') || '';
-const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const CO_ID = config.get('foodlogiq.community.owner.id');
 
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
@@ -160,7 +161,6 @@ test('A job that is started should be resumed on restart of the service', async 
   // Now start up the services
   await service({
     polling: true,
-    target: true,
     master: false,
     mirrorWatch: true,
     watchConfig: true,

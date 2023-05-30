@@ -16,7 +16,7 @@
  */
 import type { ReportConfig } from '@oada/jobs';
 
-export const reportConfig: ReportConfig = {
+export const docReportConfig: ReportConfig = {
   jobMappings: {
     'Document Name': '/config/name',
     'Document Type': '/config/type',
@@ -46,3 +46,21 @@ export const reportConfig: ReportConfig = {
       'Document already approved; Extraction Failure',
   },
 };
+
+export const tpReportConfig: ReportConfig = {
+  jobMappings: {
+    'FL Name': '/config/fl-business/business/name',
+    'FL Address': '/config/fl-business/business/address/addressLineOne',
+    'FL City': '/config/fl-business/business/address/city',
+    'FL State': '/config/fl-business/business/address/region',
+    'FL ID': '/config/fl-business/business/_id',
+    'FL Link': '/',
+  },
+  errorMappings: {},
+};
+
+export const tpReportFilter = (job: any) =>
+  Object.values(job.updates).some(
+    (v: any) =>
+      typeof v.status === 'string' && v.status === 'fl-business-incomplete'
+  );

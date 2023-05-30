@@ -42,8 +42,8 @@ const FL_DOMAIN = config.get('foodlogiq.domain') || '';
 const SUPPLIER = config.get('foodlogiq.testSupplier.id');
 const TOKEN = process.env.TOKEN ?? ''; // || config.get('trellis.token') || '';
 const DOMAIN = config.get('trellis.domain') || '';
-const SERVICE_PATH = config.get('service.path') as unknown as TreeKey;
 const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
@@ -104,7 +104,6 @@ test.before(async (t) => {
 
   await service({
     polling: true,
-    target: true,
     master: false,
     mirrorWatch: true,
     watchConfig: true,

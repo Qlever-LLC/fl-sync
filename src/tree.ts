@@ -167,6 +167,13 @@ export const tree: Record<string, any> = {
       },
     },
   },
+  // A hack to write to trading-partners bookmarks directly using their masterid resource id
+  resources: {
+    '*': {
+      bookmarks: docsTree,
+      shared: docsTree,
+    },
+  },
 };
 
 export default tree;
