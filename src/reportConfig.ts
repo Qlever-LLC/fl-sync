@@ -54,7 +54,8 @@ export const tpReportConfig: ReportConfig = {
     'FL City': '/config/fl-business/business/address/city',
     'FL State': '/config/fl-business/business/address/region',
     'FL ID': '/config/fl-business/business/_id',
-    'FL Link': '/',
+    'FL Link': '/config/link',
+    'Error Message': '/fl-business-incomplete-reason',
   },
   errorMappings: {},
 };
@@ -63,4 +64,6 @@ export const tpReportFilter = (job: any) =>
   Object.values(job.updates).some(
     (v: any) =>
       typeof v.status === 'string' && v.status === 'fl-business-incomplete'
-  );
+  ) &&
+  job.config?.['fl-business']?.locationGroup?.name !== 'Internal' &&
+  job.config?.['fl-business']?.productGroup?.name !== 'Internal';

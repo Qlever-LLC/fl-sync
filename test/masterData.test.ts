@@ -343,7 +343,7 @@ test.only(`Should report on all jobs and filter report to just when the business
   serv.addReport({
     name: reportName,
     reportConfig: tpReportConfig,
-    frequency: `0 ${dt.getMinutes()} ${dt.getHours()} * * *`,
+    frequency: `0 ${dt.getMinutes()} ${dt.getHours()} * * ${dt.getDay()}`,
     email: prepTpEmail,
     type: 'business-lookup',
     filter: tpReportFilter,
