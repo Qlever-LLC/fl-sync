@@ -108,6 +108,10 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
       'ensure-job': {
         _id: ensureJob._id,
       },
+      'config': {
+        // @ts-expect-error fl-bus doesn't exist on Json
+        link: `https://connect.foodlogiq.com/businesses/5acf7c2cfd7fa00001ce518d/suppliers/detail/${job.config['fl-business']._id}/5fff03e0458562000f4586e9`,
+      },
     },
   });
 
@@ -135,7 +139,14 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
 
   // @ts-expect-error annoying Json type
   if (!job.config['fl-business'].internalId && ensureJob.result.new) {
-    await postUpdate(oada, job.oadaId, `New FL Business missing an 'internalId' detected.`, 'fl-business-incomplete');
+    const msg = `FL Business is missing an 'internalId'.`;
+    await postUpdate(oada, job.oadaId, msg, 'fl-business-incomplete');
+    await oada.put({
+      path: `/${job.oadaId}`,
+      data: {
+        'fl-business-incomplete-reason': 'FL business is missing internalIds',
+      },
+    });
   }
 
   // Add the externalIds if they are present
@@ -159,13 +170,22 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
       });
       const updateXids = (updateResult?.externalIds ?? []) as string[];
       if (updateXids.length !== element.externalIds.length) {
-        const xids = element.externalIds.filter((xid) =>
-          !updateXids.includes(xid)
+        const xids = element.externalIds.filter(
+          (xid) => !updateXids.includes(xid)
         );
-        await postUpdate(oada, job.oadaId, `The following externalIds failed to update for trading-partner ${ensureJob.result.entry.masterid}: ${xids.join(', ')}`, 'fl-business-incomplete');
-      } else {
-        await postUpdate(oada, job.oadaId, `Updated trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`, 'tp-updated');
+        const msg = `The following failed to update for trading-partner ${
+          ensureJob.result.entry.masterid
+        }: ${xids.join(', ')}`;
+        await postUpdate(oada, job.oadaId, msg, 'fl-business-incomplete');
+        await oada.put({
+          path: `/${job.oadaId}`,
+          data: {
+            'fl-business-incomplete-reason':
+              `Conflicting internalIds: ${xids.join(',')}`,
+          },
+        });
       }
+      await postUpdate(oada, job.oadaId, `Updated trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`, 'tp-updated');
       return {
         ...ensureJob.result,
         entry: updateResult,
@@ -175,7 +195,14 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
         // @ts-expect-error fl-bus doesn't exist on Json
         `Food Logiq Business [${job.config['fl-business'].business._id}] externalID update failed.`
       );
-      await postUpdate(oada, job.oadaId, `Failed to update trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`, 'tp-update-failed');
+      const msg = `Failed to update trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`;
+      await postUpdate(oada, job.oadaId, msg, 'tp-update-failed');
+      await oada.put({
+          path: `/${job.oadaId}`,
+          data: {
+            'fl-business-incomplete-reason': `Other Internal Failure. See job ${job.oadaId} for details.`,
+          },
+        })
     }
   }
 

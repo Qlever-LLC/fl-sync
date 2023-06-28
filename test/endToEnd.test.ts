@@ -49,9 +49,9 @@ if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 }
 
-const INTERVAL_MS = config.get('foodlogiq.interval') * 1000;
 let oada: OADAClient;
-const allPdfs = [
+//const INTERVAL_MS = config.get('foodlogiq.interval') * 1000;
+/*const allPdfs = [
   'BDKFoods-COI-2099.pdf',
   'COI-2099-ReducedCoverage.pdf',
   'COI-Bad_Holder.pdf',
@@ -65,6 +65,7 @@ const allPdfs = [
   'COI-WorkersCompEmployers.pdf',
   'GFSICert.pdf',
 ];
+*/
 const supplierIdToCommunityId = new Map<string, string>();
 const docIdToJobs = new Map<
   string,
