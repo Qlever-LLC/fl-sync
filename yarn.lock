@@ -432,7 +432,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@npm:^4.5.0, @oada/client@npm:^4.5.4":
+"@oada/client@npm:^4.5.4":
   version: 4.5.4
   resolution: "@oada/client@npm:4.5.4"
   dependencies:
@@ -468,12 +468,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/jobs@portal:/home/sanoel/jobs::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/jobs@npm:^4.2.5, @oada/jobs@npm:^4.4.1":
+  version: 4.4.1
+  resolution: "@oada/jobs@npm:4.4.1"
   dependencies:
     "@ava/typescript": ^3.0.1
-    "@oada/client": ^4.5.0
+    "@oada/client": ^4.5.4
     "@oada/list-lib": ^4.2.6
     "@oada/oadaify": ^2.1.0
     "@oada/types": ^3.4.5
@@ -497,10 +497,12 @@ __metadata:
     serialize-error: ^11.0.0
     tiny-json-http: ^7.4.2
     tslib: ^2.5.0
+    xlsx: ^0.18.5
   bin:
     oada-jobs: ./src/cli.mjs
+  checksum: 404de8aa8a6aaf7b25054f5c3c23ce2fce85a1599b6ba46d6547ae09c1d67e0e0ab7a8d531fcac67a3f403dc3b78b5e24ad57b03f7cfb73fe053be4bd787b95a
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@oada/list-lib@npm:4.2.6, @oada/list-lib@npm:^4.2.6":
   version: 4.2.6
@@ -614,7 +616,7 @@ __metadata:
   dependencies:
     "@ava/typescript": ^3.0.1
     "@oada/client": ^4.5.4
-    "@oada/jobs": ^4.2.3
+    "@oada/jobs": ^4.4.1
     "@oada/list-lib": 4.2.6
     "@oada/poll": ^1.0.4
     "@oada/types": ^3.4.6

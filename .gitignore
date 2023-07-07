@@ -159,3 +159,7 @@ dist
 
 #
 keys
+
+pdfs
+
+./test/pdfs

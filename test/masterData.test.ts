@@ -319,7 +319,7 @@ test('Should return the correct trading partner if an already-used sapid is assi
   );
 });
 
-test.only(`Should report on all jobs and filter report to just when the business is missing internalIds or a conflict in the data manager occurs`, async (t) => {
+test(`Should report on all jobs and filter report to just when the business is missing internalIds or a conflict in the data manager occurs`, async (t) => {
   t.timeout(600_000);
   const serveName = 'fl-tp-test-service';
   const reportName = 'test-tp-report';
@@ -343,7 +343,7 @@ test.only(`Should report on all jobs and filter report to just when the business
   serv.addReport({
     name: reportName,
     reportConfig: tpReportConfig,
-    frequency: `0 ${dt.getMinutes()} ${dt.getHours()} * * ${dt.getDay()}`,
+    frequency: `${dt.getSeconds()} ${dt.getMinutes()} ${dt.getHours()} * * ${dt.getDay()}`,
     email: prepTpEmail,
     type: 'business-lookup',
     filter: tpReportFilter,
