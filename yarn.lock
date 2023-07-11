@@ -432,9 +432,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@oada/client@portal:/home/sanoel/client::locator=%40qlever-llc%2Ffl-sync%40workspace%3A."
+"@oada/client@npm:^4.5.4":
+  version: 4.5.5
+  resolution: "@oada/client@npm:4.5.5"
   dependencies:
     "@oada/jobs": ^4.2.5
     "@oada/types": ^3.5.2
@@ -464,8 +464,9 @@ __metadata:
     utf-8-validate: ^6.0.3
     ws: ^8.13.0
     xksuid: ^0.0.3
+  checksum: 41e61a62ef034c9f32895d76417dd865abc1ad570cbb41aeb3c180c2d4bb35b5b6a4265eb4adde49e03e47d8fa3377fcecdea8009c2f22fdf062a5b1dc22cf33
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@oada/jobs@npm:^4.2.5, @oada/jobs@npm:^4.4.1":
   version: 4.4.1
