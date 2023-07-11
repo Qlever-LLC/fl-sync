@@ -103,7 +103,6 @@ test.before(async () => {
     polling: true,
     incidents: false,
     watchConfig: true,
-    master: true,
     mirrorWatch: true,
   });
   await setTimeout(3000);

@@ -104,7 +104,6 @@ test.before(async (t) => {
 
   await service({
     polling: true,
-    master: false,
     mirrorWatch: true,
     watchConfig: true,
   });

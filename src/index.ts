@@ -45,8 +45,7 @@ import { docReportConfig, tpReportConfig, tpReportFilter } from './reportConfig.
 //import { businessesReportConfig } from './businessesReportConfig.js';
 import { startIncidents } from './flIncidentsCsv.js';
 import tree from './tree.js';
-import { watchTrellisFLBusinesses } from './masterData.js';
-import { handleFlBusiness } from './masterData2.js';
+import { handleFlBusiness } from './masterData.js';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -465,13 +464,11 @@ async function getToken() {
 
 export async function initialize({
   polling = false,
-  master = false,
   mirrorWatch = false,
   watchConfig = false,
   incidents = false,
 }: {
   polling?: boolean;
-  master?: boolean;
   mirrorWatch?: boolean;
   watchConfig?: boolean;
   incidents?: boolean;
@@ -503,11 +500,6 @@ export async function initialize({
     if (watchConfig === undefined || watchConfig) {
       await watchFlSyncConfig();
       info('Started fl-sync config handler.');
-    }
-
-    if (master === undefined || master) {
-      watchTrellisFLBusinesses(CONNECTION);
-      info('Started master data handler.');
     }
 
     // Some queued jobs may depend on the poller to complete, so start it now.

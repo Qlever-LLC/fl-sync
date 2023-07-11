@@ -85,24 +85,6 @@ function mapVendor(vendor: SAPVendor) {
   };
 }
 
-interface SAPVendor {
-  'Account group': string;
-  'Central deletion flag': string;
-  'City': string;
-  'Country': string;
-  'Name 1': string;
-  'P.O. Box Postal Code': string;
-  'PO Box': string;
-  'Postal Code': string;
-  'Region': string;
-  'Street': string;
-  'Tax Number 1': string;
-  'Tax Number 2': string;
-  'Telephone 1': string;
-  'Telephone 2': string;
-  'Vendor': string;
-}
-
 function fixCapitalization(text: string) {
   return text.toLowerCase()
     .split(' ')
@@ -196,6 +178,24 @@ interface trellisEntry {
   masterid: string;
 }
 
+interface SAPVendor {
+  'Account group': string;
+  'Central deletion flag': string;
+  'City': string;
+  'Country': string;
+  'Name 1': string;
+  'P.O. Box Postal Code': string;
+  'PO Box': string;
+  'Postal Code': string;
+  'Region': string;
+  'Street': string;
+  'Tax Number 1': string;
+  'Tax Number 2': string;
+  'Telephone 1': string;
+  'Telephone 2': string;
+  'Vendor': string;
+}
+
 //await main();
-const rows = grabVendors();
-console.log(rows);
+//const rows = grabVendors();
+//console.log(rows);

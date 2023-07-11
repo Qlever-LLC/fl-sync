@@ -161,7 +161,6 @@ test('A job that is started should be resumed on restart of the service', async 
   // Now start up the services
   await service({
     polling: true,
-    master: false,
     mirrorWatch: true,
     watchConfig: true,
   });

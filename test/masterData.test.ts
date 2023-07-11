@@ -25,7 +25,7 @@ import type { TreeKey } from '@oada/types/oada/tree/v1.js';
 import config from '../dist/config.js';
 import debug from 'debug';
 import type { FlBusiness } from '../dist/mirrorWatch.js';
-import { handleFlBusiness, mapTradingPartner } from '../dist/masterData2.js';
+import { handleFlBusiness, mapTradingPartner } from '../dist/masterData.js';
 import test from 'ava';
 import ksuid from 'ksuid';
 import { tree } from '../dist/tree.js';
