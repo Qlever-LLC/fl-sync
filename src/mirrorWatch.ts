@@ -41,13 +41,12 @@ import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
 
 import { flToTrellis, fromOadaType } from './conversions.js';
 import { linkAssessmentToDocument, spawnAssessment } from './assessments.js';
-import { addTP2Trellis } from './masterData.js';
 import checkAssessment from './checkAssessments.js';
 import { getAutoApprove } from './index.js';
 import mirrorTree from './tree.mirrorWatch.js';
 import tree from './tree.js';
 import { validateResult } from './docTypeValidation.js';
-import { handleFlBusiness } from './masterData2.js';
+import { handleFlBusiness } from './masterData.js';
 import { doJob, JobEventType, JobsRequest } from '@oada/client';
 import type OADAJob from '@oada/types/oada/service/job.js';
 

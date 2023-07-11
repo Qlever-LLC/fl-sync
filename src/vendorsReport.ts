@@ -30,11 +30,11 @@ import Fuse from 'fuse.js';
 import moment from 'moment';
 import type { JsonObject } from '@oada/client';
 import type { FlBusiness } from './mirrorWatch.js';
-import { mapTradingPartner } from './masterData2.js';
+import { mapTradingPartner, type TradingPartner } from './masterData.js';
 import { setTimeout } from 'node:timers/promises';
-import type { TradingPartner } from './masterData2.js';
 import tree from './tree.masterData.js';
 import { tree as flTree } from './tree.js';
+import { handleFlBusiness } from './masterData.js';
 
 const { domain, token } = config.get('trellis');
 const SERVICE_NAME = config.get('service.name');
@@ -199,8 +199,8 @@ async function loadVendors() {
   index.setCollection(collection);
 
   const conn = await connect({
-    domain: 'localhost:3010',
-    token: '77961fb1fc3c4d1d81bc59cd8a5eb822',
+    domain,
+    token,
   });
 
   const businesses = await conn.get({
@@ -413,11 +413,20 @@ async function fixVendors(oada: OADAClient, matches: any[]) {
 
 // The new report response handler. Find the trading-partner, write the
 // internalId to the Food Logiq member, and wait for it to sync.
-async function updateFlInternalIds(oada: OADAClient, rows: any[]) {
+async function updateFlInternalIds() {
+  const oada = await connect({
+    domain,
+    token,
+  });
+  const rows = csvjson.toObject(fs.readFileSync('./VendorReport-05-19-23.csv', {encoding: 'utf8'}), {
+    delimiter: ',',
+    quote: '"',
+ });
   for await (const tp of rows) {
     // 1. lookup the trading-partner
-    const bid = tp['FL ID'];
-    const sapid = tp['SAP ID'];
+    const bid = tp['FL ID'] as string;
+    const sapid = tp['SAP ID'] as string;
+    /*
     const job = await doJob(oada, {
       service: 'trellis-data-manager',
       type: 'trading-partners-query',
@@ -433,35 +442,51 @@ async function updateFlInternalIds(oada: OADAClient, rows: any[]) {
       console.log(`Exact match missing for trading-partner 'FL ID': ${tp['FL ID']}`);
       throw new Error('Exact match should have been found');
     }
+    */
 
     // 3. Get it to flow to LF sync
     const { data: flBus } = (await oada.get({
-      path: `/bookmarks/services/fl-sync/${bid}`,
-    })) as unknown as { data: { 'food-logiq-mirror': { _id: string } } };
+      path: `/bookmarks/services/fl-sync/businesses/${bid}`,
+    })) as unknown as {
+      data: {
+        'food-logiq-mirror': {
+          _id: string;
+          internalId: string;
+        };
+      };
+    };
 
-    const memberId = flBus['food-logiq-mirror']._id;
-    const { data: member } = await axios({
-      method: 'get',
-      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/memberships/${memberId}`,
-      headers: { Authorization: FL_TOKEN },
-    });
-    member.internalId = sapid;
-    await axios({
-      method: 'put',
-      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/memberships/${memberId}`,
-      headers: { Authorization: FL_TOKEN },
-      data: member,
-    });
+    const sapids = sapid.split(',');
+    const internalIds = flBus['food-logiq-mirror'].internalId.split(',');
+    if (
+      !flBus['food-logiq-mirror'].internalId ||
+      internalIds.every((k) => sapids.includes(k))
+    ) {
+      const memberId = flBus['food-logiq-mirror']._id;
+      const { data: member } = await axios({
+        method: 'get',
+        url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
+        headers: { Authorization: FL_TOKEN },
+      });
+      member.internalId = sapid;
+      console.log(`Putting internalId ${sapid} to fl: ${member.business._id}`);
+      /*
+      await axios({
+        method: 'put',
+        url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
+        headers: { Authorization: FL_TOKEN },
+        data: member,
+      });
+      */
+    } else {
+      console.log('internalId already set for FL vendor', bid);
+    }
   }
 }
 
 // This was the original plans for how to handle merging trading
 // partners after Chris' responses. 
 async function processReportResponses() {
-  const prod = await connect({
-    domain: 'localhost:3006',
-    token: 'e5983f91726e41a4956918932e547048',
-  });
   const oada = await connect({
     domain,
     token,
@@ -481,12 +506,13 @@ function filterOadaKeys(object: JsonObject) {
 // Copy trading-partner data from production to dev for testing
 async function copyProdData() {
   const dev = await connect({
-    domain: 'http://localhost:3002',
-    token: 'god',
+    domain,
+    token,
   });
+
   const prod = await connect({
-    domain: 'localhost:3006',
-    token: 'e5983f91726e41a4956918932e547048',
+    domain,
+    token,
   });
 
   // Copy FL businesses
@@ -596,8 +622,8 @@ async function copyProdData() {
 // changes deployed Summer 2023.
 async function tradingPartnerPrep06142023() {
   const prod = await connect({
-    domain: 'localhost:3006',
-    token: 'e5983f91726e41a4956918932e547048',
+    domain,
+    token,
   });
 
   // Copy food logiq vendors over to dev for testing
@@ -897,8 +923,8 @@ async function tradingPartnerPrep06142023() {
       const { data: change } = (await prod.get({
         path: `${tp._id}/_meta/_changes/1`,
       })) as unknown as { data: any };
-      if (change?.[0]?.body?.foodlogiq?._id) {
-        data.externalIds = [...data.externalIds, `foodlogiq:${change[0].body.foodlogiq._id}`];
+      if (change?.[0]?.body?.foodlogiq?.business?._id) {
+        data.externalIds = [...data.externalIds, `foodlogiq:${change[0].body.foodlogiq.business._id}`];
       } else {
         console.log('No foodlogiq id found for TP:', tp._id);
       }
@@ -928,17 +954,54 @@ async function tradingPartnerPrep06142023() {
   process.exit();
 }
 
-//await loadVendors();
-//await makeVendors();
-//await makeReport();
-//validateReportResponses();
-//processReportResponses();
-//await vendorPrepPriorToHandleReport();
-//await copyProdData();
-setInterval(() => {
-  console.log('stay alive');
-}, 3000);
-await tradingPartnerPrep06142023();
+// Fix a mistake from the 06142023 script
+async function tradingPartnerFix07102023() {
+  const prod = await connect({
+    domain,
+    token,
+  });
+
+  // Copy food logiq vendors over to dev for testing
+  const { data: tps } = (await prod.get({
+    path: `/bookmarks/trellisfw/trading-partners`,
+  })) as { data: JsonObject };
+
+  const tpKeys = Object.keys(tps)
+    .filter((key) => !key.startsWith('_'))
+    .filter((key) => !key.includes('index'));
+
+  for await (const tpKey of tpKeys) {
+    console.log({tpKey});
+    const { data: tp } = (await prod.get({
+      path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
+    })) as unknown as { data: any };
+    if (tp.externalIds.includes('foodlogiq:undefined')) {
+      await prod.put({
+        path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
+        data: {
+          externalIds: tp.externalIds.filter((k: string) => !k.includes('undefined')),
+        },
+      });
+    }
+
+    const { data: change } = (await prod.get({
+      path: `${tp._id}/_meta/_changes/1`,
+    })) as unknown as { data: any };
+
+    if (change?.[0]?.body?.foodlogiq?.business?._id) {
+      await prod.put({
+        path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
+        data: {
+          externalIds: [`foodlogiq:${change[0].body.foodlogiq.business._id}`],
+        },
+      });
+    } else {
+      console.log('No foodlogiq id found for TP:', tp._id);
+    }
+  }
+  process.exit();
+}
+
 
 type OldTradingPartner = {
   sapid?: string;
@@ -967,3 +1030,80 @@ type OldTradingPartner = {
   };
   _id: string;
 };
+
+async function fixJobs() {
+  const oada = await connect({
+    domain,
+    token,
+  });
+  const { data: expand } = (await oada.get({
+    path: `/bookmarks/trellisfw/trading-partners/_meta/indexings/expand-index`,
+  })) as unknown as { data: any };
+  const expandIndex = Object.entries(expand)
+    .filter(([key, _]) => !key.startsWith('_'))
+    .map(([_, value]) => value);
+  const { data: jobs } = (await oada.get({
+    path: `/bookmarks/services/fl-sync/jobs/pending`,
+  })) as unknown as { data: any }
+  const keys = Object.keys(jobs).filter((k) => !k.startsWith('_'));
+  for await (const jobKey of keys) {
+    console.log("Job", jobKey)
+    const { data: job } = (await oada.get({
+      path: `/bookmarks/services/fl-sync/jobs/pending/${jobKey}`,
+    })) as unknown as { data: { type: string; config: { masterid: string; bid: string } } };
+    if (job.type === 'document-mirrored' && !job.config.masterid.startsWith('resources')) {
+      /*
+      console.log("Job missing proper masterid. FL bid is", job.config.bid);
+      const { data: bus } = (await oada.get({
+        path: `/bookmarks/services/fl-sync/businesses/${job.config.bid}`,
+      })) as unknown as { data: { 'food-logiq-mirror': any } };
+      // @ts-expect-error Running a worker function manually
+      const result = (await handleFlBusiness({config: {'fl-business': bus['food-logiq-mirror']}},
+        {
+          oada,
+        }
+      )) as unknown as { masterid: string };
+      if (!result?.masterid) {
+        console.log("no masterid for flid", job.config.bid);
+        continue;
+      }
+      console.log('masterid set as', result.masterid);
+      */
+      const result = expandIndex.find((obj: any) =>
+        obj.externalIds.includes(`foodlogiq:${job.config.bid}`)
+      ) as unknown as { masterid: string };
+      if (!result?.masterid) {
+        console.log("no masterid for flid", job.config.bid);
+        continue;
+      }
+      //console.log('Found masterid', result.masterid);
+
+      await oada.put({
+        path: `/bookmarks/services/fl-sync/jobs/pending/${jobKey}`,
+        data: {
+          config: {
+            masterid: result.masterid,
+          },
+        },
+      });
+      console.log('put to job', jobKey);
+    }
+  }
+  process.exit();
+}
+
+setInterval(() => {
+  console.log('stay alive');
+}, 3000);
+//await loadVendors();
+//await makeVendors();
+//await makeReport();
+//validateReportResponses();
+//processReportResponses();
+//await vendorPrepPriorToHandleReport();
+//await copyProdData();
+
+//await tradingPartnerPrep06142023();
+//await tradingPartnerFix07102023();
+//await updateFlInternalIds();
+await fixJobs();

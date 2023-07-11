@@ -15,48 +15,274 @@
  * limitations under the License.
  */
 
-import config from './config.masterdata.js';
+import config from './config.js';
 
-import { setTimeout } from 'node:timers/promises';
-
-import SHA256 from 'js-sha256';
 import _ from 'lodash';
 import debug from 'debug';
 
+import { doJob } from '@oada/client';
 import type { JsonObject, OADAClient } from '@oada/client';
 import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
+import type { Job, WorkerFunction } from '@oada/jobs';
 import type Resource from '@oada/types/oada/resource.js';
 
 import tree from './tree.masterData.js';
-
-const { sha256 } = SHA256;
+//import type TradingPartner from '@oada/types/trellis/trading-partners/trading-partner.js';
+import type { FlBusiness } from './mirrorWatch.js';
+import { postUpdate } from '@oada/jobs';
 
 const SERVICE_NAME = config.get('service.name');
-const SERVICE_PATH = config.get('service.path');
-// TL_TP: string = config.get('trellis.endpoints.service-tp');
+const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
+const TP_MANAGER_SERVICE = config.get('tp-manager');
 const TL_TP = `/bookmarks/trellisfw/trading-partners`;
-const TL_TP_MI = `${TL_TP}/masterid-index`;
-const TL_TP_EI = `${TL_TP}/expand-index`;
-const FL_MIRROR = `food-logiq-mirror`;
 
-let CONNECTION: OADAClient;
 if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
 }
 
 const info = debug('fl-sync:master-data:info');
 const error = debug('fl-sync:master-data:error');
-const trace = debug('fl-sync:master-data:trace');
+const warn = debug('fl-sync:master-data:warn');
 
 enum SourceType {
   Vendor = 'vendor',
   Business = 'business',
 }
 
+export interface NewBusinessJob {
+  config: {
+    'fl-business': FlBusiness;
+  };
+}
+
+export interface TradingPartner {
+  masterid: string;
+  companycode?: string;
+  vendorid?: string;
+  partnerid?: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  coi_emails: string;
+  fsqa_emails: string;
+  email: string;
+  phone: string;
+  bookmarks: {
+    _id: string;
+  };
+  shared: {
+    _id: string;
+  };
+  externalIds: string[];
+  frozen: boolean;
+}
+
+export type TradingPartnerNoLinks = Omit<
+  TradingPartner,
+  'bookmarks' | 'shared'
+>;
+
+// Because we're calling ensure on foodlogiq externalId, we can eliminate several
+// edge cases, e.g., multiple matches really should not occur.
+export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
+  // 1. Make the query to the trellis trading partners
+  // @ts-expect-error fl-bus doesn't exist on Json
+  const element = mapTradingPartner(job.config['fl-business']);
+  const ensureJob = (await doJob(oada, {
+    type: 'trading-partners-ensure',
+    service: TP_MANAGER_SERVICE,
+    config: {
+      element: {
+        ...element,
+        // Really, we just want to match on foodlogiq externalId here
+        externalIds: [element.externalIds[0]!],
+      },
+    },
+  })) as unknown as { result: EnsureResult; _id: string };
+
+  await oada.put({
+    path: `/${job.oadaId}`,
+    data: {
+      'ensure-job': {
+        _id: ensureJob._id,
+      },
+      'config': {
+        // @ts-expect-error fl-bus doesn't exist on Json
+        link: `https://connect.foodlogiq.com/businesses/5acf7c2cfd7fa00001ce518d/suppliers/detail/${job.config['fl-business']._id}/5fff03e0458562000f4586e9`,
+      },
+    },
+  });
+
+  /*
+  if ((ensureJob?.result?.matches ?? []).length > 1) {
+    info(
+      // @ts-expect-error fl-bus doesn't exist on Json
+      `Food Logiq Business [${job.config['fl-business'].business._id}] inputs returned multiple trading-partner matches`
+    );
+    await postUpdate(oada, job.oadaId, `Multiple results on ensure request. See job /ensure-job for details.`, 'multiple-ensure-results');
+
+    const match = ensureJob.result.matches?.find((m) =>
+      m.externalIds.includes(
+        element.externalIds.find((k) => k.startsWith('foodlogiq'))
+      )
+    )
+    if (match) {
+      return {
+        ...ensureJob.result,
+        entry: match,
+      };
+    }
+  }
+  */
+
+  // @ts-expect-error annoying Json type
+  if (!job.config['fl-business'].internalId && ensureJob.result.new) {
+    const msg = `FL Business is missing an 'internalId'.`;
+    await postUpdate(oada, job.oadaId, msg, 'fl-business-incomplete');
+    await oada.put({
+      path: `/${job.oadaId}`,
+      data: {
+        'fl-business-incomplete-reason': 'FL business is missing internalIds',
+      },
+    });
+  }
+
+  // Add the externalIds if they are present
+  if (
+    // @ts-expect-error annoying Json type
+    job.config['fl-business'].internalId &&
+    !element.externalIds
+      .filter((k) => k.startsWith('sap'))
+      .every((k) => k.indexOf(ensureJob?.result?.entry.externalIds) > 0)
+  ) {
+    try {
+      const { result: updateResult } = await doJob(oada, {
+        type: 'trading-partners-update',
+        service: TP_MANAGER_SERVICE,
+        config: {
+          element: {
+            masterid: ensureJob.result.entry.masterid,
+            externalIds: element.externalIds,
+          },
+        },
+      });
+      const updateXids = (updateResult?.externalIds ?? []) as string[];
+      if (updateXids.length !== element.externalIds.length) {
+        const xids = element.externalIds.filter(
+          (xid) => !updateXids.includes(xid)
+        );
+        const msg = `The following failed to update for trading-partner ${
+          ensureJob.result.entry.masterid
+        }: ${xids.join(', ')}`;
+        await postUpdate(oada, job.oadaId, msg, 'fl-business-incomplete');
+        await oada.put({
+          path: `/${job.oadaId}`,
+          data: {
+            'fl-business-incomplete-reason':
+              `Conflicting internalIds: ${xids.join(',')}`,
+          },
+        });
+      }
+      await postUpdate(oada, job.oadaId, `Updated trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`, 'tp-updated');
+      return {
+        ...ensureJob.result,
+        entry: updateResult,
+      };
+    } catch(err) {
+      warn(
+        // @ts-expect-error fl-bus doesn't exist on Json
+        `Food Logiq Business [${job.config['fl-business'].business._id}] externalID update failed.`
+      );
+      const msg = `Failed to update trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`;
+      await postUpdate(oada, job.oadaId, msg, 'tp-update-failed');
+      await oada.put({
+          path: `/${job.oadaId}`,
+          data: {
+            'fl-business-incomplete-reason': `Other Internal Failure. See job ${job.oadaId} for details.`,
+          },
+        })
+    }
+  }
+
+  return ensureJob.result.entry;
+};
+
+/**
+ * assigns fl business data into the trading partner template
+ * @param {*} item fl business
+ * @returns
+ */
+export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
+  let externalIds = [`foodlogiq:${bus.business._id}`];
+  if (bus.internalId) {
+    const iids = bus.internalId.split(',').map((iid) => `sap:${iid}`);
+    externalIds = [...externalIds, ...iids];
+  }
+  return {
+    ..._.cloneDeep(trellisTPTemplate),
+    name: bus.business.name || '',
+    address: bus.business.address.addressLineOne || '',
+    city: bus.business.address.city || '',
+    state: bus.business.address.region || '',
+    email: bus.business.email || '',
+    phone: bus.business.phone || '',
+    externalIds,
+  };
+}
+
+/**
+ * Updates the masterid property in the
+ * fl-sync/business/<bid> endpoint
+ * @param masterid string that contains internalid from FL or
+ * random string created by sap-sync
+ */
+async function updateMasterId(flBusiness: any, masterid: string, oada: OADAClient) {
+  await oada.put({
+    path: `${SERVICE_PATH}/businesses/${flBusiness._id}`,
+    data: ({ masterid }) as JsonObject,
+  });
+  info(`${SERVICE_PATH}/businesses/<bid> updated with masterid [${masterid}].`);
+
+  await oada.put({
+    path: `/${masterid}/_meta`,
+    data: ({
+      services: {
+        'fl-sync': {
+          businesses: {
+            [flBusiness._id]: { _id: masterid}
+          }
+        }
+      }
+    }) as JsonObject
+  });
+  info(`${TL_TP}/ updated with masterid [${masterid}].`);
+} // UpdateMasterId
+
+const trellisTPTemplate: TradingPartnerNoLinks = {
+  masterid: '', // internal trellis resource id 
+  companycode: '',
+  vendorid: '',
+  partnerid: '',
+  name: '', // Both
+  address: '', // Both
+  city: '', // Both
+  state: '', // Both
+  //type: 'CUSTOMER', // Both
+  //source: SourceType.Business,
+  coi_emails: '', // Business
+  fsqa_emails: '', // Business
+  email: '', // Both
+  phone: '', // Both,
+  externalIds: [],
+  frozen: false,
+};
+
 /**
  * Watches for changes in the fl-sync/businesses
  */
-export async function watchTrellisFLBusinesses(conn: OADAClient) {
+/*
+export async function watchTrellisFLBusinesses(conn: OADAClient, service: Service) {
   info(`Setting masterData ListWatch on FL Businesses`);
   setConnection(conn);
   // eslint-disable-next-line no-new
@@ -69,396 +295,18 @@ export async function watchTrellisFLBusinesses(conn: OADAClient) {
     onNewList: AssumeState.Handled,
   });
   watch.on(ChangeType.ItemAdded, async ({ item, pointer }) => {
+    await addTP2Trellis((await item) as Resource, pointer, conn, service);
+  });
+
+  // FIXME: Handle changes to the trading partners
+  watch.on(ChangeType.ItemChanged, async ({ item, pointer }) => {
     await addTP2Trellis((await item) as Resource, pointer, conn);
   });
 } // WatchTrellisFLBusinesses
-
-/**
- * adds a trading-partner to the trellisfw when
- * a new business is found under services/fl-sync/businesses
- * @param {*} item
- * @param {*} key
- */
-export async function addTP2Trellis(
-  item: Resource,
-  key: string,
-  conn?: OADAClient
-) {
-  info(
-    `New FL business detected [${item._id}]. Mapping to trellis trading partner.`
-  );
-  if (!CONNECTION) {
-    setConnection(conn!);
-  }
-
-  const _key: string = key.slice(1);
-  try {
-    if (typeof TradingPartners[key] === 'undefined') {
-      // Adds the business as trading partner
-      let data = _.cloneDeep(trellisTPTemplate);
-      let expandData: ExpandIndexRecord = _.cloneDeep(expandIndexTemplate);
-      // FIXME: need to include a flag when search engine is present
-
-      trace(item, 'Business item');
-      const _path = item._id;
-      if (typeof item[FL_MIRROR] === 'undefined') {
-        info(`Getting ${_path} with delay.`);
-        // FIXME: find a more robust way to retrieve business content
-        let fl_mirror_content: unknown = item[FL_MIRROR];
-        let tries = 0;
-        // Retry until it gets a body with FL_MIRROR
-        while (typeof fl_mirror_content === 'undefined') {
-          // eslint-disable-next-line no-await-in-loop
-          await setTimeout(500);
-          try {
-            // eslint-disable-next-line no-await-in-loop
-            const result = await CONNECTION.get({
-              path: _path,
-            });
-            fl_mirror_content = (result.data as JsonObject)[FL_MIRROR];
-            if (typeof fl_mirror_content === 'undefined') {
-              info(
-                `ListWatch did not return a complete object for business ${key}. Retrying ...`
-              );
-              if (tries > 10) {
-                info(
-                  `Giving up. No 'food-logiq-mirror' for business at ${item._id}.`
-                );
-                /*              Await fetchAndSync({
-                  from:`${FL_DOMAIN/v2/businesses/${CO_ID}/communities/${COMMUNITY_ID}/contacts/${}`,
-                  to: ``,
-                })*/
-                fl_mirror_content = false;
-                return;
-              }
-
-              tries++;
-            } else {
-              info(`Got a complete object.`);
-              info(`assigning data after get.`);
-              data = assignData(data, result.data);
-              data.id = _path;
-              expandData = assignDataExpandIndex(data, result.data);
-            } // If
-          } catch (error_: unknown) {
-            error({ error: error_ }, '--> error when retrieving business ');
-          }
-        } // While FIXME: Verify consistency of this
-      } else {
-        // If
-        data = assignData(data, item);
-        data.id = _path;
-        expandData = assignDataExpandIndex(data, item);
-      } // If
-
-      // mirroring the business into trading partners
-      // 1. make the resource
-      info('--> mirroring the business into trading partners.');
-      trace('DATA', data);
-      const {
-        headers: { 'content-location': location },
-      } = await CONNECTION.post({
-        path: `/resources`,
-        data: data as unknown as JsonObject,
-        contentType: 'application/vnd.oada.service.1+json',
-      });
-      const resId = location!.replace(/^\//, '');
-      const _datum = { _id: resId, _rev: 0 };
-      try {
-        await CONNECTION.put({
-          path: `${TL_TP}`,
-          data: {
-            [key.replace(/^\//, '')]: _datum,
-          },
-          tree,
-        });
-        info('----> business mirrored. ', `${TL_TP}${key}`);
-        // Creating bookmarks endpoint under tp
-        const { headers } = await CONNECTION.put({
-          path: `${TL_TP}${key}/bookmarks`,
-          data: {},
-          tree,
-        });
-        const _bookmarks_id: string = headers?.['content-location'] ?? '';
-        const _string_content = _bookmarks_id.slice(1);
-        if (_bookmarks_id !== '') {
-          const _bookmarks_data: Bookmarks = {
-            bookmarks: {
-              _id: _string_content,
-            },
-          };
-          expandData.user = _bookmarks_data;
-        } // If
-      } catch (error_: unknown) {
-        error({ error: error_ }, '--> error when mirroring ');
-      }
-
-      // Updating the expand index
-      info('--> updating the expand-idex ', expandData.masterid);
-      const expandIndexRecord: IExpandIndex = {};
-      expandIndexRecord[_key] = expandData;
-      await updateExpandIndex(expandData, _key);
-
-      // Updating the fl-sync/businesses/<bid> index
-      info('--> updating masterid-index, masterid ', expandData.masterid);
-      await updateMasterId(_path, expandData.masterid, resId);
-
-      TradingPartners[key] = data;
-    } else {
-      info('--> TP exists. The FL business was not mirrored.');
-    } // If
-
-    // return TradingPartners[key].masterid;
-  } catch (error_: unknown) {
-    error('--> error ', error_);
-    throw error_ as Error;
-  }
-} // AddTP2Trellis
-
-/**
- * assigns item data (new business) into the trading partner template
- * @param {*} data: TradingPartner
- * @param {*} item
- * @returns
- */
-function assignData(data: TradingPartner, item: any) {
-  // FIXME: NEED type for item
-  try {
-    let _id = sha256(JSON.stringify(item[FL_MIRROR]));
-    if (
-      typeof item[FL_MIRROR].internalid !== 'undefined' ||
-      item[FL_MIRROR].internalid !== ''
-    ) {
-      _id = item[FL_MIRROR].internalid;
-    } // If
-
-    data.name = item[FL_MIRROR].business.name
-      ? item[FL_MIRROR].business.name
-      : '';
-    data.address = item[FL_MIRROR].business.address.addressLineOne
-      ? item[FL_MIRROR].business.address.addressLineOne
-      : '';
-    data.city = item[FL_MIRROR].business.address.city
-      ? item[FL_MIRROR].business.address.city
-      : '';
-    data.email = item[FL_MIRROR].business.email
-      ? item[FL_MIRROR].business.email
-      : '';
-    data.phone = item[FL_MIRROR].business.phone
-      ? item[FL_MIRROR].business.phone
-      : '';
-    data.foodlogiq = item[FL_MIRROR] ? item[FL_MIRROR] : '';
-    data.masterid = _id;
-    data.internalid = _id;
-  } catch (error_: unknown) {
-    error({ error: error_ }, 'Error when assigning data.');
-    error('This is the content of the item FL MIRROR = %o', item[FL_MIRROR]);
-  }
-
-  return data;
-} // AssignData
-
-/**
- * builds expand index entry
- * @param data TradingPartner
- * @returns
- */
-function assignDataExpandIndex(data: TradingPartner, item: any) {
-  // FIXME: NEED type for item
-  const _expandIndexData: ExpandIndexRecord = _.cloneDeep(expandIndexTemplate);
-  let _id = sha256(JSON.stringify(item[FL_MIRROR]));
-  if (
-    typeof item[FL_MIRROR].internalid !== 'undefined' &&
-    item[FL_MIRROR].internalid !== ''
-  ) {
-    _id = item[FL_MIRROR].internalid;
-  } // If
-
-  _expandIndexData.name = data.name ?? '';
-  _expandIndexData.address = data.address ?? '';
-  _expandIndexData.city = data.city ?? '';
-  _expandIndexData.state = '';
-  _expandIndexData.email = data.email ?? '';
-  _expandIndexData.phone = data.phone ?? '';
-  _expandIndexData.id = data.id ?? '';
-  _expandIndexData.internalid = _id;
-  _expandIndexData.masterid = _id;
-  _expandIndexData.sapid = _id;
-  _expandIndexData.type = 'CUSTOMER';
-
-  return _expandIndexData;
-} // AssignDataExpandIndex
-
-/**
- * updates the expand index with the information extracted
- * from the received FL business
- * @param expandIndexRecord expand index content
- */
-async function updateExpandIndex(
-  expandIndexRecord: ExpandIndexRecord,
-  key: string
-) {
-  try {
-    // Expand index
-    await CONNECTION.put({
-      path: `${TL_TP_EI}`,
-      data: {
-        [key]: expandIndexRecord as unknown as JsonObject,
-      },
-      tree,
-    });
-    info('--> expand index updated. ');
-  } catch (error_: unknown) {
-    error({ error: error_ }, '--> error when mirroring expand index.');
-  }
-} // UpdateExpandIndex
-
-/**
- * Updates the masterid property in the
- * fl-sync/business/<bid> endpoint
- * @param masterid string that contains internalid from FL or
- * random string created by sap-sync
- */
-async function updateMasterId(
-  path: string,
-  masterid: string,
-  resourceId: string
-) {
-  const masterid_path = `${TL_TP_MI}/${masterid}`;
-  info('--> masterid-index path ', masterid_path);
-  info('--> masterid path ', path);
-
-  // Creating masterid-index
-  const mi_datum = { _id: resourceId };
-  try {
-    await CONNECTION.put({
-      path: TL_TP_MI,
-      // Path: masterid_path,
-      data: {
-        [masterid]: mi_datum,
-      },
-      tree,
-    });
-    info('--> trading-partners/masterid-index updated.');
-  } catch (error_: unknown) {
-    error(
-      { error: error_ },
-      '--> error when updating masterid-index element. '
-    );
-  }
-
-  // Updating masterid under fl-sync/business/<bid>
-  try {
-    await CONNECTION.put({
-      path,
-      data: { masterid },
-    });
-    info(`${SERVICE_PATH}/businesses/<bid> updated with masterid.`);
-  } catch (error_: unknown) {
-    error(
-      { error: error_ },
-      '--> error when updating masterid element in fl-sync. '
-    );
-  }
-} // UpdateMasterId
-
-function setConnection(conn: OADAClient) {
-  CONNECTION = conn;
-}
-
-interface TradingPartner {
-  id: string;
-  sapid: string;
-  masterid: string;
-  internalid: string;
-  companycode?: string;
-  vendorid?: string;
-  partnerid?: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  type: string;
-  source: SourceType;
-  coi_emails: string;
-  fsqa_emails: string;
-  email: string;
-  phone: string;
-  foodlogiq?: string;
-}
-type ITradingPartner = Record<string, TradingPartner>;
-const TradingPartners: ITradingPartner = {};
-
-type IExpandIndex = Record<string, ExpandIndexRecord>;
-
-interface ExpandIndexRecord {
-  id: string;
-  internalid: string;
-  masterid: string;
-  sapid: string;
-  companycode?: string;
-  vendorid?: string;
-  partnerid?: string;
-  address: string;
-  city: string;
-  coi_emails: string;
-  email: string;
-  fsqa_emails: string;
-  name: string;
-  phone: string;
-  state: string;
-  type: string;
-  source: SourceType;
-  user: Bookmarks;
-}
-
-const expandIndexTemplate: ExpandIndexRecord = {
-  address: '',
-  city: '',
-  coi_emails: '',
-  email: '',
-  fsqa_emails: '',
-  id: '',
-  internalid: '',
-  masterid: '',
-  name: '',
-  phone: '',
-  sapid: '',
-  companycode: '',
-  vendorid: '',
-  partnerid: '',
-  state: '',
-  type: 'CUSTOMER',
-  source: SourceType.Business,
-  user: {
-    bookmarks: {
-      _id: '',
-    },
-  },
-};
-
-interface Bookmarks {
-  bookmarks: {
-    _id: string;
-  };
-}
-
-const trellisTPTemplate: TradingPartner = {
-  id: '', // Both (vendor and business)
-  sapid: '', // Business
-  masterid: '', // Business
-  internalid: '', // Business
-  companycode: '',
-  vendorid: '',
-  partnerid: '',
-  name: '', // Both
-  address: '', // Both
-  city: '', // Both
-  state: '', // Both
-  type: 'CUSTOMER', // Both
-  source: SourceType.Business,
-  coi_emails: '', // Business
-  fsqa_emails: '', // Business
-  email: '', // Both
-  phone: '', // Both,
+*/
+export type EnsureResult = {
+  entry?: any;
+  matches?: any[];
+  exact?: boolean;
+  new?: boolean;
 };
