@@ -716,15 +716,45 @@ export const handleDocumentJob: WorkerFunction = async (
         'itemId': item._id,
         job
       });
-      flType = await postTpDocument({
-        bid,
-        oada,
-        item,
-        masterid,
-        jobKey,
-        jobId,
-        docJob: job,
-      });
+      try {
+        flType = await postTpDocument({
+          bid,
+          oada,
+          item,
+          masterid,
+          jobKey,
+          jobId,
+          docJob: job,
+        });
+      } catch (cError: unknown) {
+        error({ error: cError }, 'postTpDocument Promise threw. Rejecting...');
+        const { message, JobError } = cError as Error & {
+          JobError?: string;
+        };
+        if (
+          [multipleFilesErrorMessage, attachmentsErrorMessage].includes(message)
+        ) {
+          info('error type', JobError);
+          if (indexConfig['allow-rejection'] !== false) {
+            try {
+              // @ts-expect-error
+              if (flType && rejectable[flType])
+                await rejectFlDocument(item!._id, jobId, message);
+            } catch {
+              info(
+                `Caught in rejectFlDocument, likely because this document id:${
+                  item!._id
+                } no longer exists in FL.`
+              );
+            }
+          }
+          // Now let it continue below and throw; no promise gets made, but the job is failed now
+        }
+
+        // If allow-rejection is false and it throws, the job will fail and leave
+        // the document "suspended" for further review, which is fine
+        reject(cError);
+      }
     });
   } catch (cError: unknown) {
     error({ error: cError }, 'handleDocumentJob errored');
