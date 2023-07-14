@@ -216,7 +216,7 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
 export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
   let externalIds = [`foodlogiq:${bus.business._id}`];
   if (bus.internalId) {
-    const iids = bus.internalId.split(',').map((iid) => `sap:${iid}`);
+    const iids = bus.internalId.split(',').map((iid) => `sap:${iid.trim()}`);
     externalIds = [...externalIds, ...iids];
   }
   return {
