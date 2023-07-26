@@ -577,6 +577,7 @@ export async function postTpDocument({
     path: `/${docId}/_meta`,
     data: {
       vdoc: { pdf: { [pdfKey]: { _id: pdfId } } },
+      shared: 'incoming',
     },
   });
   trace(

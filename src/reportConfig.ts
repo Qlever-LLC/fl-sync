@@ -53,7 +53,6 @@ export const tpReportConfig: ReportConfig = {
     'FL Address': '/config/fl-business/business/address/addressLineOne',
     'FL City': '/config/fl-business/business/address/city',
     'FL State': '/config/fl-business/business/address/region',
-    'FL ID': '/config/fl-business/business/_id',
     'FL Link': '/config/link',
     'Error Message': '/fl-business-incomplete-reason',
   },

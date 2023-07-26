@@ -593,7 +593,8 @@ export async function initialize({
 function prepEmail() {
   const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
   if (!REPORT_EMAIL) throw new Error('REPORT_EMAIL is required for prepEmail');
-  if (!REPORT_REPLYTO_EMAIL) throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
+  if (!REPORT_REPLYTO_EMAIL)
+    throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
   return {
     from: 'noreply@trellis.one',
     to: REPORT_CC_EMAIL ? [REPORT_EMAIL, REPORT_CC_EMAIL] : [REPORT_EMAIL],
