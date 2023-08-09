@@ -192,7 +192,7 @@ async function handleTargetStatus(
   const docJobId = docJob.oadaId as string;
   const { bid, masterid, key } = docJob.config;
   if (docJob && docJob.config['allow-rejection'] === false) {
-    info(`Target finished with status ${status} on already-approved doc.`);
+    info(`[job ${docJobId}] Target finished with status ${status} on already-approved doc.`);
     if (status === 'success') {
       // If successful, skip the potential pitfalls of assessment creation and call finishDoc.
       await postUpdate(
@@ -259,7 +259,7 @@ async function handleTargetStatus(
         }
 
         info(
-          `Target job ${targetJob._id} errored. reject: ${reject}; fl-sync job error ${jobError}`
+          `[job ${docJobId}] Target job ${targetJob._id} errored. reject: ${reject}; fl-sync job error ${jobError}`
         );
 
         // @ts-expect-error
@@ -279,7 +279,7 @@ async function handleTargetStatus(
  * @param {*} docId
  */
 async function approveFlDocument(documentId: string, jobId: string) {
-  info(`Approving associated FL Doc ${documentId}`);
+  info(`[job ${jobId}] Approving associated FL Doc ${documentId}`);
   try {
     await axios({
       method: 'put',
@@ -310,9 +310,9 @@ export const handleAssessmentJob: WorkerFunction = async (
   { oada, jobId }
 ) => {
   const jobKey = jobId.replace(/^resources\//, '');
-  info(`Handling Assessment job ${jobKey}`);
   try {
-    const { bid, key } = job.config;
+    const { bid, key, flDocJobId: docJobId } = job.config;
+    info(`[job ${docJobId}] Handling incoming Assessment job ${jobKey}`);
     const itemData = await oada
       .get({
         path: `${SERVICE_PATH}/businesses/${bid}/assessments/${key}`,
@@ -346,7 +346,7 @@ export const handleAssessmentJob: WorkerFunction = async (
     });
 
     const aaa = getAutoApprove();
-    info(`Autoapprove Assessments Configuration: [${aaa}]`);
+    info(`[job ${docJobId}] Autoapprove Assessments Configuration: [${aaa}]`);
     if (aaa) {
       const { failed, reasons }: { failed: boolean; reasons: string[] } =
         checkAssessment(item);
@@ -357,7 +357,7 @@ export const handleAssessmentJob: WorkerFunction = async (
           approval: !failed,
         },
       });
-      info(`Assessment Auto-${item.state}. [${item._id}]`);
+      info(`[job ${docJobId}] Assessment Auto-${item.state}. [${item._id}]`);
       await axios({
         method: 'put',
         url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${
@@ -366,7 +366,7 @@ export const handleAssessmentJob: WorkerFunction = async (
         headers: { Authorization: FL_TOKEN },
         data: item,
       });
-      info('WRITING REASONS', reasons.join(';'));
+      info(`[job ${docJobId}] Assessment Reasons: ${reasons.join(';')}`);
 
       const docJob = assessmentToFlId.get(item._id);
       if (docJob && failed) {
@@ -522,6 +522,11 @@ export async function postTpDocument({
       data: zdata,
       contentType: 'application/pdf',
     });
+    await oada.put({
+      path: `/${pdfId}/_meta`,
+      data: { filename: fKey },
+      contentType: 'application/pdf',
+    });
     trace(`Wrote file [${fKey}] to pdfId ${pdfId}.`);
   } catch (cError: unknown) {
     throw Buffer.byteLength(zdata) === 0
@@ -669,7 +674,7 @@ export async function postTpDocument({
       [targetJobKey]: { _id: targetJobId },
     },
   });
-  info(`Noted target job ${targetJobKey} in fl-sync job ${jobId}`);
+  info(`[job ${docJob.oadaId}] Noted target job ${targetJobKey} in fl-sync job ${jobId}`);
 
   return type;
 }
@@ -863,25 +868,32 @@ async function finishDocument(
     }
 
     // Move approved docs to trading partner /bookmarks
-    info(
-      `Moving approved document to [/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`
-    );
-    await CONNECTION.put({
-      path: `/${masterid}/bookmarks/trellisfw/documents/${type}`,
-      data: {},
-      tree,
-    });
-    await CONNECTION.put({
-      path: `/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
-      data: { _id },
-    });
-    await CONNECTION.delete({
-      path: `/${masterid}/shared/trellisfw/documents/${type}/${key}`,
-    });
+    try {
+      info(
+        `[job ${docJobId}] Moving approved document to [/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`
+      );
+      await CONNECTION.ensure({
+        path: `/${masterid}/bookmarks/trellisfw/documents/${type}`,
+        data: {},
+        tree,
+      });
+      await CONNECTION.delete({
+        path: `/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
+      });
+      await CONNECTION.put({
+        path: `/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
+        data: { _id, _rev: 0 },
+      });
+      await CONNECTION.delete({
+        path: `/${masterid}/shared/trellisfw/documents/${type}/${key}`,
+      });
+    } catch (err) {
+      error(`Error during move to bookmarks ${err}`) 
+    }
     endJob(docJobId);
   } else {
     // Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
-    info(`Document [${itemId}] with status [${status}]. finishDoc skipping.`);
+    info(`[job ${docJobId}] Document [${itemId}] with status [${status}]. finishDoc skipping.`);
   }
 }
 
@@ -892,8 +904,8 @@ async function finishDocument(
  * @return
  */
 function endJob(jobId: string, message?: string | Error | JobError) {
-  info('Removing %s from flSyncJobs Map', jobId);
-  trace(flSyncJobs, 'All flSyncJobs');
+  info(`[job ${jobId}] Removing job from flSyncJobs Map`);
+  //trace(flSyncJobs, 'All flSyncJobs');
   const prom = flSyncJobs.get(jobId);
   if (prom) {
     if (message) {
@@ -1035,7 +1047,7 @@ async function handleScrapedResult(
       isObj(targetResultItem?.[key])
     ) {
       const targetRes = targetResultItem?.[key] as JsonObject;
-      info(`Job result: [type: ${type}, key: ${key}, _id: ${targetRes?._id}]`);
+      info(`[job ${docJobId}] Job result: [type: ${type}, key: ${key}, _id: ${targetRes?._id}]`);
     }
 
     const { data: result } = (await CONNECTION.get({
@@ -1068,7 +1080,7 @@ async function handleScrapedResult(
     const validationResult = await validateResult(result, flMirror, type);
 
     info(
-      `Validation of pending document result:[${result._id}]: ${validationResult.status}`
+      `[job ${docJobId}] Validation of pending document result:[${result._id}]: ${validationResult.status}`
     );
     await CONNECTION.put({
       path: `/${docJobId}`,
@@ -1094,7 +1106,7 @@ async function handleScrapedResult(
         //@ts-ignore
         //@ts-ignore
         if (rejectable[type]) {
-          info(`Document type ${type} was rejectable. Rejecting`);
+          info(`[job ${docJobId}] Document type ${type} was rejectable. Rejecting`);
           await rejectFlDocument(flId, docJobId, validationResult?.message);
         }
       }
@@ -1119,7 +1131,7 @@ async function handleScrapedResult(
 
       if (assessmentId) {
         info(
-          `Assessment with id [${assessmentId}] already exists for document _id [${flId}].`
+          `[job ${docJobId}] Assessment with id [${assessmentId}] already exists for document _id [${flId}].`
         );
         assessmentToFlId.set(assessmentId as string, {
           jobId: docJobId,
@@ -1127,7 +1139,7 @@ async function handleScrapedResult(
           flId,
         });
       } else {
-        info(`Assessment does not yet exist for document _id [${flId}]`);
+        info(`[job ${docJobId}] Assessment does not yet exist for document _id [${flId}]`);
       }
 
       let assess;
@@ -1159,7 +1171,7 @@ async function handleScrapedResult(
             'food-logiq-mirror'
           ] as unknown as FlObject;
           info(
-            `Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`
+            `[job ${docJobId}] Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`
           );
 
           //TODO:This is maybe a problem causing cyclical re-runs of assessments?
@@ -1180,7 +1192,7 @@ async function handleScrapedResult(
         } else throw cError as Error;
       }
 
-      info(`Spawned assessment [${assessmentId}] for business id [${bid}]`);
+      info(`[job ${docJobId}] Spawned assessment [${assessmentId}] for business id [${bid}]`);
       await postUpdate(
         CONNECTION,
         docJobId,
@@ -1195,7 +1207,7 @@ async function handleScrapedResult(
         });
       }
     } else {
-      info(`Skipping assessment for result of type [${flType}] [${type}].`);
+      info(`[job ${docJobId}] Skipping assessment for result of type [${flType}] [${type}].`);
     }
   } catch (cError: unknown) {
     error(cError);
@@ -1211,7 +1223,7 @@ async function rejectFlDocument(
   jobId: string,
   message?: string
 ) {
-  info(`Rejecting FL document [${documentId}]. ${message}`);
+  info(`[job ${jobId}] Rejecting FL document [${documentId}]. ${message}`);
 
   // Reject to FL
   await axios({
@@ -1367,7 +1379,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     const { key: flDocumentId, type: flDocumentType, masterid } = indexConfig;
     if (!flDocumentType) {
       info(
-        `Assessment [${item._id}] could not find fl doc type prior to queueing. Ignoring.`
+        `[job ${docJobId}] Assessment [${item._id}] could not find fl doc type prior to queueing. Ignoring.`
       );
       return;
     }
@@ -1376,7 +1388,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     const docs = flTypes.get(flDocumentType)!;
     if (!assessmentType || !docs) {
       info(
-        `Assessment type of [${item._id}] was of type [${assessmentType}]. Ignoring.`
+        `[job ${docJobId}] Assessment type of [${item._id}] was of type [${assessmentType}]. Ignoring.`
       );
       return;
     }
@@ -1386,7 +1398,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
       !Object.keys(docs.assessments).includes(assessmentType)
     ) {
       info(
-        `Assessment [${item._id}] was of type [${assessmentType}]. Ignoring.`
+        `[job ${docJobId}] Assessment [${item._id}] was of type [${assessmentType}]. Ignoring.`
       );
       return;
     }
@@ -1397,7 +1409,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
       approvalUser === FL_TRELLIS_USER ||
       approvalUser === APPROVAL_TRELLIS_USER;
     info(
-      `approvalInfo user ${
+      `[job ${docJobId}] approvalInfo user ${
         usersEqual
           ? 'matches our user'
           : `[${approvalUser}] does not match our users: [${FL_TRELLIS_USER} or ${APPROVAL_TRELLIS_USER}]`
@@ -1437,7 +1449,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
           [jobkey]: { _id: `resources/${jobkey}`, _rev: 0 },
         },
       });
-      info('Posted job [assessment] at /resources/%s', jobkey);
+      info(`[job ${docJobId}] Posted job [assessment] at /resources/${jobkey}`);
 
       // Add it to the parent fl-sync job
       await CONNECTION.put({
@@ -1468,7 +1480,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
       // Reject the assessment job;
       endJob(item._id, message);
       assessmentToFlId.delete(item._id);
-      info('REASONS', reasons);
+      info(`[job ${docJobId}] REASONS: ${reasons}`);
 
       // Reject the FL Document with a supplier message and reject the doc job
       if (flSyncJobs.get(docJobId)['allow-rejection'] !== false) {
@@ -1484,7 +1496,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
         await finishDocument(docJobId, flDocumentId, masterid, status);
       } else {
         info(
-          `Assessment ${item._id} failed logic, but cannot override approval. Calling finishDoc.`
+          `[job ${docJobId}] Assessment ${item._id} failed logic, but cannot override approval. Calling finishDoc.`
         );
         await approveFlDocument(flDocumentId, docJobId);
         //TODO: remove this when/if FL is able to retrieve changes after approval updates
@@ -1493,7 +1505,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     } else {
       // 2c. Job not handled by trellis system.
       const message = `Assessment not pending, approval status not set by Trellis. Skipping. Assessment: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
-      info(message);
+      info(`[job ${docJobId}] ${message}`);
       return;
     }
   } catch (cError: unknown) {
@@ -1523,12 +1535,12 @@ export async function postJob(
   const jobkey = headers['content-location']!.replace(/^\/resources\//, '');
 
   await cancelDocJobs(indexConfig.key, jobkey)
-
+  const _id = `resources/${jobkey}`;
   await oada.put({
     path: pending,
     tree,
     data: {
-      [jobkey]: { _id: `resources/${jobkey}`, _rev: 0 },
+      [jobkey]: { _id, _rev: 0 },
     },
   });
 
@@ -1539,15 +1551,15 @@ export async function postJob(
       services: {
         'fl-sync': {
           jobs: {
-            [jobkey]: { _id: `resources/${jobkey}` },
+            [jobkey]: { _id },
           },
         },
       },
     },
   });
 
-  info('Posted job [document] at /resources/%s', jobkey);
-  return `resources/${jobkey}`;
+  info(`[job ${_id}] Posted job [document] at /${_id}`);
+  return _id;
 }
 
 async function cancelDocJobs(itemId: string, newJobKey?: string) {

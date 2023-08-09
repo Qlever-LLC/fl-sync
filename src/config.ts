@@ -148,36 +148,45 @@ const config = convict({
       env: 'HANDLE_INCOMPLETE_INTERVAL',
       arg: 'handleIncompleteInterval',
     },
-    reportInterval: {
-      doc: 'Time interval for reports to be generated.',
-      format: Number,
-      default: 86_400_000,
-      env: 'REPORT_INTERVAL',
-      arg: 'reportInterval',
-    },
-    reportEmail: {
-      doc: 'Email addresses to send reports to',
-      format: String,
-      default: null,
-      env: 'REPORT_EMAIL',
-      arg: 'reportEmail',
-    },
-    reportCcEmail: {
-      doc: 'Email address to cc reports to',
-      format: String,
-      default: null,
-      env: 'REPORT_CC_EMAIL',
-      arg: 'reportCcEmail',
-    },
-    reportReplyToEmail: {
-      doc: 'reply to email listed for the report',
-      format: String,
-      default: null,
-      env: 'REPORT_REPLYTO_EMAIL',
-      arg: 'reportReplyToEmail',
+    reports: {
+      docFrequency: {
+        doc: 'CRON frequency for reports to be generated.',
+        format: String,
+        default: '0 0 0 * * 1',
+        env: 'DOC_REPORT_FREQ',
+        arg: 'docFrequency',
+      },
+      vendorFrequency: {
+        doc: 'CRON frequency for reports to be generated.',
+        format: String,
+        default: '0 0 0 * * 2',
+        env: 'VENDOR_REPORT_FREQ',
+        arg: 'vendorFrequency',
+      },
+      email: {
+        doc: 'Email addresses to send reports to',
+        format: String,
+        default: null,
+        env: 'REPORT_EMAIL',
+        arg: 'reportEmail',
+      },
+      ccEmail: {
+        doc: 'Email address to cc reports to',
+        format: String,
+        default: null,
+        env: 'REPORT_CC_EMAIL',
+        arg: 'reportCcEmail',
+      },
+      replyToEmail: {
+        doc: 'reply to email listed for the report',
+        format: String,
+        default: null,
+        env: 'REPORT_REPLYTO_EMAIL',
+        arg: 'reportReplyToEmail',
+      },
     },
   },
-  foodlogiq: {
+  'foodlogiq': {
     'interval': {
       doc: 'polling interval',
       format: Number,

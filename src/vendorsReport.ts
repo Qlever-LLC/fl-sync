@@ -42,6 +42,7 @@ const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const SUPPLIER = config.get('foodlogiq.testSupplier.id');
 const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
 const CO_ID = config.get('foodlogiq.community.owner.id');
+const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const info = debug('fl-sync:vendorsReport:info');
@@ -672,7 +673,6 @@ async function tradingPartnerPrep06142023() {
     '5a68c37e6b390300014474dc',
     '5a786599a0ba6300010ce2c0',
     '5ac645a2fa59f800012dd928',
-    '5acbc2b1230156000101ab32',
     '5acbd1021772b90001b45a85',
     '5acbdaad230156000101ad90',
     '5acbdbf4627fec0001bb4283',
@@ -749,7 +749,6 @@ async function tradingPartnerPrep06142023() {
     '60ba1e6e95c48d000e28bff9',
     '60ba1e50d2a730000eaca341',
     '60ba1ed1033190000e4b4a4b',
-    '60ba1f15f0ba6a000ec42129',
     '60ba1e8cd2a730000eaca35b',
     '60ba1f2ad2a730000eaca379',
     '60ba1f10b91309000ea97b97',
@@ -1031,6 +1030,7 @@ type OldTradingPartner = {
   _id: string;
 };
 
+// Fix some old still-queued jobs that used the old masterid implementation
 async function fixJobs() {
   const oada = await connect({
     domain,
@@ -1092,6 +1092,44 @@ async function fixJobs() {
   process.exit();
 }
 
+
+// Generate the Vendors list that still requires an SAP ID
+// FYI this uses old non-v2 FL endpoints. v1 uses 'internalId' versus 'Internalid'
+async function getFLVendorsList(date: string) {
+  const { data } = await axios({
+    method: 'get',
+    url: `${FL_DOMAIN}/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
+    headers: { Authorization: FL_TOKEN },
+  }) as unknown as any;
+
+  let csvObj = data
+    .filter((s: any) => 
+      s.locationGroup.name !== 'Internal' &&
+      s.productGroup.name !== 'Internal'
+    )
+    .filter((s: any) => s.internalId === '')
+    .map((s: any) => ({
+      'FL Name': s.business.name.replaceAll(',', ''),
+      'FL Address': s.business.address.addressLineOne.replaceAll(',', ''),
+      'FL City': s.business.address.city.replaceAll(',', ''),
+      'FL State': s.business.address.region.replaceAll(',', ''),
+      'FL Link': 
+        `https://connect.foodlogiq.com/businesses/${CO_ID}/suppliers/detail/${s._id}/${COMMUNITY_ID}`,
+    }))
+    .sort((a:any, b:any) => {
+      if (a['FL Name'] > b['FL Name']) return 1;
+      if (a['FL Name'] < b['FL Name']) return -1;
+      return 0;
+    })
+  const csvData = csvjson.toCSV(csvObj, {
+    delimiter: ',',
+    wrap: false,
+    headers: 'relative',
+  });
+
+  fs.writeFileSync(`Vendor Report${date}.csv`, csvData, { encoding: 'utf8' });
+}
+
 setInterval(() => {
   console.log('stay alive');
 }, 3000);
@@ -1106,4 +1144,6 @@ setInterval(() => {
 //await tradingPartnerPrep06142023();
 //await tradingPartnerFix07102023();
 //await updateFlInternalIds();
-await fixJobs();
+//await fixJobs();
+await getFLVendorsList('2023-08-09');
+process.exit();

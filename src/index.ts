@@ -55,15 +55,15 @@ const JUST_TPS = config.get('trellis.justTps');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const CONCURRENCY = config.get('trellis.concurrency');
-// Const HANDLE_INCOMPLETE_INTERVAL = config.get('trellis.handleIncompleteInterval');
-// const REPORT_INTERVAL = config.get('trellis.handleIncompleteInterval');
 const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; // FL polling interval
 const SERVICE_NAME = config.get('service.name');
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
-const REPORT_EMAIL = config.get('trellis.reportEmail');
-const REPORT_CC_EMAIL = config.get('trellis.reportCcEmail');
-const REPORT_REPLYTO_EMAIL = config.get('trellis.reportReplyToEmail');
+const DOC_FREQUENCY = config.get('trellis.reports.docFrequency');
+const VENDOR_FREQUENCY = config.get('trellis.reports.vendorFrequency');
+const REPORT_EMAIL = config.get('trellis.reports.email');
+const REPORT_CC_EMAIL = config.get('trellis.reports.ccEmail');
+const REPORT_REPLYTO_EMAIL = config.get('trellis.reports.replyToEmail');
 const services = config.get('services');
 const skipQueueOnStartup = config.get('skipQueueOnStartup');
 
@@ -552,14 +552,14 @@ export async function initialize({
       svc.addReport({
         name: 'fl-sync-report',
         reportConfig: docReportConfig,
-        frequency: `0 0 0 * * *`,
+        frequency: DOC_FREQUENCY,
         email: prepEmail,
         type: 'document-mirrored',
       });
       svc.addReport({
         name: 'businesses-report',
         reportConfig: tpReportConfig,
-        frequency: `0 0 0 * * 1`,
+        frequency: VENDOR_FREQUENCY,
         email: prepTpEmail,
         type: 'business-lookup',
         filter: tpReportFilter,
