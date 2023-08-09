@@ -1610,6 +1610,7 @@ async function queueDocumentJob(fullData: JsonObject, path: string) {
         type: 'business-lookup',
         config: {
           'fl-business': bus['food-logiq-mirror'],
+          'link': `https://connect.foodlogiq.com/businesses/${CO_ID}/suppliers/detail/${item._id}/${COMMUNITY_ID}`,
         },
       }) as unknown as { result: {masterid: string}};
       masterid = result?.masterid;
