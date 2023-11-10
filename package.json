@@ -51,7 +51,7 @@
     "@oada/types": "^3.4.6",
     "@overleaf/o-error": "^3.4.0",
     "@types/json-pointer": "^1.0.31",
-    "axios": "^0.27.2",
+    "axios": "^1.6.0",
     "bluebird": "^3.7.2",
     "convict": "^6.2.4",
     "convict-format-with-moment": "^6.2.0",
