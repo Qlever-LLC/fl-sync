@@ -163,3 +163,8 @@ keys
 pdfs
 
 ./test/pdfs
+
+#kubectl deployment yaml
+fl-sync-deployment.yaml
+
+scripts
