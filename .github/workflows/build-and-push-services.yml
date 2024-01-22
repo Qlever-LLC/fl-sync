@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v4.1.1
 
       - name: Parse Ref
         id: ref
@@ -90,14 +90,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v4.1.1
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2.1.0
+        uses: docker/setup-qemu-action@v3.0.0
 
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v2.9.1
+        uses: docker/setup-buildx-action@v3.0.0
         with:
           version: latest
 
@@ -109,7 +109,7 @@ jobs:
 
       - name: Cache docker layers
         if: ${{ !env.ACT }} # Awaiting ACT version after 0.2.17 for this feature
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4.0.0
         id: cache
         with:
           path: /tmp/.buildx-cache
@@ -164,21 +164,21 @@ jobs:
 
       - name: Login to DockerHub
         if: ${{ env.DOCKERHUB_PUSH && github.event_name != 'pull_request' }}
-        uses: docker/login-action@v2.2.0
+        uses: docker/login-action@v3.0.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v2.2.0
+        uses: docker/login-action@v3.0.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push images
-        uses: docker/build-push-action@v4.1.1
+        uses: docker/build-push-action@v5.1.0
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/Dockerfile
@@ -235,7 +235,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v4.1.1
 
       - name: Find Docker tag for Snyk
         id: tag
@@ -289,7 +289,7 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload SARIF file to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ./securecodewarrior.sarif
           #sarif_file: ./snyk.sarif
