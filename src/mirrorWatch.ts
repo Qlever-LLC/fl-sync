@@ -525,7 +525,7 @@ export async function postTpDocument({
     await oada.put({
       path: `/${pdfId}/_meta`,
       data: { filename: fKey },
-      contentType: 'application/pdf',
+      contentType: 'application/json',
     });
     trace(`Wrote file [${fKey}] to pdfId ${pdfId}.`);
   } catch (cError: unknown) {
@@ -1103,8 +1103,7 @@ async function handleScrapedResult(
           'Could not extract expiration dates'
         )
       ) {
-        //@ts-ignore
-        //@ts-ignore
+        //@ts-expect-error todo
         if (rejectable[type]) {
           info(`[job ${docJobId}] Document type ${type} was rejectable. Rejecting`);
           await rejectFlDocument(flId, docJobId, validationResult?.message);
@@ -1225,7 +1224,24 @@ async function rejectFlDocument(
 ) {
   info(`[job ${jobId}] Rejecting FL document [${documentId}]. ${message}`);
 
-  // Reject to FL
+  // Extra check prior to rejection.
+  const { data: doc } = await axios({
+    method: 'get',
+    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}`,
+    headers: { Authorization: FL_TOKEN },
+  });
+  if (doc?.shareSource?.approvalInfo?.status === 'Approved') {
+      await postUpdate(CONNECTION, jobId, 'Job was going to be rejected but was already approved', 'in-progress');
+      await CONNECTION.put({
+        path: `/${jobId}`,
+        data: {
+          'foodlogiq-result-status': 'Approved',
+        },
+      });
+
+    return;
+  }
+
   await axios({
     method: 'put',
     url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
