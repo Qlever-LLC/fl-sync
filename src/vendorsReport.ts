@@ -21,7 +21,8 @@ import fs from 'node:fs';
 import { default as axios, AxiosRequestConfig } from 'axios';
 import type { OADAClient } from '@oada/client';
 import { JsonPointer } from 'json-ptr';
-import { connect, doJob } from '@oada/client';
+import { connect } from '@oada/client';
+import { doJob } from '@oada/client/jobs';
 import _ from 'lodash';
 // @ts-expect-error
 import csvjson from 'csvjson';
@@ -63,7 +64,6 @@ export async function makeReport() {
     const businessKeys = Object.keys(businesses).filter(
       (key) => !key.startsWith('_')
     );
-
 
     const results: any[] = [];
 
@@ -1095,7 +1095,7 @@ async function fixJobs() {
 
 // Generate the Vendors list that still requires an SAP ID
 // FYI this uses old non-v2 FL endpoints. v1 uses 'internalId' versus 'Internalid'
-async function getFLVendorsList(date: string) {
+async function generateFLVendorsReport() {
   const { data } = await axios({
     method: 'get',
     url: `${FL_DOMAIN}/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
@@ -1127,7 +1127,122 @@ async function getFLVendorsList(date: string) {
     headers: 'relative',
   });
 
+  const date = Date.now().toLocaleString().split('T')[0];
   fs.writeFileSync(`Vendor Report${date}.csv`, csvData, { encoding: 'utf8' });
+}
+
+export async function generateFLDocsReport(inDate?: string) {
+  let obj: any = {};
+
+  const oada = await connect({
+    domain,
+    token,
+  });
+  const { data: dates } = await oada.get({
+    path: `/bookmarks/services/fl-sync/jobs/reports/fl-sync-report/day-index`,
+  }) as unknown as any;
+
+  const today = inDate ? new Date(inDate) : new Date();
+  // @ts-expect-error you can subtract dates
+  const now = new Date(today - today.getTimezoneOffset() * 60 * 1000);
+  // @ts-expect-error you can subtract dates
+  const lastWeek = new Date(now - (7 * 24 * 60 * 60 * 1000));
+
+  for (let i = 0; i < 50; i++) {
+    // @ts-expect-error you can subtract dates
+    const day = new Date(today - i * 24 * 60 * 60 * 1000);
+    const date = day.toISOString().split('T')[0];
+
+    try {
+      const { data: report } = await oada.get({
+        path: `/bookmarks/services/fl-sync/jobs/reports/fl-sync-report/day-index/${date}`,
+      }) as unknown as any;
+
+      const data = Object.fromEntries(
+        Object.entries(report)
+          .filter(
+            ([key, item]: [string, any]) =>
+              !key.startsWith('_') && new Date(item['Creation Date']) > lastWeek
+          )
+          .map(([key, item]) => [
+            key,
+            Object.fromEntries(
+              // @ts-ignore
+              Object.entries(item).map(([k, it]: [string, string]) => [k, it.replaceAll(',', '')])
+            )
+          ])
+      );
+      Object.assign(obj, data);
+    } catch (err) {
+      continue;
+    }
+  }
+
+  let csvObj = Object.values(obj);
+  const csvData = csvjson.toCSV(csvObj, {
+    delimiter: ',',
+    wrap: false,
+    headers: 'relative',
+  });
+
+  fs.writeFileSync(`TrellisFLDocsReport${now.toISOString().split('T')[0]}.csv`, csvData, { encoding: 'utf8' });
+  console.log('done');
+}
+
+export async function generateIncrementalFLVendorsReport(inDate?: string) {
+  let obj: any = {};
+
+  const oada = await connect({
+    domain,
+    token,
+  });
+  const { data: dates } = await oada.get({
+    path: `/bookmarks/services/fl-sync/jobs/reports/businesses-report/day-index`,
+  }) as unknown as any;
+
+  const today = inDate ? new Date(inDate) : new Date();
+  // @ts-expect-error you can subtract dates
+  const now = new Date(today - today.getTimezoneOffset() * 60 * 1000);
+  // @ts-expect-error you can subtract dates
+  const lastWeek = new Date(now - (7 * 24 * 60 * 60 * 1000));
+
+  for (let i = 0; i < 7; i++) {
+    // @ts-expect-error you can subtract dates
+    const day = new Date(today - i * 24 * 60 * 60 * 1000);
+    const date = day.toISOString().split('T')[0];
+
+    try {
+      const { data: report } = await oada.get({
+        path: `/bookmarks/services/fl-sync/jobs/reports/businesses-report/day-index/${date}`,
+      }) as unknown as any;
+      
+      const data = Object.fromEntries(
+        Object.entries(report)
+        .filter(([key, _]: [string, unknown]) => !key.startsWith('_'))
+        .map(([key, item]) => [
+          key,
+          Object.fromEntries(
+            // @ts-ignore
+            Object.entries(item).map(([k, it]: [string, string]) => [k, it.replaceAll(',', '')])
+          )
+        ])
+      );
+
+      Object.assign(obj, data);
+    } catch (err) {
+      continue;
+    }
+  }
+
+  let csvObj = Object.values(obj);
+  const csvData = csvjson.toCSV(csvObj, {
+    delimiter: ',',
+    wrap: false,
+    headers: 'relative',
+  });
+
+  fs.writeFileSync(`TrellisFLVendorsReport${now.toISOString().split('T')[0]}.csv`, csvData, { encoding: 'utf8' });
+  console.log('done');
 }
 
 setInterval(() => {
@@ -1145,5 +1260,8 @@ setInterval(() => {
 //await tradingPartnerFix07102023();
 //await updateFlInternalIds();
 //await fixJobs();
-await getFLVendorsList('2023-08-09');
+//await generateFLVendorsReport();
+
+//await generateFLDocsReport('2023-09-11');
+await generateIncrementalFLVendorsReport('2023-09-11');
 process.exit();

@@ -20,7 +20,7 @@ import config from './config.js';
 import _ from 'lodash';
 import debug from 'debug';
 
-import { doJob } from '@oada/client';
+import { doJob } from '@oada/client/jobs';
 import type { JsonObject, OADAClient } from '@oada/client';
 import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
 import type { Job, WorkerFunction } from '@oada/jobs';
@@ -89,7 +89,7 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
   // 1. Make the query to the trellis trading partners
   // @ts-expect-error fl-bus doesn't exist on Json
   const element = mapTradingPartner(job.config['fl-business']);
-  const ensureJob = (await doJob(oada, {
+  const ensureJob = (await doJob(oada as unknown as OADAClient, {
     type: 'trading-partners-ensure',
     service: TP_MANAGER_SERVICE,
     config: {
@@ -157,7 +157,7 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
       .every((k) => k.indexOf(ensureJob?.result?.entry.externalIds) > 0)
   ) {
     try {
-      const { result: updateResult } = await doJob(oada, {
+      const { result: updateResult } = await doJob(oada as unknown as OADAClient, {
         type: 'trading-partners-update',
         service: TP_MANAGER_SERVICE,
         config: {

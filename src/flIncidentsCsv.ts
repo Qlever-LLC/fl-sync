@@ -43,7 +43,7 @@ const trace = debug('fl-sync-incidents:trace');
 
 export async function pollIncidents(lastPoll: Moment, end: Moment) {
   // Sync list of suppliers
-  const startTime: string = (lastPoll || moment('20150101', 'YYYYMMDD'))
+  const startTime: string = (lastPoll || moment('20230801', 'YYYYMMDD'))
     .utc()
     .format();
   const endTime: string = end.utc().format();

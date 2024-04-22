@@ -47,7 +47,7 @@ import mirrorTree from './tree.mirrorWatch.js';
 import tree from './tree.js';
 import { validateResult } from './docTypeValidation.js';
 import { handleFlBusiness } from './masterData.js';
-import { doJob, JobEventType, JobsRequest } from '@oada/client';
+import { doJob, JobEventType, JobsRequest } from '@oada/client/jobs';
 import type OADAJob from '@oada/types/oada/service/job.js';
 
 const DOMAIN = config.get('trellis.domain');
@@ -1617,8 +1617,7 @@ async function queueDocumentJob(fullData: JsonObject, path: string) {
     })) as { data: JsonObject };
 
     let masterid;
-
-    if (!bus)
+if (!bus)
       error(`No trading partner found for business ${bid}.`);
     if (bus['food-logiq-mirror']) {
       const { result } = await doJob(CONNECTION, {

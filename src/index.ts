@@ -378,7 +378,7 @@ async function fetchAndSync({
               ? await to(item as any)
               : `${to}/${item._id}`;
           try {
-            const { data: resp } = await CONNECTION.get({ path });
+            const { data: resp } = await CONNECTION.get({ path }) as { data : any };
             if (
               typeof resp !== 'object' ||
               Buffer.isBuffer(resp) ||
@@ -475,7 +475,7 @@ export async function initialize({
 }) {
   try {
     info(
-      `<<<<<<<<<       Initializing fl-sync service. [v1.2.23]       >>>>>>>>>>`
+      `<<<<<<<<<       Initializing fl-sync service. [v1.4.11]       >>>>>>>>>>`
     );
     TOKEN = await getToken();
     // Connect to oada
@@ -529,6 +529,7 @@ export async function initialize({
     if (mirrorWatch === undefined || mirrorWatch) {
       const svc = new Service({
         name: SERVICE_NAME,
+        //@ts-ignore
         oada: CONNECTION,
         opts: { skipQueueOnStartup },
       });
@@ -582,6 +583,8 @@ export async function initialize({
 
       info('Started fl-sync mirror handler.');
     }
+
+    
 
     info('Initialize complete. Service running...');
   } catch (cError: unknown) {
