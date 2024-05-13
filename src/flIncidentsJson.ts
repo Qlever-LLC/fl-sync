@@ -58,7 +58,7 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
       const equals = _.isEqual(resp['food-logiq-mirror'], item);
       if (!equals) {
         info(
-          `Document difference in FL doc [${item._id}] detected. Syncing...`
+          `Document difference in FL doc [${item._id}] detected. Syncing...`,
         );
         sync = true;
       }
@@ -87,7 +87,7 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
     // TODO: Need to add this to some sort of retry
     error(
       { error: cError },
-      `fetchIncidents errored on item ${item._id}. Moving on`
+      `fetchIncidents errored on item ${item._id}. Moving on`,
     );
     return false;
   }
@@ -108,7 +108,7 @@ export async function fetchIncidents({
   pageIndex?: number;
   oada: OADAClient;
 }) {
-  pageIndex = pageIndex ?? 0;
+  pageIndex ??= 0;
   const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents?updated=${startTime}..${endTime}`;
   const request: AxiosRequestConfig = {
     method: `get`,
@@ -138,7 +138,7 @@ export async function fetchIncidents({
     info(
       `Finished page ${pageIndex}. Item ${
         response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`
+      }/${response.data.totalItemCount}`,
     );
     await fetchIncidents({
       startTime,
@@ -152,7 +152,7 @@ export async function fetchIncidents({
 export async function pollIncidents(
   lastPoll: Moment,
   end: Moment,
-  oada: OADAClient
+  oada: OADAClient,
 ) {
   // Sync list of suppliers
   const startTime: string = (lastPoll || moment('20150101', 'YYYYMMDD'))
@@ -175,7 +175,7 @@ export async function fetchIncidentTypes({
   pageIndex?: number;
   oada: OADAClient;
 }) {
-  pageIndex = pageIndex ?? 0;
+  pageIndex ??= 0;
   const url = `${FL_DOMAIN}/businesses/${CO_ID}/incidentTypes?updated=${startTime}..${endTime}`;
   const request: AxiosRequestConfig = {
     method: `get`,
@@ -205,7 +205,7 @@ export async function fetchIncidentTypes({
     info(
       `Finished page ${pageIndex}. Item ${
         response.data.items.length * (pageIndex + 1)
-      }/${response.data.total}`
+      }/${response.data.total}`,
     );
     await fetchIncidentTypes({
       startTime,
@@ -218,7 +218,7 @@ export async function fetchIncidentTypes({
 
 export async function handleIncidentType(
   item: FlIncidentType,
-  oada: OADAClient
+  oada: OADAClient,
 ) {
   try {
     const type = item._id;
@@ -234,7 +234,7 @@ export async function handleIncidentType(
       const equals = _.isEqual(resp['food-logiq-mirror'], item);
       if (!equals) {
         info(
-          `Document difference in FL doc [${item._id}] detected. Syncing...`
+          `Document difference in FL doc [${item._id}] detected. Syncing...`,
         );
         sync = true;
       }
@@ -263,7 +263,7 @@ export async function handleIncidentType(
     // TODO: Need to add this to some sort of retry
     error(
       { error: cError },
-      `fetchIncidents errored on item ${item._id}. Moving on`
+      `fetchIncidents errored on item ${item._id}. Moving on`,
     );
     return false;
   }

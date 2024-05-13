@@ -23,9 +23,11 @@ const temporary = {
     '_rev': 0,
     'documents': {
       '_type': 'application/vnd.oada.trellisfw.documents.1+json',
-      '*': { // Document type list
+      '*': {
+        // Document type list
         '_type': 'application/vnd.oada.trellisfw.documents.1+json',
-        '*': { // Document list
+        '*': {
+          // Document list
           _type: 'application/vnd.oada.trellisfw.document.1+json',
         },
       },

@@ -102,7 +102,7 @@ export async function makeFinalReport() {
       path: `${SERVICE_PATH}/businesses`,
     });
     const busKeys: any = Object.keys(buses as Record<string, unknown>).filter(
-      (index) => !index.startsWith('_')
+      (index) => !index.startsWith('_'),
     );
 
     for await (const bid of busKeys) {
@@ -117,7 +117,7 @@ export async function makeFinalReport() {
       }
 
       const documentKeys = Object.keys(docs).filter(
-        (index) => !index.startsWith('_')
+        (index) => !index.startsWith('_'),
       );
 
       for await (const docid of documentKeys) {
@@ -153,19 +153,19 @@ export async function makeFinalReport() {
         const documentName = _.get(document, 'food-logiq-mirror.name');
         const busName = _.get(
           document,
-          'food-logiq-mirror.shareSource.sourceBusiness.name'
+          'food-logiq-mirror.shareSource.sourceBusiness.name',
         );
         const status = _.get(
           document,
-          'food-logiq-mirror.shareSource.approvalInfo.status'
+          'food-logiq-mirror.shareSource.approvalInfo.status',
         );
         const user = _.get(
           document,
-          'food-logiq-mirror.shareSource.approvalInfo.setBy._id'
+          'food-logiq-mirror.shareSource.approvalInfo.setBy._id',
         );
         const createDate = _.get(
           document,
-          'food-logiq-mirror.versionInfo.createdAt'
+          'food-logiq-mirror.versionInfo.createdAt',
         );
         if (status) {
           finalReport.flStatuses[status] = finalReport.flStatuses[status] || {};
@@ -337,11 +337,11 @@ export async function makeFinalReport() {
     console.log(finalReport);
     fs.writeFileSync(
       './scripts/finalReportDocs-Prod.json',
-      JSON.stringify(otherReport)
+      JSON.stringify(otherReport),
     );
     fs.writeFileSync(
       './scripts/finalReport-Prod.json',
-      JSON.stringify(finalReport)
+      JSON.stringify(finalReport),
     );
     finalReport.checks = {
       totals: {

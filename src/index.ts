@@ -30,8 +30,8 @@ import debug from 'debug';
 import esMain from 'es-main';
 import moment from 'moment';
 
-import type { Change, JsonObject, OADAClient } from '@oada/client';
 import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
+import type { Change, JsonObject, OADAClient } from '@oada/client';
 import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
@@ -41,8 +41,12 @@ import {
   startJobCreator,
 } from './mirrorWatch.js';
 import type { FlObject } from './mirrorWatch.js';
-import { docReportConfig, tpReportConfig, tpReportFilter } from './reportConfig.js';
-//import { businessesReportConfig } from './businessesReportConfig.js';
+import {
+  docReportConfig,
+  tpReportConfig,
+  tpReportFilter,
+} from './reportConfig.js';
+// Import { businessesReportConfig } from './businessesReportConfig.js';
 import { startIncidents } from './flIncidentsCsv.js';
 import tree from './tree.js';
 import { handleFlBusiness } from './masterData.js';
@@ -84,7 +88,7 @@ async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
   for await (const change of changes) {
     try {
       if (_.has(change.body, 'autoapprove-assessments')) {
-        setAutoApprove(Boolean(change.body!['autoapprove-assessments']));
+        setAutoApprove(Boolean(change.body['autoapprove-assessments']));
       }
     } catch (cError: unknown) {
       error({ error: cError }, 'mirror watchCallback error');
@@ -126,7 +130,6 @@ export async function watchFlSyncConfig() {
     setAutoApprove(Boolean(data['autoapprove-assessments']));
   }
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const { changes } = await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
     type: 'single',
@@ -139,7 +142,7 @@ export async function watchFlSyncConfig() {
 export async function handleItem(
   type: string,
   item: FlObject,
-  oada?: OADAClient
+  oada?: OADAClient,
 ) {
   let bid;
   try {
@@ -169,7 +172,7 @@ export async function handleItem(
       const equals = _.isEqual(resp['food-logiq-mirror'], item);
       if (!equals || FL_FORCE_WRITE) {
         info(
-          `Document difference in FL doc [${item._id}] detected. Syncing...`
+          `Document difference in FL doc [${item._id}] detected. Syncing...`,
         );
         sync = true;
       }
@@ -195,7 +198,7 @@ export async function handleItem(
         tree,
       });
       info(
-        `Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`
+        `Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`,
       );
     }
 
@@ -204,7 +207,7 @@ export async function handleItem(
     // TODO: Need to add this to some sort of retry
     error(
       { error: cError },
-      `fetchCommunityResources errored on item ${item._id} bid ${bid}. Moving on`
+      `fetchCommunityResources errored on item ${item._id} bid ${bid}. Moving on`,
     );
     return false;
   }
@@ -227,7 +230,7 @@ export async function fetchCommunityResources({
   pageIndex?: number;
   oada?: OADAClient;
 }) {
-  pageIndex = pageIndex ?? 0;
+  pageIndex ??= 0;
   const url =
     type === 'assessments'
       ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${startTime}..${endTime}`
@@ -259,9 +262,8 @@ export async function fetchCommunityResources({
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
     info(
-      `Finished page ${pageIndex}. Item ${
-        response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`
+      `Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)
+      }/${response.data.totalItemCount}`,
     );
     if (type === 'documents') info(`Pausing for ${delay / 60_000} minutes`);
     if (type === 'documents') await setTimeout(delay);
@@ -349,12 +351,12 @@ async function fetchAndSync({
 }: {
   from: string;
   to:
-    | string
-    | ((input: { business: { _id: string } }) => string | PromiseLike<string>);
+  | string
+  | ((input: { business: { _id: string } }) => string | PromiseLike<string>);
   pageIndex?: number;
   forEach: (input: { business: { _id: string } }) => PromiseLike<void>;
 }) {
-  pageIndex = pageIndex ?? 0;
+  pageIndex ??= 0;
   try {
     const request: AxiosRequestConfig = {
       method: `get`,
@@ -378,7 +380,9 @@ async function fetchAndSync({
               ? await to(item as any)
               : `${to}/${item._id}`;
           try {
-            const { data: resp } = await CONNECTION.get({ path }) as { data : any };
+            const { data: resp } = (await CONNECTION.get({ path })) as {
+              data: any;
+            };
             if (
               typeof resp !== 'object' ||
               Buffer.isBuffer(resp) ||
@@ -391,11 +395,11 @@ async function fetchAndSync({
             const equals = _.isEqual(resp?.['food-logiq-mirror'], item);
             if (equals)
               info(
-                `No resource difference in FL item [${item._id}]. Skipping...`
+                `No resource difference in FL item [${item._id}]. Skipping...`,
               );
             if (!equals)
               info(
-                `Resource difference in FL item [${item._id}] detected. Syncing to ${path}`
+                `Resource difference in FL item [${item._id}] detected. Syncing to ${path}`,
               );
             if (!equals) {
               sync = true;
@@ -404,7 +408,7 @@ async function fetchAndSync({
             // @ts-expect-error stupid errors
             if (cError.status === 404) {
               info(
-                `FL Resource ${item._id} is not already on trellis. Syncing...`
+                `FL Resource ${item._id} is not already on trellis. Syncing...`,
               );
               sync = true;
             } else {
@@ -424,25 +428,22 @@ async function fetchAndSync({
 
         await forEach?.(item as any);
       },
-      { concurrency: 20 }
+      { concurrency: 20 },
     );
 
     // Repeat for additional pages of FL results
     if (response.data.hasNextPage) {
       info(
-        `fetchAndSync Finished page ${pageIndex}. Item ${
-          response.data.pageItemCount * (pageIndex + 1)
-        }/${response.data.totalItemCount}`
+        `fetchAndSync Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)
+        }/${response.data.totalItemCount}`,
       );
       await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach });
     }
-
-    return;
   } catch (cError: unknown) {
     info({ error: cError }, 'getBusinesses Error, Please check error logs');
     throw cError;
-        //if (key !== 'd4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e') return
-}
+    // If (key !== 'd4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e') return
+  }
 } // FetchAndSync
 
 export function setConnection(conn: OADAClient) {
@@ -475,7 +476,7 @@ export async function initialize({
 }) {
   try {
     info(
-      `<<<<<<<<<       Initializing fl-sync service. [v1.4.11]       >>>>>>>>>>`
+      `<<<<<<<<<       Initializing fl-sync service. [v1.4.11]       >>>>>>>>>>`,
     );
     TOKEN = await getToken();
     // Connect to oada
@@ -529,7 +530,6 @@ export async function initialize({
     if (mirrorWatch === undefined || mirrorWatch) {
       const svc = new Service({
         name: SERVICE_NAME,
-        //@ts-ignore
         oada: CONNECTION,
         opts: { skipQueueOnStartup },
       });
@@ -538,17 +538,17 @@ export async function initialize({
       svc.on(
         'document-mirrored',
         config.get('timeouts.mirrorWatch'),
-        handleDocumentJob
+        handleDocumentJob,
       );
       svc.on(
         'assessment-mirrored',
         config.get('timeouts.mirrorWatch'),
-        handleAssessmentJob
+        handleAssessmentJob,
       );
       svc.on(
         'business-lookup',
         config.get('timeouts.mirrorWatch'),
-        handleFlBusiness
+        handleFlBusiness,
       );
       svc.addReport({
         name: 'fl-sync-report',
@@ -583,8 +583,6 @@ export async function initialize({
 
       info('Started fl-sync mirror handler.');
     }
-
-    
 
     info('Initialize complete. Service running...');
   } catch (cError: unknown) {

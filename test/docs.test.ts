@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/prevent-abbreviations */
-
 import config from '../dist/config.js';
 
 import test from 'ava';
@@ -79,7 +77,7 @@ test.before(async (t) => {
       await oada.delete({
         path: `${SERVICE_PATH}/jobs/pending/${jobKey}`,
       });
-    })
+    }),
   );
 
   // Blow away the existing coi docs created
@@ -88,7 +86,7 @@ test.before(async (t) => {
       path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois`,
     })
     .then((r) =>
-      Object.keys(r.data || {}).filter((key) => !key.startsWith('_'))
+      Object.keys(r.data || {}).filter((key) => !key.startsWith('_')),
     )
     .catch((error) => {
       if (error.status !== 404) throw error;
@@ -99,7 +97,7 @@ test.before(async (t) => {
       await oada.delete({
         path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois/${key}`,
       });
-    })
+    }),
   );
 
   await service({
@@ -115,7 +113,7 @@ test.skip('Should fail and warn suppliers when multiple PDFs are attached on COI
   const data = coi;
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'multi-files-attached'
+    'multi-files-attached',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -128,7 +126,7 @@ test.skip('Should allow suppliers to upload multiple files attached on some doc 
   // TODO: This needs to be addressed when I get to it; rerunFlDoc is for failures
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'multi-files-attached'
+    'multi-files-attached',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -140,7 +138,7 @@ test.skip(`Should fail on Target fail due to multiple COIs in one pdf`, async (t
   const data = await getFlDocument(_id);
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'target-multiple-docs-combined'
+    'target-multiple-docs-combined',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -154,7 +152,7 @@ test.skip('Should fail when attachments cannot be retrieved.', async (t) => {
   data.attachments = [data.attachments[0]!];
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'bad-fl-attachments'
+    'bad-fl-attachments',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -168,7 +166,7 @@ test.skip(`Should fail on Target validation failure (COI)`, async (t) => {
   const data = await getFlDocument(_id);
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'target-validation'
+    'target-validation',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -181,7 +179,7 @@ test.skip(`Should fail on Target validation failure (COI) - specific holder chec
   const data = await getFlDocument(_id);
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'target-validation'
+    'target-validation',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -193,7 +191,7 @@ test.skip(`Should fail on Target fail on unrecognized format`, async (t) => {
   const data = await getFlDocument(_id);
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'target-unrecognized'
+    'target-unrecognized',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -206,7 +204,7 @@ test.skip(`Should fail on Target failure to identify doc`, async (t) => {
   const data = await getFlDocument(_id);
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'target-unrecognized'
+    'target-unrecognized',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -220,7 +218,7 @@ test.skip(`Should fail on Target failure due to not text pdf, needs OCR`, async 
   const data = await getFlDocument(_id);
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'target-unrecognized'
+    'target-unrecognized',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -235,14 +233,14 @@ test(`Should approve a valid COI document.`, async (t) => {
   console.log(
     'CONTINUING',
     `${SERVICE_PATH}/jobs/success/day-index/${moment().format(
-      'YYYY-MM-DD'
-    )}/${jobKey}`
+      'YYYY-MM-DD',
+    )}/${jobKey}`,
   );
 
   const job = await oada
     .get({
       path: `${SERVICE_PATH}/jobs/success/day-index/${moment().format(
-        'YYYY-MM-DD'
+        'YYYY-MM-DD',
       )}/${jobKey}`,
     })
     .catch((error) => {
@@ -259,7 +257,7 @@ test.skip(`Should reject a COI with expirations that do not match the user-enter
   const data = await getFlDocument(_id);
   const { flId, jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'document-validation'
+    'document-validation',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -280,7 +278,7 @@ test.skip(`Should reject a COI with insufficient policy coverage.`, async (t) =>
   const data = await getFlDocument(_id);
   const { jobKeys, jobKey, keyCount } = await rerunFlDocument(
     data,
-    'associated-assessment-rejected'
+    'associated-assessment-rejected',
   );
   t.assert(jobKeys[jobKey]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
@@ -303,7 +301,7 @@ test.skip(`Shouldn't queue a job if already approved by non-trellis user.`, asyn
   data.shareSource.sourceBusiness._id = SUPPLIER;
   console.log(
     'putting',
-    `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`
+    `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
   );
   await oada.put({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
@@ -340,7 +338,7 @@ test.skip(`Shouldn't queue a job if already rejected by non-trellis user.`, asyn
   data.shareSource.sourceBusiness._id = SUPPLIER;
   console.log(
     'putting',
-    `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`
+    `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
   );
   await oada.put({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
@@ -480,7 +478,6 @@ async function postAndPause(data: unknown, oada: OADAClient) {
       if (r && typeof r.data === 'object') {
         return Object.keys(r.data)[0];
       }
-      return undefined;
     });
   const jobKey = jobId!.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id');
@@ -490,7 +487,7 @@ async function postAndPause(data: unknown, oada: OADAClient) {
 
 async function rerunFlDocument(data: unknown, failType: string) {
   const jobsResultPath = `${SERVICE_PATH}/jobs/failure/${failType}/day-index/${moment().format(
-    'YYYY-MM-DD'
+    'YYYY-MM-DD',
   )}`;
 
   const keyCount = await oada
@@ -536,7 +533,7 @@ interface FlBody extends FlObject {
       type: Record<string, unknown>;
       community: Record<string, unknown>;
       shareSpecificAttributes: Record<string, unknown>;
-    }
+    },
   ];
 }
 

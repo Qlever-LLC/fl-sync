@@ -18,8 +18,8 @@
 /* eslint-disable unicorn/prevent-abbreviations */
 
 import { connect, doJob } from '@oada/client';
-import type { OADAClient } from '@oada/client';
-import { parseAttachment, Service } from '@oada/jobs';
+import type { JsonObject, OADAClient } from '@oada/client';
+import { Service, parseAttachment } from '@oada/jobs';
 import type { TreeKey } from '@oada/types/oada/tree/v1.js';
 
 import config from '../dist/config.js';
@@ -29,7 +29,6 @@ import { handleFlBusiness, mapTradingPartner } from '../dist/masterData.js';
 import test from 'ava';
 import ksuid from 'ksuid';
 import { tree } from '../dist/tree.js';
-import type { JsonObject } from '@oada/client';
 import { tpReportConfig, tpReportFilter } from '../dist/reportConfig.js';
 import { setTimeout } from 'node:timers/promises';
 import { parse } from 'node:path';
@@ -43,7 +42,8 @@ const SERVICE_NAME = config.get('service.name');
 const TEST_SERVICE_NAME = `test-${SERVICE_NAME}`;
 
 if (TEST_SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
-  tree.bookmarks.services[TEST_SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+  tree.bookmarks.services[TEST_SERVICE_NAME] =
+    tree.bookmarks.services['fl-sync'];
 }
 
 // Const pending = `${TEST_SERVICE_PATH}/jobs/pending`
@@ -66,7 +66,7 @@ test.before(async (t) => {
   svc.on(
     'business-lookup',
     config.get('timeouts.mirrorWatch'),
-    handleFlBusiness
+    handleFlBusiness,
   );
   svc.addReport({
     name: 'businesses-report',
@@ -121,7 +121,7 @@ test('If no TP exists, it should create one with a food logiq external id', asyn
     },
   });
 
-  //The result should contain 'new' and 'matches'
+  // The result should contain 'new' and 'matches'
   t.falsy(job.result?.new);
   t.true(job.result?.exact);
   t.assert(job?.result?.entry);
@@ -159,7 +159,7 @@ test('Should return an exact on sap externalId', async (t) => {
     },
   });
 
-  //The result should contain 'new' and 'matches'
+  // The result should contain 'new' and 'matches'
   t.falsy(jobB.result?.new);
   t.true(jobB.result?.exact);
   t.assert(jobB?.result?.entry);
@@ -199,7 +199,7 @@ test('Should return an exact match on foodlogiq externalId', async (t) => {
     },
   });
 
-  //The result should contain 'new' and 'matches'
+  // The result should contain 'new' and 'matches'
   t.falsy(jobB.result?.new);
   t.true(jobB.result?.exact);
   t.assert(jobB?.result?.entry);
@@ -208,7 +208,7 @@ test('Should return an exact match on foodlogiq externalId', async (t) => {
 });
 
 test('Should return the correct trading partner after updating the internalId', async (t) => {
-  let testFlBusiness = {
+  const testFlBusiness = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
       name: 'Test Business, LLC',
@@ -246,11 +246,11 @@ test('Should return the correct trading partner after updating the internalId', 
   t.assert(jobB?.result?.entry);
   t.true(
     // @ts-expect-error object is of type unknown
-    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[0]}`)
+    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[0]}`),
   );
   t.true(
     // @ts-expect-error object is of type unknown
-    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[1]}`)
+    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[1]}`),
   );
 });
 
@@ -305,17 +305,17 @@ test('Should return the correct trading partner if an already-used sapid is assi
   t.assert(jobB?.result?.entry);
   t.true(
     // @ts-expect-error object is of type unknown
-    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[0]}`)
+    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[0]}`),
   );
   t.true(
     // @ts-expect-error object is of type unknown
     Object.values(jobB?.updates).some(({ meta }: { meta: string }) =>
-      meta.includes(`sap:${internalIds[1]}`)
-    )
+      meta.includes(`sap:${internalIds[1]}`),
+    ),
   );
   t.false(
     // @ts-expect-error object is of type unknown
-    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[1]}`)
+    jobB?.result?.entry.externalIds.includes(`sap:${internalIds[1]}`),
   );
 });
 
@@ -333,12 +333,12 @@ test(`Should report on all jobs and filter report to just when the business is m
   serv.on(
     'business-lookup',
     config.get('timeouts.mirrorWatch'),
-    handleFlBusiness
+    handleFlBusiness,
   );
   const dt = new Date();
   dt.setSeconds(dt.getSeconds() + 90);
   const offset = dt.getTimezoneOffset();
-  const offsetDt = new Date(dt.getTime() - (offset * 60 * 1000));
+  const offsetDt = new Date(dt.getTime() - offset * 60 * 1000);
   const date = offsetDt.toISOString().split('T')[0];
   serv.addReport({
     name: reportName,
@@ -362,7 +362,7 @@ test(`Should report on all jobs and filter report to just when the business is m
       email: 'test@test.com',
       phone: '777-777-7777',
     },
-    internalId: '',//ksuid.randomSync().string,
+    internalId: '', // Ksuid.randomSync().string,
   };
   const jobA = (await doJob(oada, {
     type: 'business-lookup',
@@ -421,7 +421,7 @@ test(`Should report on all jobs and filter report to just when the business is m
   })) as { data: any };
 
   const items = Object.fromEntries(
-    Object.entries(result).filter(([k, _]) => !k.startsWith('_'))
+    Object.entries(result).filter(([k, _]) => !k.startsWith('_')),
   );
 
   t.is(Object.keys(items).length, 2);
@@ -431,28 +431,32 @@ test(`Should report on all jobs and filter report to just when the business is m
   // @ts-expect-error stuff
   const diff = ((dt - Date.now()) as unknown as number) + 3000;
   await setTimeout(diff);
-  const { data: emailJobs } = await oada.get({
+  const { data: emailJobs } = (await oada.get({
     path: `/bookmarks/services/abalonemail/jobs/pending`,
-  }) as { data: any };
+  })) as { data: any };
 
   let keys = Object.keys(emailJobs).filter((k) => !k.startsWith('_'));
   keys = keys.sort();
   t.assert(keys.length);
-  const key = keys[keys.length - 1];
+  const key = keys.at(-1);
   t.assert(key);
-  const { data: email } = await oada.get({
+  const { data: email } = (await oada.get({
     path: `/bookmarks/services/abalonemail/jobs/pending/${key}`,
-  }) as unknown as { data: { config: { attachments: any[] } } };
+  })) as unknown as { data: { config: { attachments: any[] } } };
 
-  const objArr = parseAttachment(email?.config?.attachments[0].content) as any[];
+  const objArr = parseAttachment(
+    email?.config?.attachments[0].content,
+  ) as any[];
   t.true(objArr.some((obj) => obj['FL ID'] === testFlBusiness.business._id));
-  t.true(objArr.some((obj) => obj['FL ID'] === testFlBusinessThree.business._id));
+  t.true(
+    objArr.some((obj) => obj['FL ID'] === testFlBusinessThree.business._id),
+  );
 });
 
 // Edge case that now should not come up...
 test.skip('Should return a new trading partner if the non-foodlogiq externalIds are already in use', async (t) => {
   t.timeout(300_000);
-  let testFlBusiness = {
+  const testFlBusiness = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
       name: 'Test Business, LLC',
@@ -474,7 +478,7 @@ test.skip('Should return a new trading partner if the non-foodlogiq externalIds 
     },
   });
 
-  let testFlBusinessTwo = {
+  const testFlBusinessTwo = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
       name: 'Test Biz, LLC',
@@ -495,7 +499,7 @@ test.skip('Should return a new trading partner if the non-foodlogiq externalIds 
       'fl-business': testFlBusinessTwo,
     },
   });
-  let testFlBusinessThree = {
+  const testFlBusinessThree = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
       name: 'Test Business, LLC',

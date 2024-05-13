@@ -52,9 +52,9 @@ export function checkAssessment(assessment: FlAssessment) {
             }
 
             return res;
-          })
-        )
-      )
+          }),
+        ),
+      ),
     )
     .flat(5)
     .some(Boolean);
@@ -76,13 +76,13 @@ const checkAssessments = new Map(
           subsection.questions.map((question) => {
             const umbrellaIndex = _.findIndex(
               question.productEvaluationOptions.columns,
-              ['name', 'Umbrella Coverage']
+              ['name', 'Umbrella Coverage'],
             );
             const { _id } =
               question.productEvaluationOptions.columns[umbrellaIndex]!;
             const umbrella = _.findIndex(
               question.productEvaluationOptions.answerRows[0]!.answers,
-              ['column', _id]
+              ['column', _id],
             );
             return question.productEvaluationOptions.columns.map((column) => {
               let value;
@@ -98,7 +98,7 @@ const checkAssessments = new Map(
               ) {
                 const answerIndex = _.findIndex(
                   question.productEvaluationOptions.answerRows[0]!.answers,
-                  ['column', column._id]
+                  ['column', column._id],
                 );
                 const value =
                   question?.productEvaluationOptions?.answerRows?.[0]
@@ -122,7 +122,7 @@ const checkAssessments = new Map(
                       value + umbCov
                     }. This does not meet the required coverage (${requirement})`;
                     info(
-                      `Assessment violation for id [${assessment._id}: ${reason}`
+                      `Assessment violation for id [${assessment._id}: ${reason}`,
                     );
                     reasons.push(reason);
                   }
@@ -138,20 +138,20 @@ const checkAssessments = new Map(
                 if (column.type === 'numeric') {
                   const reason = `${column.name}(${value}; plus umbrella ${umbCov}) did not meet the requirement (${requirement})`;
                   info(
-                    `Assessment violation for id [${assessment._id}: ${reason}`
+                    `Assessment violation for id [${assessment._id}: ${reason}`,
                   );
                   reasons.push(reason);
                 } else if (column.type === 'bool') {
                   const answerIndex = _.findIndex(
                     question.productEvaluationOptions.answerRows[0]!.answers,
-                    ['column', column._id]
+                    ['column', column._id],
                   );
                   const value =
                     question?.productEvaluationOptions?.answerRows?.[0]
                       ?.answers?.[answerIndex]?.answerBool;
                   const reason = `${column.name}(${value}) did not meet the requirement (${column.acceptanceValueBool})`;
                   info(
-                    `Assessment violation for id [${assessment._id}: ${reason}`
+                    `Assessment violation for id [${assessment._id}: ${reason}`,
                   );
                   reasons.push(reason);
                 }
@@ -159,13 +159,13 @@ const checkAssessments = new Map(
 
               return column.statisticsCommon.percentWithinTolerance < 100;
             });
-          })
-        )
+          }),
+        ),
       );
       const thing = failed.flat(5);
       return { failed: thing.some(Boolean), reasons };
     },
-  })
+  }),
 );
 
 export default checkAssessment;

@@ -28,7 +28,7 @@ const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');
 const ASSESSMENT_TEMPLATE_ID = config.get('foodlogiq.assessment-template.id');
 const ASSESSMENT_TEMPLATE_NAME = config.get(
-  'foodlogiq.assessment-template.name'
+  'foodlogiq.assessment-template.name',
 );
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const COMMUNITY_NAME = config.get('foodlogiq.community.name');
@@ -119,7 +119,7 @@ interface AnswerContent {
 export async function spawnAssessment(
   bid: string,
   bname: string,
-  content: AssessmentContent
+  content: AssessmentContent,
 ) {
   const {
     general,
@@ -221,7 +221,7 @@ export async function spawnAssessment(
   ASSESSMENT_BODY.state = 'Submitted';
   const response = await updateAssessment(
     PATH_TO_UPDATE_ASSESSMENT,
-    ASSESSMENT_BODY
+    ASSESSMENT_BODY,
   );
   return response || result;
 } // SpawnAssessment
@@ -235,11 +235,11 @@ export async function spawnAssessment(
 export async function linkAssessmentToDocument(
   bid: string,
   assessment: JsonObject,
-  document: JsonObject
+  document: JsonObject,
 ) {
   const PATH_LINK_ASSESSMENT = `${FL_DOMAIN}/v2/businesses/${CO_ID}/links/assessment/${assessment._id}`;
   trace(
-    `Creating FL Link from assessment [${assessment._id}] to document [${document._id}]`
+    `Creating FL Link from assessment [${assessment._id}] to document [${document._id}]`,
   );
 
   return axios({

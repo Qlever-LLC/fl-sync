@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/prevent-abbreviations */
-
-import type { Moment } from 'moment';
-import moment from 'moment';
 import type { FlObject } from './mirrorWatch.js';
+import type { Moment } from 'moment';
 import debug from 'debug';
 import { fromOadaType } from './conversions.js';
+import moment from 'moment';
 
 const info = debug('fl-sync:mirror-watch:info');
 const error = debug('fl-sync:mirror-watch:error');
@@ -43,7 +41,7 @@ const error = debug('fl-sync:mirror-watch:error');
 export async function validateResult(
   trellisDocument: any,
   flMirror: FlObject,
-  type: string
+  type: string,
 ) {
   info(`Validating pending doc [${trellisDocument._id}]; type: [${type}]`);
   try {
@@ -102,7 +100,7 @@ const validation = {
   */
   'Certificate of Insurance'(trellisDocument: any, flMirror: FlObject) {
     const trellisDates: any[] = Object.values(trellisDocument.policies).map(
-      (object: any) => moment(object.expire_date).utcOffset(0)
+      (object: any) => moment(object.expire_date).utcOffset(0),
     );
     return validateExpiration(trellisDates, flMirror);
   },
@@ -187,7 +185,7 @@ const validation = {
 
 function validateExpiration(
   trellisDates: Moment | Moment[],
-  flMirror: FlObject
+  flMirror: FlObject,
 ) {
   let message = '';
   let status = true;
@@ -197,7 +195,7 @@ function validateExpiration(
   if (trellisDates && Array.isArray(trellisDates)) {
     // Filter out the common bad date from target of 1900-12-30
     trellisDates = trellisDates.filter(
-      (index) => index.format('YYYY-MM-DD') !== '1900-12-30'
+      (index) => index.format('YYYY-MM-DD') !== '1900-12-30',
     );
 
     if (trellisDates.length > 0) {
@@ -205,7 +203,7 @@ function validateExpiration(
         .reduce(
           (previousExp, currentExp) =>
             previousExp < currentExp ? previousExp : currentExp,
-          trellisDates[0]!
+          trellisDates[0]!,
         )
         .format('YYYY-MM-DD');
     } else throw new Error('Could not extract expiration dates from PDF.');

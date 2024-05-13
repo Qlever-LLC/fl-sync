@@ -65,7 +65,7 @@ export async function fetchIncidentsCsv({
   endTime: string;
   pageIndex?: number;
 }) {
-  pageIndex = pageIndex ?? 0;
+  pageIndex ??= 0;
   const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?updated=${startTime}..${endTime}`;
   const request: AxiosRequestConfig = {
     method: `get`,
@@ -94,7 +94,7 @@ export async function fetchIncidentsCsv({
     info(
       `Finished page ${pageIndex}. Item ${
         response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`
+      }/${response.data.totalItemCount}`,
     );
     await fetchIncidentsCsv({
       startTime,
@@ -106,7 +106,7 @@ export async function fetchIncidentsCsv({
 
 export async function startIncidents(connection: OADAClient) {
   /*
-  const sqlConfig = {
+  Const sqlConfig = {
     server,
     database,
     user,
@@ -147,7 +147,7 @@ export async function startIncidents(connection: OADAClient) {
 export async function ensureTable() {
   const tables = await sql.query`select * from INFORMATION_SCHEMA.TABLES`;
   const matches = tables.recordset.filter(
-    (object: any) => object.TABLE_NAME === 'incidents'
+    (object: any) => object.TABLE_NAME === 'incidents',
   );
 
   if (matches.length === 0) {
@@ -162,7 +162,6 @@ export async function ensureTable() {
 
   return true;
 }
-
 
 /*
   'incidentDate (Incident Date/Delivery Date)': 'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
@@ -188,7 +187,7 @@ function checkSlashThings(row: any) {
   const matches = Object.keys(allColumns).filter((key) => pattern.test(key));
 
   const keys = Object.keys(row).filter(
-    (key) => !(key in allColumns) && pattern.test(key)
+    (key) => !(key in allColumns) && pattern.test(key),
   );
   for (const key of keys) {
     const parts = key.split(' (');
@@ -289,7 +288,7 @@ async function syncToSql(csvData: any) {
       .join(',');
 
     const setString = columnKeys
-    //.filter((key) => key !== 'Id')
+      // .filter((key) => key !== 'Id')
       .map((key, index) => `[${key}] = @val${index}`)
       .join(',');
 
@@ -318,7 +317,7 @@ function handleTypes(newRow: any) {
 
   return Object.fromEntries(
     columnKeys.map((key) => {
-      if (allColumns[key]!.type.includes("DATE")) {
+      if (allColumns[key]!.type.includes('DATE')) {
         if (moment.isDate(newRow[key])) {
           return [key, moment(newRow[key]).toDate()];
         }
@@ -345,13 +344,17 @@ function handleTypes(newRow: any) {
         }
 
         if (typeof newRow[key] === 'string') {
-          if (newRow[key].toLowerCase() === 'yes' ||
-            newRow[key].toLowerCase() === 'no') {
+          if (
+            newRow[key].toLowerCase() === 'yes' ||
+            newRow[key].toLowerCase() === 'no'
+          ) {
             return [key, newRow[key].toLowerCase() === 'no'];
           }
 
-          if (newRow[key].toLowerCase() === 'true' ||
-            newRow[key].toLowerCase() === 'false') {
+          if (
+            newRow[key].toLowerCase() === 'true' ||
+            newRow[key].toLowerCase() === 'false'
+          ) {
             return [key, newRow[key].toLowerCase() === 'true'];
           }
 
@@ -369,13 +372,16 @@ function handleTypes(newRow: any) {
           ];
         }
 
-	if (typeof newRow[key] === 'string') {
-	  return [key, null]
-	}
+        if (typeof newRow[key] === 'string') {
+          return [key, null];
+        }
       }
 
       // Handle some other general cases. Null will be handled in the next step
-      if (typeof newRow[key] === 'string' && ['', 'na', 'n/a'].includes(newRow[key].toLowerCase())) {
+      if (
+        typeof newRow[key] === 'string' &&
+        ['', 'na', 'n/a'].includes(newRow[key].toLowerCase())
+      ) {
         return [key, null];
       }
 
@@ -383,15 +389,16 @@ function handleTypes(newRow: any) {
         return [key, null];
       }
 
-      if (allColumns[key]!.type.includes("VARCHAR")) {
-        if (typeof newRow[key] === 'string') {
-	  return [key, newRow[key]];
-	}
+      if (
+        allColumns[key]!.type.includes('VARCHAR') &&
+        typeof newRow[key] === 'string'
+      ) {
+        return [key, newRow[key]];
       }
 
-      return [key, null]
-    })
-  )
+      return [key, null];
+    }),
+  );
   return newRow;
 }
 
@@ -399,7 +406,7 @@ function ensureNotNull(newRow: any) {
   const nonNulls = Object.values(allColumns).filter(
     (col) =>
       (newRow[col.name] === null || newRow[col.name] === undefined) &&
-      !col.allowNull
+      !col.allowNull,
   );
   for (const { name, type } of nonNulls) {
     if (type === 'BIT') {
@@ -412,6 +419,7 @@ function ensureNotNull(newRow: any) {
       newRow[name] = newRow['Created At'];
     }
   }
+
   return newRow;
 }
 

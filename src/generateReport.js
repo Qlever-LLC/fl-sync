@@ -320,7 +320,7 @@ async function generateReport() {
           if (
             pointer.get(
               document,
-              `/food-logiq-mirror/shareSource/approvalInfo/status`
+              `/food-logiq-mirror/shareSource/approvalInfo/status`,
             ) === 'approved'
           ) {
             documentApproved = true;
@@ -335,7 +335,7 @@ async function generateReport() {
           } else if (
             pointer.get(
               document,
-              `/food-logiq-mirror/shareSource/approvalInfo/status`
+              `/food-logiq-mirror/shareSource/approvalInfo/status`,
             ) === 'rejected'
           ) {
             documentApproved = false;
@@ -347,7 +347,7 @@ async function generateReport() {
           } else if (
             pointer.get(
               document,
-              `/food-logiq-mirror/shareSource/approvalInfo/status`
+              `/food-logiq-mirror/shareSource/approvalInfo/status`,
             ) === 'Awaiting Approval'
           ) {
             object.a.a4.count++;
@@ -396,7 +396,7 @@ async function generateReport() {
               'Fail',
               object.b3.description,
               object.b3.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -428,7 +428,7 @@ async function generateReport() {
                 'Fail',
                 object.b2.description,
                 object.b3.remedy,
-                newItems
+                newItems,
               );
               return;
             }
@@ -457,7 +457,7 @@ async function generateReport() {
                 'Fail',
                 object.b4.description,
                 object.b4.remedy,
-                newItems
+                newItems,
               );
             } else if (documentApproved === false) {
               object.b5.count++;
@@ -471,7 +471,7 @@ async function generateReport() {
                 'Fail',
                 object.b5.description,
                 object.b5.remedy,
-                newItems
+                newItems,
               );
             } else {
               object.b6.count++;
@@ -485,7 +485,7 @@ async function generateReport() {
                 'Fail',
                 object.b6.description,
                 object.b6.remedy,
-                newItems
+                newItems,
               );
             }
 
@@ -523,7 +523,7 @@ async function generateReport() {
               'Fail',
               object.c2.description,
               object.c2.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -566,7 +566,7 @@ async function generateReport() {
                     'Fail',
                     object.d2.d2c.description,
                     object.d2.d2c.remedy,
-                    newItems
+                    newItems,
                   );
                   return false;
                 }
@@ -584,7 +584,7 @@ async function generateReport() {
                     'Fail',
                     object.d2.d2b.description,
                     object.d2.d2b.remedy,
-                    newItems
+                    newItems,
                   );
                   return false;
                 }
@@ -602,7 +602,7 @@ async function generateReport() {
                     'Fail',
                     object.d2.d2a.description,
                     object.d2.d2a.remedy,
-                    newItems
+                    newItems,
                   );
                   return false;
                 }
@@ -620,13 +620,13 @@ async function generateReport() {
                     'Fail',
                     object.d2.d2d.description,
                     object.d2.d2d.remedy,
-                    newItems
+                    newItems,
                   );
                   return false;
                 }
 
                 return true;
-              }
+              },
             );
 
             if (event === true) {
@@ -642,7 +642,7 @@ async function generateReport() {
                 'Fail',
                 object.d2.d2e.description,
                 object.d2.d2e.remedy,
-                newItems
+                newItems,
               );
             }
 
@@ -659,7 +659,7 @@ async function generateReport() {
               'Fail',
               object.d3.description,
               object.d3.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -685,7 +685,7 @@ async function generateReport() {
               'Fail',
               object.e2.description,
               object.e2.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -713,7 +713,7 @@ async function generateReport() {
               'Fail',
               object.f3.description,
               object.f3.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -742,7 +742,7 @@ async function generateReport() {
                 'Fail',
                 object.f2.f2a.description,
                 object.f2.f2a.remedy,
-                newItems
+                newItems,
               );
             } else if (v.valid.message.includes('match')) {
               object.f2.f2b.count++;
@@ -756,7 +756,7 @@ async function generateReport() {
                 'Fail',
                 object.f2.f2b.description,
                 object.f2.f2b.remedy,
-                newItems
+                newItems,
               );
             }
 
@@ -773,7 +773,7 @@ async function generateReport() {
               'Fail',
               object.f3.description,
               object.f3.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -800,7 +800,7 @@ async function generateReport() {
               'Fail',
               object.g3.description,
               object.g3.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -825,7 +825,7 @@ async function generateReport() {
               'Fail',
               object.g2.description,
               object.g2.remedy,
-              newItems
+              newItems,
             );
             return;
           } else {
@@ -840,7 +840,7 @@ async function generateReport() {
               'Fail',
               object.g3.description,
               object.g3.remedy,
-              newItems
+              newItems,
             );
             return;
           }
@@ -947,10 +947,10 @@ async function generateReport() {
             pushReportItem(report, document, 'Success', '', '', newItems);
           }
         },
-        { concurrency: 10 }
+        { concurrency: 10 },
       );
     },
-    { concurrency: 10 }
+    { concurrency: 10 },
   );
 }
 
