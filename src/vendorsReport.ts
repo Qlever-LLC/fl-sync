@@ -1,6 +1,6 @@
 /**
  * @license
- *  Copyright 2021 Qlever LLC
+ * Copyright 2021 Qlever LLC
  *
  * Licensed under the Apache License, Version 2.0 (the 'License');
  * you may not use this file except in compliance with the License.
@@ -197,8 +197,7 @@ async function loadVendors() {
     // minMatchCharLength: 3,
     useExtendedSearch: true,
   };
-  // @ts-expect-error
-  const index = new Fuse([], options);
+  const index = new Fuse<typeof values[0]>([], options);
 
   const collection = Object.values(values || {}).filter(
     (value) => value !== undefined,
@@ -425,13 +424,13 @@ function validateReportResponses() {
 // and one originating from the SAP data.
 async function fixVendors(oada: OADAClient, matches: any[]) {
   for await (const { 'FL ID': fl, 'SAP ID': sap } of matches) {
-    const flid = `foodlogiq:${fl}`;
+    const flId = `foodlogiq:${fl}`;
     const sapid = `sap:${sap}`;
     // Well, we haven't created any trading partners yet...
     const fromTP = await doJob(oada, {
       service: 'trellis-data-manager',
       type: 'trading-partners-query',
-      config: { element: { externalIds: [flid] } },
+      config: { element: { externalIds: [flId] } },
     });
 
     const toTP = await doJob(oada, {
@@ -442,7 +441,7 @@ async function fixVendors(oada: OADAClient, matches: any[]) {
 
     if (fromTP.length !== 1 || toTP.length !== 1) {
       console.log(
-        `Multiple TP results found for food logiq: ${flid}, sap: ${sapid}`,
+        `Multiple TP results found for food logiq: ${flId}, sap: ${sapid}`,
       );
       continue;
     }
@@ -450,7 +449,7 @@ async function fixVendors(oada: OADAClient, matches: any[]) {
     const config = {
       from: fromTP.masterid,
       to: toTP.masterid,
-      externalIds: [flid, sapid],
+      externalIds: [flId, sapid],
     };
     await doJob(oada, {
       service: 'trellis-data-manager',
@@ -1130,7 +1129,7 @@ async function fixJobs() {
         }
       )) as unknown as { masterid: string };
       if (!result?.masterid) {
-        console.log("no masterid for flid", job.config.bid);
+        console.log("no masterid for flId", job.config.bid);
         continue;
       }
       console.log('masterid set as', result.masterid);
@@ -1139,7 +1138,7 @@ async function fixJobs() {
         object.externalIds.includes(`foodlogiq:${job.config.bid}`),
       ) as { masterid: string };
       if (!result?.masterid) {
-        console.log('no masterid for flid', job.config.bid);
+        console.log('no masterid for flId', job.config.bid);
         continue;
       }
       // Console.log('Found masterid', result.masterid);

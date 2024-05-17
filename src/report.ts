@@ -1,6 +1,6 @@
 /**
  * @license
- *  Copyright 2021 Qlever LLC
+ * Copyright 2021 Qlever LLC
  *
  * Licensed under the Apache License, Version 2.0 (the 'License');
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import csvjson from 'csvjson';
 import debug from 'debug';
 import ksuid from 'ksuid';
 import moment from 'moment';
+import type Link from '@oada/types/oada/link/v1.js';
 
 const DOMAIN = config.get('trellis.domain');
 const TOKEN = config.get('trellis.token');
@@ -111,7 +112,7 @@ export async function makeFinalReport() {
           path: `${SERVICE_PATH}/businesses/${bid}/documents`,
         })
         .then((r) => r.data)
-        .catch(() => {});
+        .catch(() => { });
       if (!docs) {
         return;
       }
@@ -120,14 +121,17 @@ export async function makeFinalReport() {
         (index) => !index.startsWith('_'),
       );
 
-      for await (const docid of documentKeys) {
-        if (!docid) return;
+      for await (const docId of documentKeys) {
+        if (!docId) {
+          return;
+        }
+
         const document = await oada
           .get({
-            path: `${SERVICE_PATH}/businesses/${bid}/documents/${docid}`,
+            path: `${SERVICE_PATH}/businesses/${bid}/documents/${docId}`,
           })
           .then((r) => r.data)
-          .catch(() => {});
+          .catch(() => { });
 
         if (!document) {
           return;
@@ -155,10 +159,10 @@ export async function makeFinalReport() {
           document,
           'food-logiq-mirror.shareSource.sourceBusiness.name',
         );
-        const status = _.get(
+        const status = `${_.get(
           document,
           'food-logiq-mirror.shareSource.approvalInfo.status',
-        );
+        )!}`;
         const user = _.get(
           document,
           'food-logiq-mirror.shareSource.approvalInfo.setBy._id',
@@ -183,7 +187,7 @@ export async function makeFinalReport() {
         try {
           await axios({
             method: 'head',
-            url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docid}`,
+            url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}`,
             headers: {
               Authorization: `${FL_TOKEN}`,
             },
@@ -191,8 +195,8 @@ export async function makeFinalReport() {
         } catch (error: unknown) {
           // @ts-expect-error stupid errors
           if (error.response.status === 404) {
-            console.log(`Document has been deleted in FL`, { docid, bid });
-            otherReport.flDeleted[docid] = { docid, bid, status, user };
+            console.log(`Document has been deleted in FL`, { docid: docId, bid });
+            otherReport.flDeleted[docId] = { docid: docId, bid, status, user };
             finalReport.flDeleted++;
           } else throw error as Error;
         }
@@ -200,14 +204,14 @@ export async function makeFinalReport() {
         // 2. Get the associated job
         const { data: meta } = await oada
           .get({
-            path: `${SERVICE_PATH}/businesses/${bid}/documents/${docid}/_meta`,
+            path: `${SERVICE_PATH}/businesses/${bid}/documents/${docId}/_meta`,
           })
           .catch(() => ({ data: undefined }));
         if (!meta) {
           return;
         }
 
-        const jobs = _.get(meta, 'services.fl-sync.jobs') ?? {};
+        const jobs: Record<string, Link> = _.get(meta, 'services.fl-sync.jobs') ?? {};
         if (Object.keys(jobs).length <= 0) {
           finalReport.missingFlSyncJob = finalReport.missingFlSyncJob ?? 0;
           finalReport.missingFlSyncJob++;
@@ -217,8 +221,8 @@ export async function makeFinalReport() {
           otherReport.missingFlSyncJobs = otherReport.missingFlSyncJobs ?? {};
           otherReport.missingFlSyncJobs[status] =
             otherReport.missingFlSyncJobs[status] ?? {};
-          otherReport.missingFlSyncJobs[status][docid] = {
-            docid,
+          otherReport.missingFlSyncJobs[status][docId] = {
+            docid: docId,
             bid,
             status,
             user,
@@ -227,20 +231,22 @@ export async function makeFinalReport() {
             console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
             console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
             console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-            console.log({ docid, bid, status, user });
-            otherReport.approvedButNoJob[docid] = { docid, bid, status, user };
+            console.log({ docid: docId, bid, status, user });
+            otherReport.approvedButNoJob[docId] = { docid: docId, bid, status, user };
           }
 
           return;
         }
 
         const jobkey = mostRecentKsuid(Object.keys(jobs));
-        if (!jobkey) return;
-        const jobid = jobs[jobkey]._id;
+        if (!jobkey) {
+          return;
+        }
+        const jobId = jobs[jobkey]?._id;
 
         const job: any = await oada
           .get({
-            path: `/${jobid}`,
+            path: `/${jobId}`,
           })
           .then((r) => r.data);
 
@@ -260,8 +266,8 @@ export async function makeFinalReport() {
             'FoodLogiQ Status': status,
             // @ts-expect-error
             'Trellis Result': humanReadableJobError[jobError],
-            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docid}`,
-            'FoodLogiQ Document ID': docid,
+            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
+            'FoodLogiQ Document ID': docId,
             'FoodLogiQ Supplier ID': bid,
           });
 
@@ -279,14 +285,14 @@ export async function makeFinalReport() {
             'Supplier': busName,
             'FoodLogiQ Status': status,
             'Trellis Result': 'Success',
-            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docid}`,
-            'FoodLogiQ Document ID': docid,
+            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
+            'FoodLogiQ Document ID': docId,
             'FoodLogiQ Supplier ID': bid,
           });
-          console.log({ docid, jobid, status: job.status });
+          console.log({ docid: docId, jobid: jobId, status: job.status });
         } else {
           finalReport.otherErrors++;
-          otherReport.otherErrors[docid] = { docid, bid, jobid };
+          otherReport.otherErrors[docId] = { docid: docId, bid, jobid: jobId };
           spreadsheet.push({
             'Document Name': documentName,
             'Document Type': type,
@@ -294,8 +300,8 @@ export async function makeFinalReport() {
             'Supplier': busName,
             'FoodLogiQ Status': status,
             'Trellis Result': 'Other Trellis Error',
-            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docid}`,
-            'FoodLogiQ Document ID': docid,
+            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
+            'FoodLogiQ Document ID': docId,
             'FoodLogiQ Supplier ID': bid,
           });
           return;
@@ -318,12 +324,12 @@ export async function makeFinalReport() {
             finalReport.flStatuses[status].notInLaserfiche =
               finalReport.flStatuses[status].notInLaserfiche || 0;
             finalReport.flStatuses[status].notInLaserfiche++;
-            otherReport.notInLaserfiche[docid] = { docid, bid, jobid };
+            otherReport.notInLaserfiche[docId] = { docid: docId, bid, jobid: jobId };
             if (status === 'approved') {
-              otherReport.approvedNotInLaserfiche[docid] = {
-                docid,
+              otherReport.approvedNotInLaserfiche[docId] = {
+                docid: docId,
                 bid,
-                jobid,
+                jobid: jobId,
               };
             }
           }
@@ -403,8 +409,8 @@ function fixHeaders(csv: string, headers: string[]) {
 export function mostRecentKsuid(keys: string[]) {
   return keys.length > 0
     ? keys
-        .map((k) => ksuid.parse(k))
-        .reduce((a, b) => (a.compare(b) > 0 ? a : b)).string
+      .map((k) => ksuid.parse(k))
+      .reduce((a, b) => (a.compare(b) > 0 ? a : b)).string
     : undefined;
 }
 

@@ -39,7 +39,7 @@ const temporary = {
       },
     },
   },
-};
+} as const;
 export const tree: Record<string, any> = {
   bookmarks: {
     _type: 'application/vnd.oada.bookmarks.1+json',
@@ -151,6 +151,6 @@ export const tree: Record<string, any> = {
       },
     },
   },
-};
+} as const;
 
 export default tree;
