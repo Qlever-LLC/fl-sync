@@ -475,7 +475,7 @@ export async function initialize({
 }) {
   try {
     info(
-      `<<<<<<<<<       Initializing fl-sync service. [v1.4.11]       >>>>>>>>>>`
+      `<<<<<<<<<       Initializing fl-sync service. [v${process.env.npm_package_version}]       >>>>>>>>>>`
     );
     TOKEN = await getToken();
     // Connect to oada
