@@ -33,7 +33,7 @@ const docsTree = {
     'documents': {
       '_type': 'application/vnd.oada.trellisfw.documents.1+json',
       '*': {
-        // Cois, letters-of-guarantee, fsqa-audits, etc.
+        // COIs, letters-of-guarantee, fsqa-audits, etc.
         '_type': 'application/vnd.oada.trellisfw.documents.1+json',
         '*': {
           // Individual docs here
@@ -43,7 +43,7 @@ const docsTree = {
       },
     },
   },
-};
+} as const;
 export const tree: Record<string, any> = {
   bookmarks: {
     _type: 'application/vnd.oada.bookmarks.1+json',
@@ -174,6 +174,6 @@ export const tree: Record<string, any> = {
       shared: docsTree,
     },
   },
-};
+} as const;
 
 export default tree;

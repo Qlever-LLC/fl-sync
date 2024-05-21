@@ -20,7 +20,7 @@ import config from './config.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import { default as axios, AxiosRequestConfig } from 'axios';
+import { default as axios, type AxiosRequestConfig } from 'axios';
 import _ from 'lodash';
 import debug from 'debug';
 import jszip from 'jszip';
@@ -29,7 +29,8 @@ import crypto from 'crypto';
 import oError from '@overleaf/o-error';
 import pointer from 'json-pointer';
 
-import type { Change,
+import type {
+  Change,
   Json,
   JsonObject,
   OADAClient,
@@ -184,22 +185,21 @@ const rejectable = {
   'cois': 'cois',
 };
 
-async function handleTargetStatus(
-  targetJob: TargetJob,
-  docJob: FlSyncJob,
-) {
+async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob) {
   const { status } = targetJob;
   const docJobId = docJob.oadaId as string;
   const { bid, masterid, key } = docJob.config;
   if (docJob && docJob.config['allow-rejection'] === false) {
-    info(`[job ${docJobId}] Target finished with status ${status} on already-approved doc.`);
+    info(
+      `[job ${docJobId}] Target finished with status ${status} on already-approved doc.`,
+    );
     if (status === 'success') {
       // If successful, skip the potential pitfalls of assessment creation and call finishDoc.
       await postUpdate(
         CONNECTION,
         docJobId,
         'Target extraction completed. Handling result...',
-        'in-progress'
+        'in-progress',
       );
       return finishDocument(docJobId, key, masterid, 'Approved');
     }
@@ -214,7 +214,7 @@ async function handleTargetStatus(
         CONNECTION,
         docJobId,
         'Target extraction failed',
-        'in-progress'
+        'in-progress',
       );
       // TODO: Probably shouldn't be ending the job in failure here. I'd say if we
       // are calling finish job as approved, its a success (despite issues)
@@ -227,7 +227,7 @@ async function handleTargetStatus(
       CONNECTION,
       docJobId,
       'Target extraction completed. Handling result...',
-      'in-progress'
+      'in-progress',
     );
     await handleScrapedResult(targetJob, docJob);
   } else if (status === 'failure') {
@@ -235,7 +235,7 @@ async function handleTargetStatus(
       CONNECTION,
       docJobId,
       'Target extraction failed',
-      'in-progress'
+      'in-progress',
     );
 
     let jobError;
@@ -244,7 +244,7 @@ async function handleTargetStatus(
     if (isObj(targetJob) && targetJob.updates) {
       // 1. Find the update with the error message
       const errorObject = Object.values(targetJob.updates).find(
-        (object) => object.status === 'error'
+        (object) => object.status === 'error',
       );
       if (errorObject) errorMessage = errorObject.information;
       // 2. Determine whether to reject the document based on target error type; others we'll need to review
@@ -259,7 +259,7 @@ async function handleTargetStatus(
         }
 
         info(
-          `[job ${docJobId}] Target job ${targetJob._id} errored. reject: ${reject}; fl-sync job error ${jobError}`
+          `[job ${docJobId}] Target job ${targetJob._id} errored. reject: ${reject}; fl-sync job error ${jobError}`,
         );
 
         // @ts-expect-error
@@ -269,8 +269,7 @@ async function handleTargetStatus(
       }
     }
 
-    if (!jobError)
-      endJob(docJobId, new JobError(errorMessage, 'target-other'));
+    if (!jobError) endJob(docJobId, new JobError(errorMessage, 'target-other'));
   }
 }
 
@@ -287,11 +286,11 @@ async function approveFlDocument(documentId: string, jobId: string) {
       headers: { Authorization: FL_TOKEN },
       data: {
         status: 'Approved',
-        comment: "",
+        comment: '',
         visibleForSupplier: false,
       },
     });
-  } catch(err) {
+  } catch (err) {
     throw err;
   }
 
@@ -307,7 +306,7 @@ async function approveFlDocument(documentId: string, jobId: string) {
  */
 export const handleAssessmentJob: WorkerFunction = async (
   job: any,
-  { oada, jobId }
+  { oada, jobId },
 ) => {
   const jobKey = jobId.replace(/^resources\//, '');
   try {
@@ -320,7 +319,7 @@ export const handleAssessmentJob: WorkerFunction = async (
       .then((r) => r.data as JsonObject);
     if (!isObj(itemData)) {
       throw new Error(
-        `Could not retrieve 'food-logiq-mirror' from request data.`
+        `Could not retrieve 'food-logiq-mirror' from request data.`,
       );
     }
 
@@ -360,9 +359,8 @@ export const handleAssessmentJob: WorkerFunction = async (
       info(`[job ${docJobId}] Assessment Auto-${item.state}. [${item._id}]`);
       await axios({
         method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${
-          item._id
-        }/${failed ? 'reject' : 'approve'}spawnedassessment`,
+        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${item._id
+          }/${failed ? 'reject' : 'approve'}spawnedassessment`,
         headers: { Authorization: FL_TOKEN },
         data: item,
       });
@@ -382,9 +380,8 @@ export const handleAssessmentJob: WorkerFunction = async (
         CONNECTION,
         jobId,
         {},
-        `Assessment auto-${item.state}. [${item._id}] ${
-          failed ? `for these reasons: ${reasons.join(';')}` : ''
-        }`
+        `Assessment auto-${item.state}. [${item._id}] ${failed ? `for these reasons: ${reasons.join(';')}` : ''
+        }`,
         // TODO: is this an enumerated status?Should the above line get applied as the 'meta'?
         // 'in-progress'
       );
@@ -405,7 +402,7 @@ export const handleAssessmentJob: WorkerFunction = async (
         resolve,
         reject,
       });
-      info('Saved assessmentjob')
+      info('Saved assessmentjob');
     });
   } catch (error_) {
     error('Error handleAssessmentJob', error_);
@@ -470,7 +467,7 @@ export async function postTpDocument({
     });
     docId = r.headers['content-location']!.replace(/^\//, '');
     trace(
-      `Doc for hashKey ${hashKey} already exists. Partial JSON lives at /${docId}`
+      `Doc for hashKey ${hashKey} already exists. Partial JSON lives at /${docId}`,
     );
   } catch (error_: any) {
     if (error_?.status !== 404) throw error_;
@@ -481,7 +478,7 @@ export async function postTpDocument({
     });
     docId = r.headers['content-location']!.replace(/^\//, '');
     trace(
-      `Doc for hashKey ${hashKey} did not exist. Partial JSON created at /${docId}`
+      `Doc for hashKey ${hashKey} did not exist. Partial JSON created at /${docId}`,
     );
   }
 
@@ -507,7 +504,7 @@ export async function postTpDocument({
   const fKey = files[0];
   if (!fKey)
     throw new Error(
-      `Failed to acquire file key while handling pending document`
+      `Failed to acquire file key while handling pending document`,
     );
 
   // Prepare the pdf resource
@@ -531,9 +528,9 @@ export async function postTpDocument({
   } catch (cError: unknown) {
     throw Buffer.byteLength(zdata) === 0
       ? new JobError(
-          `Attachment Buffer data 'zdata' was empty.`,
-          'bad-fl-attachments'
-        )
+        `Attachment Buffer data 'zdata' was empty.`,
+        'bad-fl-attachments',
+      )
       : (cError as Error);
   }
 
@@ -559,7 +556,7 @@ export async function postTpDocument({
     'Wrote FL mirror (%s) and fl-sync job (%s) references to _meta of pdf resource %s',
     mirrorid,
     jobId,
-    pdfId
+    pdfId,
   );
 
   await oada.put({
@@ -575,7 +572,7 @@ export async function postTpDocument({
   });
   trace(
     'Wrote pdf vdoc reference into FL mirror _meta for attachment %s',
-    pdfKey
+    pdfKey,
   );
 
   await oada.put({
@@ -587,7 +584,7 @@ export async function postTpDocument({
   });
   trace(
     'Wrote pdf vdoc reference into trellis document _meta for attachment %s',
-    pdfKey
+    pdfKey,
   );
 
   // Now that the pdf is in place, drop the document to generate a target job
@@ -599,7 +596,7 @@ export async function postTpDocument({
     tree,
   });
   info(
-    `Created partial JSON in docs list: /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`
+    `Created partial JSON in docs list: /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`,
   );
 
   const targetJob = {
@@ -620,7 +617,7 @@ export async function postTpDocument({
     job: targetJob,
   });
 
-  targetJobRequest.on(JobEventType.Status, async ({job: jobChange}: any) => {
+  targetJobRequest.on(JobEventType.Status, async ({ job: jobChange }: any) => {
     const j = await jobChange;
 
     // Handle final statuses
@@ -631,7 +628,8 @@ export async function postTpDocument({
   });
   //  targetJobRequest.on(JobEventType.Update, handleTargetUpdates)
 
-  const { key: targetJobKey, _id: targetJobId } = await targetJobRequest.start();
+  const { key: targetJobKey, _id: targetJobId } =
+    await targetJobRequest.start();
   // Add the target info to the in-memory job listing
 
   flSyncJobs.set(jobId, {
@@ -642,7 +640,7 @@ export async function postTpDocument({
 
   await targetJobRequest.postUpdate(
     `Document posted to /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey} (${docId}).`,
-    'in-progress'
+    'in-progress',
   );
   await oada.put({
     path: `${jobId}`,
@@ -674,7 +672,9 @@ export async function postTpDocument({
       [targetJobKey]: { _id: targetJobId },
     },
   });
-  info(`[job ${docJob.oadaId}] Noted target job ${targetJobKey} in fl-sync job ${jobId}`);
+  info(
+    `[job ${docJob.oadaId}] Noted target job ${targetJobKey} in fl-sync job ${jobId}`,
+  );
 
   return type;
 }
@@ -686,7 +686,7 @@ export async function postTpDocument({
  */
 export const handleDocumentJob: WorkerFunction = async (
   job: Job,
-  { oada, jobId }
+  { oada, jobId },
 ) => {
   const jobKey = jobId.replace(/^resources\//, '');
   let item: FlObject;
@@ -697,7 +697,7 @@ export const handleDocumentJob: WorkerFunction = async (
     info(
       'handleDocumentJob processing new document job resource[%s] doc [%s]',
       jobId,
-      `${SERVICE_NAME}/businesses/${bid}/documents/${key}`
+      `${SERVICE_NAME}/businesses/${bid}/documents/${key}`,
     );
 
     const { data: itemData } = (await oada.get({
@@ -705,7 +705,7 @@ export const handleDocumentJob: WorkerFunction = async (
     })) as { data: JsonObject };
     if (!isObj(itemData)) {
       throw new Error(
-        `Could not retrieve 'food-logiq-mirror' from request data.`
+        `Could not retrieve 'food-logiq-mirror' from request data.`,
       );
     }
 
@@ -713,14 +713,14 @@ export const handleDocumentJob: WorkerFunction = async (
 
     if (!item || !isObj(item)) throw new Error(`Bad FlObject`);
 
-        // Save the document job
+    // Save the document job
     return await new Promise(async (resolve, reject) => {
       flSyncJobs.set(jobId, {
         resolve,
         reject,
         'allow-rejection': indexConfig['allow-rejection'], // Also save this here
         'itemId': item._id,
-        job
+        job,
       });
       try {
         flType = await postTpDocument({
@@ -748,9 +748,8 @@ export const handleDocumentJob: WorkerFunction = async (
                 await rejectFlDocument(item!._id, jobId, message);
             } catch {
               info(
-                `Caught in rejectFlDocument, likely because this document id:${
-                  item!._id
-                } no longer exists in FL.`
+                `Caught in rejectFlDocument, likely because this document id:${item!._id
+                } no longer exists in FL.`,
               );
             }
           }
@@ -787,9 +786,8 @@ export const handleDocumentJob: WorkerFunction = async (
             await rejectFlDocument(item!._id, jobId, message);
         } catch {
           info(
-            `Caught in rejectFlDocument, likely because this document id:${
-              item!._id
-            } no longer exists in FL.`
+            `Caught in rejectFlDocument, likely because this document id:${item!._id
+            } no longer exists in FL.`,
           );
         }
       }
@@ -834,7 +832,7 @@ async function finishDocument(
       error(`finishDoc could not determine doc type.`);
       endJob(
         docJobId,
-        new JobError(`finishDoc could not determine doc type.`, 'other')
+        new JobError(`finishDoc could not determine doc type.`, 'other'),
       );
       return;
     }
@@ -854,14 +852,14 @@ async function finishDocument(
       } else {
         // PDFs from already-approved things need to land in LF.
         error(
-          `Target result was incomplete, perhaps due to a doc type mismatch`
+          `Target result was incomplete, perhaps due to a doc type mismatch`,
         );
         endJob(
           docJobId,
           new JobError(
             `Target result was incomplete. Unable to call finishDoc`,
-            'target-invalid-result'
-          )
+            'target-invalid-result',
+          ),
         );
         return;
       }
@@ -870,7 +868,7 @@ async function finishDocument(
     // Move approved docs to trading partner /bookmarks
     try {
       info(
-        `[job ${docJobId}] Moving approved document to [/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`
+        `[job ${docJobId}] Moving approved document to [/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`,
       );
       await CONNECTION.ensure({
         path: `/${masterid}/bookmarks/trellisfw/documents/${type}`,
@@ -888,12 +886,14 @@ async function finishDocument(
         path: `/${masterid}/shared/trellisfw/documents/${type}/${key}`,
       });
     } catch (err) {
-      error(`Error during move to bookmarks ${err}`) 
+      error(`Error during move to bookmarks ${err}`);
     }
     endJob(docJobId);
   } else {
     // Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
-    info(`[job ${docJobId}] Document [${itemId}] with status [${status}]. finishDoc skipping.`);
+    info(
+      `[job ${docJobId}] Document [${itemId}] with status [${status}]. finishDoc skipping.`,
+    );
   }
 }
 
@@ -968,7 +968,7 @@ async function constructCOIAssessment(
   bid: string,
   bname: string,
   result: TrellisCOI,
-  updateFlId?: string | void
+  updateFlId?: string | void,
 ) {
   const policies = Object.values(result.policies);
   const cgl = (_.find(policies, ['type', 'Commercial General Liability']) ??
@@ -1014,7 +1014,7 @@ async function constructCOIAssessment(
         _id: flId,
         name,
         type: 'document',
-      }
+      },
     );
   }
 
@@ -1027,7 +1027,7 @@ async function constructCOIAssessment(
  */
 async function handleScrapedResult(
   targetJob: TargetJob,
-  flSyncJob: JsonObject
+  flSyncJob: JsonObject,
 ) {
   try {
     // 1. Get the result content
@@ -1047,7 +1047,9 @@ async function handleScrapedResult(
       isObj(targetResultItem?.[key])
     ) {
       const targetRes = targetResultItem?.[key] as JsonObject;
-      info(`[job ${docJobId}] Job result: [type: ${type}, key: ${key}, _id: ${targetRes?._id}]`);
+      info(
+        `[job ${docJobId}] Job result: [type: ${type}, key: ${key}, _id: ${targetRes?._id}]`,
+      );
     }
 
     const { data: result } = (await CONNECTION.get({
@@ -1071,7 +1073,7 @@ async function handleScrapedResult(
     }).then((r) => r.data as JsonObject);
     if (!isObj(flMirrorData)) {
       throw new Error(
-        `Could not retrieve 'food-logiq-mirror' from request data.`
+        `Could not retrieve 'food-logiq-mirror' from request data.`,
       );
     }
 
@@ -1080,7 +1082,7 @@ async function handleScrapedResult(
     const validationResult = await validateResult(result, flMirror, type);
 
     info(
-      `[job ${docJobId}] Validation of pending document result:[${result._id}]: ${validationResult.status}`
+      `[job ${docJobId}] Validation of pending document result:[${result._id}]: ${validationResult.status}`,
     );
     await CONNECTION.put({
       path: `/${docJobId}`,
@@ -1095,24 +1097,26 @@ async function handleScrapedResult(
         CONNECTION,
         docJobId,
         `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejected FL Doc ${flId}: ${validationResult.message}`,
-        'in-progress'
+        'in-progress',
       );
       if (
         validationResult.message &&
         !validationResult?.message.includes(
-          'Could not extract expiration dates'
+          'Could not extract expiration dates',
         )
       ) {
         //@ts-expect-error todo
         if (rejectable[type]) {
-          info(`[job ${docJobId}] Document type ${type} was rejectable. Rejecting`);
+          info(
+            `[job ${docJobId}] Document type ${type} was rejectable. Rejecting`,
+          );
           await rejectFlDocument(flId, docJobId, validationResult?.message);
         }
       }
 
       endJob(
         docJobId,
-        new JobError(validationResult?.message, 'document-validation')
+        new JobError(validationResult?.message, 'document-validation'),
       );
       return;
     }
@@ -1130,7 +1134,7 @@ async function handleScrapedResult(
 
       if (assessmentId) {
         info(
-          `[job ${docJobId}] Assessment with id [${assessmentId}] already exists for document _id [${flId}].`
+          `[job ${docJobId}] Assessment with id [${assessmentId}] already exists for document _id [${flId}].`,
         );
         assessmentToFlId.set(assessmentId as string, {
           jobId: docJobId,
@@ -1138,7 +1142,9 @@ async function handleScrapedResult(
           flId,
         });
       } else {
-        info(`[job ${docJobId}] Assessment does not yet exist for document _id [${flId}]`);
+        info(
+          `[job ${docJobId}] Assessment does not yet exist for document _id [${flId}]`,
+        );
       }
 
       let assess;
@@ -1150,7 +1156,7 @@ async function handleScrapedResult(
           bid,
           bname,
           result,
-          assessmentId
+          assessmentId,
         );
 
         if (!assessmentId) {
@@ -1170,7 +1176,7 @@ async function handleScrapedResult(
             'food-logiq-mirror'
           ] as unknown as FlObject;
           info(
-            `[job ${docJobId}] Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`
+            `[job ${docJobId}] Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`,
           );
 
           //TODO:This is maybe a problem causing cyclical re-runs of assessments?
@@ -1191,12 +1197,14 @@ async function handleScrapedResult(
         } else throw cError as Error;
       }
 
-      info(`[job ${docJobId}] Spawned assessment [${assessmentId}] for business id [${bid}]`);
+      info(
+        `[job ${docJobId}] Spawned assessment [${assessmentId}] for business id [${bid}]`,
+      );
       await postUpdate(
         CONNECTION,
         docJobId,
         `Assessment spawned with id ${assessmentId} and linked into job /${docJobId}/assessments/${ASSESSMENT_TEMPLATE_ID}`,
-        'in-progress'
+        'in-progress',
       );
 
       if (assessmentId) {
@@ -1206,7 +1214,9 @@ async function handleScrapedResult(
         });
       }
     } else {
-      info(`[job ${docJobId}] Skipping assessment for result of type [${flType}] [${type}].`);
+      info(
+        `[job ${docJobId}] Skipping assessment for result of type [${flType}] [${type}].`,
+      );
     }
   } catch (cError: unknown) {
     error(cError);
@@ -1220,7 +1230,7 @@ async function handleScrapedResult(
 async function rejectFlDocument(
   documentId: string,
   jobId: string,
-  message?: string
+  message?: string,
 ) {
   info(`[job ${jobId}] Rejecting FL document [${documentId}]. ${message}`);
 
@@ -1231,13 +1241,18 @@ async function rejectFlDocument(
     headers: { Authorization: FL_TOKEN },
   });
   if (doc?.shareSource?.approvalInfo?.status === 'Approved') {
-      await postUpdate(CONNECTION, jobId, 'Job was going to be rejected but was already approved', 'in-progress');
-      await CONNECTION.put({
-        path: `/${jobId}`,
-        data: {
-          'foodlogiq-result-status': 'Approved',
-        },
-      });
+    await postUpdate(
+      CONNECTION,
+      jobId,
+      'Job was going to be rejected but was already approved',
+      'in-progress',
+    );
+    await CONNECTION.put({
+      path: `/${jobId}`,
+      data: {
+        'foodlogiq-result-status': 'Approved',
+      },
+    });
 
     return;
   }
@@ -1344,7 +1359,7 @@ export async function startJobCreator(oada: OADAClient) {
         if (ch.body?.['food-logiq-mirror']) {
           queueAssessmentJob((await item) as JsonObject, pointer);
         }
-      }
+      },
     );
 
     return;
@@ -1367,7 +1382,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     });
     if (!isObj(itemData)) {
       throw new Error(
-        `Could not retrieve 'food-logiq-mirror' from request data.`
+        `Could not retrieve 'food-logiq-mirror' from request data.`,
       );
     }
 
@@ -1377,7 +1392,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     // This may happen on startup with lots of assessments already sitting there.
     if (!assessmentToFlId.has(key)) {
       info(
-        `No associated fl-sync document job could be found for assessment: ${item._id}`
+        `No associated fl-sync document job could be found for assessment: ${item._id}`,
       );
       return;
     }
@@ -1395,7 +1410,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     const { key: flDocumentId, type: flDocumentType, masterid } = indexConfig;
     if (!flDocumentType) {
       info(
-        `[job ${docJobId}] Assessment [${item._id}] could not find fl doc type prior to queueing. Ignoring.`
+        `[job ${docJobId}] Assessment [${item._id}] could not find fl doc type prior to queueing. Ignoring.`,
       );
       return;
     }
@@ -1404,7 +1419,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     const docs = flTypes.get(flDocumentType)!;
     if (!assessmentType || !docs) {
       info(
-        `[job ${docJobId}] Assessment type of [${item._id}] was of type [${assessmentType}]. Ignoring.`
+        `[job ${docJobId}] Assessment type of [${item._id}] was of type [${assessmentType}]. Ignoring.`,
       );
       return;
     }
@@ -1414,7 +1429,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
       !Object.keys(docs.assessments).includes(assessmentType)
     ) {
       info(
-        `[job ${docJobId}] Assessment [${item._id}] was of type [${assessmentType}]. Ignoring.`
+        `[job ${docJobId}] Assessment [${item._id}] was of type [${assessmentType}]. Ignoring.`,
       );
       return;
     }
@@ -1425,11 +1440,10 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
       approvalUser === FL_TRELLIS_USER ||
       approvalUser === APPROVAL_TRELLIS_USER;
     info(
-      `[job ${docJobId}] approvalInfo user ${
-        usersEqual
-          ? 'matches our user'
-          : `[${approvalUser}] does not match our users: [${FL_TRELLIS_USER} or ${APPROVAL_TRELLIS_USER}]`
-      }`
+      `[job ${docJobId}] approvalInfo user ${usersEqual
+        ? 'matches our user'
+        : `[${approvalUser}] does not match our users: [${FL_TRELLIS_USER} or ${APPROVAL_TRELLIS_USER}]`
+      }`,
     );
 
     if (status === 'Submitted') {
@@ -1489,7 +1503,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
       // 2b. Notify, clean up, and remove after rejection
       const reasons: string = _.get(
         docJob,
-        'fail-reasons'
+        'fail-reasons',
       ) as unknown as string;
 
       const message = `A supplier Assessment associated with this document has been rejected for the following reasons: ${reasons}.`;
@@ -1506,13 +1520,13 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
 
         endJob(
           docJobId,
-          new JobError(message, 'associated-assessment-rejected')
+          new JobError(message, 'associated-assessment-rejected'),
         );
         //TODO: remove this when/if FL is able to retrieve changes after approval updates
         await finishDocument(docJobId, flDocumentId, masterid, status);
       } else {
         info(
-          `[job ${docJobId}] Assessment ${item._id} failed logic, but cannot override approval. Calling finishDoc.`
+          `[job ${docJobId}] Assessment ${item._id} failed logic, but cannot override approval. Calling finishDoc.`,
         );
         await approveFlDocument(flDocumentId, docJobId);
         //TODO: remove this when/if FL is able to retrieve changes after approval updates
@@ -1528,7 +1542,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
     throw oError.tag(
       cError as Error,
       'queueAssessmentJob Failed',
-      change.resource_id
+      change.resource_id,
     );
   }
 } // QueueAssessmentJob
@@ -1536,7 +1550,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
 export async function postJob(
   oada: OADAClient,
   indexConfig: JobConfig,
-  flStatus: string
+  flStatus: string,
 ) {
   const { headers } = await oada.post({
     path: '/resources',
@@ -1550,7 +1564,7 @@ export async function postJob(
   });
   const jobkey = headers['content-location']!.replace(/^\/resources\//, '');
 
-  await cancelDocJobs(indexConfig.key, jobkey)
+  await cancelDocJobs(indexConfig.key, jobkey);
   const _id = `resources/${jobkey}`;
   await oada.put({
     path: pending,
@@ -1579,20 +1593,15 @@ export async function postJob(
 }
 
 async function cancelDocJobs(itemId: string, newJobKey?: string) {
-    // Find and ignore other jobs with the same item._id
+  // Find and ignore other jobs with the same item._id
   const flSyncJobMatches = Array.from(flSyncJobs.entries()).filter(
-    ([_, v]) => v.itemId === itemId 
-  )
+    ([_, v]) => v.itemId === itemId,
+  );
   for await (const [jobId, _] of flSyncJobMatches) {
     const msg = `Job was interrupted by an update to this FL doc${newJobKey ? ` resulting in a new job [resources/${newJobKey}]` : ''}. Cancelling this job.`;
-    await postUpdate(
-      CONNECTION,
-      jobId,
-      msg,
-      'in-progress'
-    )
+    await postUpdate(CONNECTION, jobId, msg, 'in-progress');
     // TODO: Should this be considered job success or failure?
-    await endJob(jobId, new JobError(msg, 'job-cancelled'))
+    await endJob(jobId, new JobError(msg, 'job-cancelled'));
   }
 }
 
@@ -1617,21 +1626,20 @@ async function queueDocumentJob(fullData: JsonObject, path: string) {
     })) as { data: JsonObject };
 
     let masterid;
-if (!bus)
-      error(`No trading partner found for business ${bid}.`);
+    if (!bus) error(`No trading partner found for business ${bid}.`);
     if (bus['food-logiq-mirror']) {
-      const { result } = await doJob(CONNECTION, {
+      const { result } = (await doJob(CONNECTION, {
         service: SERVICE_NAME,
         type: 'business-lookup',
         config: {
           'fl-business': bus['food-logiq-mirror'],
           'link': `https://connect.foodlogiq.com/businesses/${CO_ID}/suppliers/detail/${item._id}/${COMMUNITY_ID}`,
         },
-      }) as unknown as { result: {masterid: string}};
+      })) as unknown as { result: { masterid: string } };
       masterid = result?.masterid;
     }
 
-    //TODO: Determine how to report this skipping due to no trading-partner. 
+    //TODO: Determine how to report this skipping due to no trading-partner.
     if (!masterid) return;
     info(`Found trading partner masterid [${masterid}] for FL business ${bid}`);
 
@@ -1646,19 +1654,18 @@ if (!bus)
     const status = item.shareSource && item.shareSource.approvalInfo.status;
     const approvalUser = _.get(item, `shareSource.approvalInfo.setBy._id`);
     info(
-      `approvalInfo user: ${approvalUser} (${
-        approvalUser === FL_TRELLIS_USER ||
+      `approvalInfo user: ${approvalUser} (${approvalUser === FL_TRELLIS_USER ||
         approvalUser === APPROVAL_TRELLIS_USER
-          ? 'Was us.'
-          : 'Was NOT us'
-      }). Status: ${status}. id: ${item._id}`
+        ? 'Was us.'
+        : 'Was NOT us'
+      }). Status: ${status}. id: ${item._id}`,
     );
 
     // Accept all supplier drafts as we had previously while changing the doc
     // status back to Awaiting Approval.
     if (item.shareSource?.draftVersionId && status !== 'Awaiting Approval') {
       info(
-        `Document [${item._id}] has a supplier update. Setting status to 'Awaiting Approval'.`
+        `Document [${item._id}] has a supplier update. Setting status to 'Awaiting Approval'.`,
       );
       await axios({
         method: 'put',
@@ -1700,7 +1707,7 @@ if (!bus)
       //TODO There really shouldn't be multiple jobs here for a given item._id,
       // but in such an event, finish all of them.
       const flSyncJobMatches = Array.from(flSyncJobs.entries()).filter(
-        ([_, v]) => v.itemId === item._id
+        ([_, v]) => v.itemId === item._id,
       );
       if (!flSyncJobMatches) return;
       for (const [docJobId, docJob] of flSyncJobMatches) {
@@ -1710,16 +1717,16 @@ if (!bus)
       //c. Document handled by others
       if (status === 'Approved') {
         info(
-          `Already approved document[${item._id}]; bid[${bid}]; ApprovalUser was not us. Reprocessing and ushering through.`
+          `Already approved document[${item._id}]; bid[${bid}]; ApprovalUser was not us. Reprocessing and ushering through.`,
         );
         // Run it through target and move it to trading-partner /bookmarks
         jobConf['allow-rejection'] = false;
         await postJob(CONNECTION, jobConf, status);
       } else {
         info(
-          `Document ${item._id} approvalUser was not us. status !== Approved. Skipping. Killing any running jobs.`
+          `Document ${item._id} approvalUser was not us. status !== Approved. Skipping. Killing any running jobs.`,
         );
-        await cancelDocJobs(item._id)
+        await cancelDocJobs(item._id);
       }
       return;
     }

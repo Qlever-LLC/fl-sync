@@ -50,6 +50,7 @@ overrides:
       ecmaVersion: 2020
       project: './**/tsconfig.*'
     rules:
+      prettier/prettier: off
       '@typescript-eslint/naming-convention':
         [
           error,
@@ -91,19 +92,22 @@ overrides:
           },
         ]
       '@typescript-eslint/consistent-type-definitions': [warn, interface]
-      "unicorn/prevent-abbreviations": [
-        "error",
-        {
-          "allowList": {
-            "prod": true,
-            "dev": true,
-            "doc": true,
-            "docs": true,
-            "copyProdData": true,
-          }
-        }
-      ]
+      'unicorn/prevent-abbreviations':
+        [
+          'error',
+          {
+            'allowList':
+              {
+                'prod': true,
+                'dev': true,
+                'doc': true,
+                'docs': true,
+                'copyProdData': true,
+              },
+          },
+        ]
 rules:
+  prettier/prettier: off
   notice/notice:
     - error
     - template: |

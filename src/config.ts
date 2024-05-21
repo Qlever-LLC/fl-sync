@@ -25,7 +25,7 @@ convict.addFormat(url);
 convict.addFormat(duration);
 
 const config = convict({
-  service: {
+  'service': {
     name: {
       doc: 'Name of the service; used by jobs lib; helps configuring tests separately',
       default: 'fl-sync',
@@ -39,7 +39,7 @@ const config = convict({
     env: 'TP_MANAGER_SERVICE',
     arg: 'tp_manager_service',
   },
-  services: {
+  'services': {
     mirrorWatch: {
       doc: 'Enable/disable mirrorWatch subservice',
       format: Boolean,
@@ -83,21 +83,21 @@ const config = convict({
       arg: 'watchConfigService',
     },
   },
-  skipQueueOnStartup: {
+  'skipQueueOnStartup': {
     doc: 'Skip existing jobs queue on startup; useful for debugging',
     default: false,
     format: Boolean,
     env: 'SKIP_JOBS_QUEUE_STARTUP',
     arg: 'skipQueueOnStartup',
   },
-  delay: {
+  'delay': {
     doc: 'amount to delay between pages of documents',
     default: 0,
     format: Number,
     env: 'DELAY',
     arg: 'delay',
   },
-  trellis: {
+  'trellis': {
     domain: {
       doc: 'OADA API domain',
       format: String,
@@ -279,7 +279,7 @@ const config = convict({
       env: 'FL_FORCE_WRITE',
     },
   },
-  incidents: {
+  'incidents': {
     interval: {
       doc: 'polling interval',
       format: Number,
@@ -329,7 +329,7 @@ const config = convict({
       env: 'INCIDENTS_PORT',
     },
   },
-  slack: {
+  'slack': {
     posturl: {
       format: 'url',
       // Use a real slack webhook URL
@@ -338,7 +338,7 @@ const config = convict({
       arg: 'slack-webhook',
     },
   },
-  timeouts: {
+  'timeouts': {
     mirrorWatch: {
       doc: 'Timeout duration for mirror handler jobs',
       format: 'duration',

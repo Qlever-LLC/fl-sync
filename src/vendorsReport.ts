@@ -1,6 +1,6 @@
 /**
  * @license
- *  Copyright 2021 Qlever LLC
+ * Copyright 2021 Qlever LLC
  *
  * Licensed under the Apache License, Version 2.0 (the 'License');
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
 import config from './config.js';
 
 import fs from 'node:fs';
-import { default as axios, AxiosRequestConfig } from 'axios';
-import type { OADAClient } from '@oada/client';
+import { type AxiosRequestConfig, default as axios } from 'axios';
+import type { JsonObject, OADAClient } from '@oada/client';
 import { JsonPointer } from 'json-ptr';
 import { connect } from '@oada/client';
 import { doJob } from '@oada/client/jobs';
@@ -29,9 +29,8 @@ import csvjson from 'csvjson';
 import debug from 'debug';
 import Fuse from 'fuse.js';
 import moment from 'moment';
-import type { JsonObject } from '@oada/client';
 import type { FlBusiness } from './mirrorWatch.js';
-import { mapTradingPartner, type TradingPartner } from './masterData.js';
+import { type TradingPartner, mapTradingPartner } from './masterData.js';
 import { setTimeout } from 'node:timers/promises';
 import tree from './tree.masterData.js';
 import { tree as flTree } from './tree.js';
@@ -57,12 +56,14 @@ export async function makeReport() {
     token,
   });
   try {
-    const businesses = await oada.get({
-      path: `/bookmarks/services/fl-sync/businesses`,
-    }).then(r => r.data as JsonObject);
+    const businesses = await oada
+      .get({
+        path: `/bookmarks/services/fl-sync/businesses`,
+      })
+      .then((r) => r.data as JsonObject);
 
     const businessKeys = Object.keys(businesses).filter(
-      (key) => !key.startsWith('_')
+      (key) => !key.startsWith('_'),
     );
 
     const results: any[] = [];
@@ -72,7 +73,9 @@ export async function makeReport() {
         path: `/bookmarks/services/fl-sync/businesses/${bid}`,
       });
 
-      const bus = (data as JsonObject)['food-logiq-mirror'] as unknown as FlBusiness;
+      const bus = (data as JsonObject)[
+        'food-logiq-mirror'
+      ] as unknown as FlBusiness;
       const element = mapTradingPartner(bus);
 
       const job = await doJob(oada, {
@@ -120,7 +123,7 @@ export async function makeVendors() {
         service: 'trellis-data-manager',
         config: { element },
       });
-    } catch(error_:unknown) {
+    } catch (error_: unknown) {
       console.log(error_);
     }
   }
@@ -155,8 +158,8 @@ async function loadVendors() {
 
   const values = Object.entries(data ?? {})
     .filter(([key, _]) => !key.startsWith('_'))
-    .filter(([_, val]) => !val.VendorName.startsWith('BLK'))
-    .filter(([_, val]) => val['CentralDeletionFlag'].trim() !== 'X')
+    .filter(([_, value]) => !value.VendorName.startsWith('BLK'))
+    .filter(([_, value]) => value.CentralDeletionFlag.trim() !== 'X')
     .map(([_, value]) => mapVendor(value));
 
   const searchKeys = [
@@ -182,19 +185,22 @@ async function loadVendors() {
     'masterid',
     'externalIds',
   ];
-  const searchKeysList = searchKeys.map((i) => typeof(i) === 'string' ? i : i.name);
+  const searchKeysList = new Set(
+    searchKeys.map((index_) =>
+      typeof index_ === 'string' ? index_ : index_.name,
+    ),
+  );
   const options = {
     includeScore: true,
     keys: searchKeys,
-    //ignoreLocation: true,
-    //minMatchCharLength: 3,
+    // ignoreLocation: true,
+    // minMatchCharLength: 3,
     useExtendedSearch: true,
   };
-  //@ts-ignore
-  const index = new Fuse([], options);
+  const index = new Fuse<typeof values[0]>([], options);
 
   const collection = Object.values(values || {}).filter(
-    (value) => value !== undefined
+    (value) => value !== undefined,
   );
 
   index.setCollection(collection);
@@ -204,12 +210,14 @@ async function loadVendors() {
     token,
   });
 
-  const businesses = await conn.get({
-    path: `/bookmarks/services/fl-sync/businesses`,
-  }).then(r => r.data as JsonObject);
+  const businesses = await conn
+    .get({
+      path: `/bookmarks/services/fl-sync/businesses`,
+    })
+    .then((r) => r.data as JsonObject);
 
   const businessKeys = Object.keys(businesses).filter(
-    (key) => !key.startsWith('_')
+    (key) => !key.startsWith('_'),
   );
 
   const results = [];
@@ -219,75 +227,91 @@ async function loadVendors() {
       path: `/bookmarks/services/fl-sync/businesses/${bid}`,
     });
 
-    const bus = (data as JsonObject)['food-logiq-mirror'] as unknown as FlBusiness;
+    const bus = (data as JsonObject)[
+      'food-logiq-mirror'
+    ] as unknown as FlBusiness;
     const foodlogiq = Object.fromEntries(
       Object.entries(mapTradingPartner(bus))
-        .filter(([k, _]) => searchKeysList.includes(k))
-        .filter(([_, v]) => v !== '' && v !== undefined)
+        .filter(([k, _]) => searchKeysList.has(k))
+        .filter(([_, v]) => v !== '' && v !== undefined),
     );
 
-    //@ts-ignore
+    // @ts-expect-error
     foodlogiq.name = foodlogiq.name.replace(/\(.+?\)/, '');
-    let matches = getMatches(foodlogiq, index);
-    //let matches = index.search({name: foodlogiq.name})
-    //if (matches.length > 5) matches = matches.slice(0, 4);
+    const matches = getMatches(foodlogiq, index);
+    // Let matches = index.search({name: foodlogiq.name})
+    // if (matches.length > 5) matches = matches.slice(0, 4);
 
     if (matches.length === 0)
       results.push({
         [INSTRUCTION_HEADER]: '',
-         //@ts-ignore
+        // @ts-expect-error
         'FL Name': foodlogiq.name.replace(',', ''),
-         //@ts-ignore
-        'FL Address': `${foodlogiq.address || ' '} - ${foodlogiq.city || ' '} - ${foodlogiq.state || ' '}`.replace(',', ''),
+        'FL Address':
+          `${foodlogiq.address || ' '} - ${foodlogiq.city || ' '} - ${foodlogiq.state || ' '}`.replace(
+            ',',
+            '',
+          ),
         'Match Score': ' ',
         'SAP Name': ' ',
         'SAP Address': ' ',
         'FL ID': bus.business._id,
       });
 
-    //@ts-ignore
     for (const m of matches) {
       results.push({
         [INSTRUCTION_HEADER]: '',
-         //@ts-ignore
+        // @ts-expect-error
         'FL Name': foodlogiq.name.replace(',', ''),
-         //@ts-ignore
-        'FL Address': `${foodlogiq.address || ' '} - ${foodlogiq.city || ' '} - ${foodlogiq.state || ' '}`.replace(',', ''),
+        'FL Address':
+          `${foodlogiq.address || ' '} - ${foodlogiq.city || ' '} - ${foodlogiq.state || ' '}`.replace(
+            ',',
+            '',
+          ),
         'Match Score': m.score,
         'SAP Name': m.item.name.replace(',', ''),
-        'SAP Address': `${m.item.address || ' '} - ${m.item.city || ' '} - ${m.item.state || ' '}`.replace(',',''),
+        'SAP Address':
+          `${m.item.address || ' '} - ${m.item.city || ' '} - ${m.item.state || ' '}`.replace(
+            ',',
+            '',
+          ),
         'SAP ID': m.item.sapid,
         'FL ID': bus.business._id,
       });
     }
   }
+
   const csvData = csvjson.toCSV(results, {
     delimiter: ',',
     wrap: false,
     headers: 'relative',
   });
 
-  fs.writeFileSync('vendorsReport.csv', csvData, {encoding: 'utf8'});
+  fs.writeFileSync('vendorsReport.csv', csvData, { encoding: 'utf8' });
 }
 
 // Basically, try a bunch of different permutations of the given attributes and
 // look for the lowest possible scores across all of those
 function getMatches(foodlogiq: any, index: any) {
-// 1. Gather a bunch of results
+  // 1. Gather a bunch of results
   let allMatches = [];
   allMatches.push(...index.search({ name: foodlogiq.name }));
   allMatches.push(...index.search(foodlogiq));
 
   const keys = ['name', 'address', 'city', 'state'];
-  allMatches.push(...index.search(
-    Object.fromEntries(keys.filter(k => foodlogiq[k]).map(k => ([k, foodlogiq[k]])))
-  ));
+  allMatches.push(
+    ...index.search(
+      Object.fromEntries(
+        keys.filter((k) => foodlogiq[k]).map((k) => [k, foodlogiq[k]]),
+      ),
+    ),
+  );
 
   // 3. sort
-  allMatches = allMatches.sort(({score: sa}, {score: sb}) => sa - sb)
+  allMatches = allMatches.sort(({ score: sa }, { score: sb }) => sa - sb);
   // 2. Dedupe
   const seen: any = {};
-  allMatches = allMatches.filter(({refIndex}) => {
+  allMatches = allMatches.filter(({ refIndex }) => {
     if (seen[refIndex]) return false;
     seen[refIndex] = true;
     return true;
@@ -300,12 +324,14 @@ function getMatches(foodlogiq: any, index: any) {
 
 // Identify the FL IDs of items in the report that had no matches selected
 function findNoMatchIds(rows: any) {
-  let ids = [...new Set(rows.map((r: any) => r['FL ID']))];
-  ids = ids.filter(id => !rows.some((r:any) => r['FL ID'] === id && r[INSTRUCTION_HEADER]))
-  let found = rows.filter((r: any) => ids.includes(r['FL ID']))
+  let ids = Array.from(new Set(rows.map((r: any) => r['FL ID'])));
+  ids = ids.filter(
+    (id) => !rows.some((r: any) => r['FL ID'] === id && r[INSTRUCTION_HEADER]),
+  );
+  const found = rows.filter((r: any) => ids.includes(r['FL ID']));
 
   /*
-  const csvData = csvjson.toCSV(found, {
+  Const csvData = csvjson.toCSV(found, {
     delimiter: ',',
     wrap: false,
     headers: 'relative',
@@ -318,46 +344,65 @@ function findNoMatchIds(rows: any) {
 
 // Identify the FL IDs of the items in the report that had multiple results selected
 function findMultipleXs(rows: any) {
-  let ids = [...new Set(rows.map((r: any) => r['FL ID']))];
-  ids = ids.filter(id => (rows.filter((r:any) => r['FL ID'] === id && r[INSTRUCTION_HEADER])).length > 1)
-  let found = rows.filter((r: any) => ids.includes(r['FL ID']))
-  let multiple = rows.map((r: any) => ids.includes(r['FL ID']))
-
+  let ids = Array.from(new Set(rows.map((r: any) => r['FL ID'])));
+  ids = ids.filter(
+    (id) =>
+      rows.filter((r: any) => r['FL ID'] === id && r[INSTRUCTION_HEADER])
+        .length > 1,
+  );
+  const found = rows.filter((r: any) => ids.includes(r['FL ID']));
   /*
-  const csvData = csvjson.toCSV(found, {
+  Const csvData = csvjson.toCSV(found, {
     delimiter: ',',
     wrap: false,
     headers: 'relative',
   });
-  
+
   fs.writeFileSync('vendorsReportMultipleMatches.csv', csvData, { encoding: 'utf8' })
   */
-  return multiple;
+  return rows.map((r: any) => ids.includes(r['FL ID']));
 }
 
-// 
+//
 function reduceForPerfectMatches(rows: any) {
-  let highScoreIds = [...new Set(rows.filter((r: any) => r['Match Score'] < 0.01).map((r:any) => r['FL ID']))];
-  let found = rows.filter((r: any) => !(highScoreIds.includes(r['FL ID']) && r['Match Score'] >= 0.01));
+  const highScoreIds = new Set(
+    Array.from(
+      new Set(
+        rows
+          .filter((r: any) => r['Match Score'] < 0.01)
+          .map((r: any) => r['FL ID']),
+      ),
+    ),
+  );
+  const found = rows.filter(
+    (r: any) => !(highScoreIds.has(r['FL ID']) && r['Match Score'] >= 0.01),
+  );
 
   const csvData = csvjson.toCSV(found, {
     delimiter: ',',
     wrap: false,
     headers: 'relative',
   });
-  
+
   fs.writeFileSync('vendorsReportReduced.csv', csvData, { encoding: 'utf8' });
   return found;
 }
 
 // Validate the report responses and identify which ones require additional work
 function validateReportResponses() {
-  let rows = csvjson.toObject(fs.readFileSync('./Vendor Report - Updated 05.04.23.csv', {encoding: 'utf8'}), {
-     delimiter: ',',
-  });
+  const rows = csvjson.toObject(
+    fs.readFileSync('./Vendor Report - Updated 05.04.23.csv', {
+      encoding: 'utf8',
+    }),
+    {
+      delimiter: ',',
+    },
+  );
   rows.map((r: any) => ({
     ...r,
-    [INSTRUCTION_HEADER]: r[INSTRUCTION_HEADER].trim() === 'X' || r[INSTRUCTION_HEADER].trim() === 'x',
+    [INSTRUCTION_HEADER]:
+      r[INSTRUCTION_HEADER].trim() === 'X' ||
+      r[INSTRUCTION_HEADER].trim() === 'x',
   }));
 
   // No Matches
@@ -369,8 +414,8 @@ function validateReportResponses() {
   //  const perfects = reduceForPerfectMatches(rows);
 
   const matches = rows
-    .filter((r:any) => r[INSTRUCTION_HEADER])
-    .filter((_:unknown, i: number) => !multipleMatches[i]);
+    .filter((r: any) => r[INSTRUCTION_HEADER])
+    .filter((_: unknown, index: number) => !multipleMatches[index]);
 
   return { rows, noMatches, multipleMatches, matches };
 }
@@ -378,14 +423,14 @@ function validateReportResponses() {
 // Merge trading-partners based on report responses. One based on FL external ID
 // and one originating from the SAP data.
 async function fixVendors(oada: OADAClient, matches: any[]) {
-  for await (const {'FL ID': fl, 'SAP ID': sap} of matches) {
-    const flid = `foodlogiq:${fl}`;
+  for await (const { 'FL ID': fl, 'SAP ID': sap } of matches) {
+    const flId = `foodlogiq:${fl}`;
     const sapid = `sap:${sap}`;
     // Well, we haven't created any trading partners yet...
     const fromTP = await doJob(oada, {
       service: 'trellis-data-manager',
       type: 'trading-partners-query',
-      config: { element: { externalIds: [flid] } },
+      config: { element: { externalIds: [flId] } },
     });
 
     const toTP = await doJob(oada, {
@@ -395,14 +440,16 @@ async function fixVendors(oada: OADAClient, matches: any[]) {
     });
 
     if (fromTP.length !== 1 || toTP.length !== 1) {
-      console.log(`Multiple TP results found for food logiq: ${flid}, sap: ${sapid}`);
+      console.log(
+        `Multiple TP results found for food logiq: ${flId}, sap: ${sapid}`,
+      );
       continue;
     }
 
     const config = {
       from: fromTP.masterid,
       to: toTP.masterid,
-      externalIds: [flid, sapid],
+      externalIds: [flId, sapid],
     };
     await doJob(oada, {
       service: 'trellis-data-manager',
@@ -419,16 +466,19 @@ async function updateFlInternalIds() {
     domain,
     token,
   });
-  const rows = csvjson.toObject(fs.readFileSync('./VendorReport-05-19-23.csv', {encoding: 'utf8'}), {
-    delimiter: ',',
-    quote: '"',
- });
+  const rows = csvjson.toObject(
+    fs.readFileSync('./VendorReport-05-19-23.csv', { encoding: 'utf8' }),
+    {
+      delimiter: ',',
+      quote: '"',
+    },
+  );
   for await (const tp of rows) {
     // 1. lookup the trading-partner
     const bid = tp['FL ID'] as string;
     const sapid = tp['SAP ID'] as string;
     /*
-    const job = await doJob(oada, {
+    Const job = await doJob(oada, {
       service: 'trellis-data-manager',
       type: 'trading-partners-query',
       config: {
@@ -472,7 +522,7 @@ async function updateFlInternalIds() {
       member.internalId = sapid;
       console.log(`Putting internalId ${sapid} to fl: ${member.business._id}`);
       /*
-      await axios({
+      Await axios({
         method: 'put',
         url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
         headers: { Authorization: FL_TOKEN },
@@ -486,7 +536,7 @@ async function updateFlInternalIds() {
 }
 
 // This was the original plans for how to handle merging trading
-// partners after Chris' responses. 
+// partners after Chris' responses.
 async function processReportResponses() {
   const oada = await connect({
     domain,
@@ -494,13 +544,13 @@ async function processReportResponses() {
   });
   const { matches } = validateReportResponses();
 
-//  await fixVendors(prod, matches);
+  //  Await fixVendors(prod, matches);
 }
 
 // Utility function for removing OADA underscore keys
 function filterOadaKeys(object: JsonObject) {
   return Object.fromEntries(
-    Object.entries(object).filter(([key, _]) => !key.startsWith('_'))
+    Object.entries(object).filter(([key, _]) => !key.startsWith('_')),
   );
 }
 
@@ -569,7 +619,7 @@ async function copyProdData() {
     tp = Object.fromEntries(
       Object.entries(tp)
         .filter(([k, _]) => !k.startsWith('_'))
-        .filter(([k, _]) => !['bookmarks', 'shared'].includes(k))
+        .filter(([k, _]) => !['bookmarks', 'shared'].includes(k)),
     );
     await dev.put({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
@@ -594,24 +644,28 @@ async function copyProdData() {
         })) as { data: JsonObject };
 
         doc = Object.fromEntries(
-          Object.entries(doc).filter(([k, _]) => !k.startsWith('_'))
+          Object.entries(doc).filter(([k, _]) => !k.startsWith('_')),
         );
-        console.log({ doc }, `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`);
+        console.log(
+          { doc },
+          `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
+        );
         try {
           await dev.head({
             path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
           });
-        } catch (err: any) {
-          if (err.status !== 404) throw err;
+        } catch (error_: any) {
+          if (error_.status !== 404) throw error_;
           try {
             await dev.put({
               path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
               data: doc,
               tree,
             });
-          } catch(errorThing: any) {
-            console.log(errorThing)
+          } catch (error_: any) {
+            console.log(error_);
           }
+
           await setTimeout(500);
         }
       }
@@ -890,7 +944,7 @@ async function tradingPartnerPrep06142023() {
       continue;
     }
 
-    console.log({tpKey});
+    console.log({ tpKey });
     const { data: tp } = (await prod.get({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
     })) as unknown as { data: OldTradingPartner };
@@ -923,7 +977,10 @@ async function tradingPartnerPrep06142023() {
         path: `${tp._id}/_meta/_changes/1`,
       })) as unknown as { data: any };
       if (change?.[0]?.body?.foodlogiq?.business?._id) {
-        data.externalIds = [...data.externalIds, `foodlogiq:${change[0].body.foodlogiq.business._id}`];
+        data.externalIds = [
+          ...data.externalIds,
+          `foodlogiq:${change[0].body.foodlogiq.business._id}`,
+        ];
       } else {
         console.log('No foodlogiq id found for TP:', tp._id);
       }
@@ -942,8 +999,9 @@ async function tradingPartnerPrep06142023() {
     });
     console.log('done with tp');
   }
-/*
-  await prod.delete({
+
+  /*
+  Await prod.delete({
     path: `/bookmarks/trellisfw/trading-partners/masterid-index`,
   });
   await prod.delete({
@@ -970,7 +1028,7 @@ async function tradingPartnerFix07102023() {
     .filter((key) => !key.includes('index'));
 
   for await (const tpKey of tpKeys) {
-    console.log({tpKey});
+    console.log({ tpKey });
     const { data: tp } = (await prod.get({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
     })) as unknown as { data: any };
@@ -978,7 +1036,9 @@ async function tradingPartnerFix07102023() {
       await prod.put({
         path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
         data: {
-          externalIds: tp.externalIds.filter((k: string) => !k.includes('undefined')),
+          externalIds: tp.externalIds.filter(
+            (k: string) => !k.includes('undefined'),
+          ),
         },
       });
     }
@@ -998,11 +1058,11 @@ async function tradingPartnerFix07102023() {
       console.log('No foodlogiq id found for TP:', tp._id);
     }
   }
+
   process.exit();
 }
 
-
-type OldTradingPartner = {
+interface OldTradingPartner {
   sapid?: string;
   id?: string;
   type?: string;
@@ -1028,7 +1088,7 @@ type OldTradingPartner = {
     _id: string;
   };
   _id: string;
-};
+}
 
 // Fix some old still-queued jobs that used the old masterid implementation
 async function fixJobs() {
@@ -1044,16 +1104,21 @@ async function fixJobs() {
     .map(([_, value]) => value);
   const { data: jobs } = (await oada.get({
     path: `/bookmarks/services/fl-sync/jobs/pending`,
-  })) as unknown as { data: any }
+  })) as unknown as { data: any };
   const keys = Object.keys(jobs).filter((k) => !k.startsWith('_'));
   for await (const jobKey of keys) {
-    console.log("Job", jobKey)
+    console.log('Job', jobKey);
     const { data: job } = (await oada.get({
       path: `/bookmarks/services/fl-sync/jobs/pending/${jobKey}`,
-    })) as unknown as { data: { type: string; config: { masterid: string; bid: string } } };
-    if (job.type === 'document-mirrored' && !job.config.masterid.startsWith('resources')) {
+    })) as unknown as {
+      data: { type: string; config: { masterid: string; bid: string } };
+    };
+    if (
+      job.type === 'document-mirrored' &&
+      !job.config.masterid.startsWith('resources')
+    ) {
       /*
-      console.log("Job missing proper masterid. FL bid is", job.config.bid);
+      Console.log("Job missing proper masterid. FL bid is", job.config.bid);
       const { data: bus } = (await oada.get({
         path: `/bookmarks/services/fl-sync/businesses/${job.config.bid}`,
       })) as unknown as { data: { 'food-logiq-mirror': any } };
@@ -1064,19 +1129,19 @@ async function fixJobs() {
         }
       )) as unknown as { masterid: string };
       if (!result?.masterid) {
-        console.log("no masterid for flid", job.config.bid);
+        console.log("no masterid for flId", job.config.bid);
         continue;
       }
       console.log('masterid set as', result.masterid);
       */
-      const result = expandIndex.find((obj: any) =>
-        obj.externalIds.includes(`foodlogiq:${job.config.bid}`)
-      ) as unknown as { masterid: string };
+      const result = expandIndex.find((object: any) =>
+        object.externalIds.includes(`foodlogiq:${job.config.bid}`),
+      ) as { masterid: string };
       if (!result?.masterid) {
-        console.log("no masterid for flid", job.config.bid);
+        console.log('no masterid for flId', job.config.bid);
         continue;
       }
-      //console.log('Found masterid', result.masterid);
+      // Console.log('Found masterid', result.masterid);
 
       await oada.put({
         path: `/bookmarks/services/fl-sync/jobs/pending/${jobKey}`,
@@ -1089,23 +1154,24 @@ async function fixJobs() {
       console.log('put to job', jobKey);
     }
   }
+
   process.exit();
 }
-
 
 // Generate the Vendors list that still requires an SAP ID
 // FYI this uses old non-v2 FL endpoints. v1 uses 'internalId' versus 'Internalid'
 async function generateFLVendorsReport() {
-  const { data } = await axios({
+  const { data } = (await axios({
     method: 'get',
     url: `${FL_DOMAIN}/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
     headers: { Authorization: FL_TOKEN },
-  }) as unknown as any;
+  })) as unknown as any;
 
-  let csvObj = data
-    .filter((s: any) => 
-      s.locationGroup.name !== 'Internal' &&
-      s.productGroup.name !== 'Internal'
+  const csvObject = data
+    .filter(
+      (s: any) =>
+        s.locationGroup.name !== 'Internal' &&
+        s.productGroup.name !== 'Internal',
     )
     .filter((s: any) => s.internalId === '')
     .map((s: any) => ({
@@ -1113,15 +1179,14 @@ async function generateFLVendorsReport() {
       'FL Address': s.business.address.addressLineOne.replaceAll(',', ''),
       'FL City': s.business.address.city.replaceAll(',', ''),
       'FL State': s.business.address.region.replaceAll(',', ''),
-      'FL Link': 
-        `https://connect.foodlogiq.com/businesses/${CO_ID}/suppliers/detail/${s._id}/${COMMUNITY_ID}`,
+      'FL Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/suppliers/detail/${s._id}/${COMMUNITY_ID}`,
     }))
-    .sort((a:any, b:any) => {
+    .sort((a: any, b: any) => {
       if (a['FL Name'] > b['FL Name']) return 1;
       if (a['FL Name'] < b['FL Name']) return -1;
       return 0;
-    })
-  const csvData = csvjson.toCSV(csvObj, {
+    });
+  const csvData = csvjson.toCSV(csvObject, {
     delimiter: ',',
     wrap: false,
     headers: 'relative',
@@ -1132,136 +1197,151 @@ async function generateFLVendorsReport() {
 }
 
 export async function generateFLDocsReport(inDate?: string) {
-  let obj: any = {};
+  const object: any = {};
 
   const oada = await connect({
     domain,
     token,
   });
-  const { data: dates } = await oada.get({
+  const { data: dates } = (await oada.get({
     path: `/bookmarks/services/fl-sync/jobs/reports/fl-sync-report/day-index`,
-  }) as unknown as any;
+  })) as unknown as any;
 
   const today = inDate ? new Date(inDate) : new Date();
   // @ts-expect-error you can subtract dates
   const now = new Date(today - today.getTimezoneOffset() * 60 * 1000);
   // @ts-expect-error you can subtract dates
-  const lastWeek = new Date(now - (7 * 24 * 60 * 60 * 1000));
+  const lastWeek = new Date(now - 7 * 24 * 60 * 60 * 1000);
 
-  for (let i = 0; i < 50; i++) {
+  for (let index = 0; index < 50; index++) {
     // @ts-expect-error you can subtract dates
-    const day = new Date(today - i * 24 * 60 * 60 * 1000);
+    const day = new Date(today - index * 24 * 60 * 60 * 1000);
     const date = day.toISOString().split('T')[0];
 
     try {
-      const { data: report } = await oada.get({
+      const { data: report } = (await oada.get({
         path: `/bookmarks/services/fl-sync/jobs/reports/fl-sync-report/day-index/${date}`,
-      }) as unknown as any;
+      })) as unknown as any;
 
       const data = Object.fromEntries(
         Object.entries(report)
           .filter(
             ([key, item]: [string, any]) =>
-              !key.startsWith('_') && new Date(item['Creation Date']) > lastWeek
+              !key.startsWith('_') &&
+              new Date(item['Creation Date']) > lastWeek,
           )
           .map(([key, item]) => [
             key,
             Object.fromEntries(
-              // @ts-ignore
-              Object.entries(item).map(([k, it]: [string, string]) => [k, it.replaceAll(',', '')])
-            )
-          ])
+              // @ts-expect-error
+              Object.entries(item).map(([k, it]: [string, string]) => [
+                k,
+                it.replaceAll(',', ''),
+              ]),
+            ),
+          ]),
       );
-      Object.assign(obj, data);
-    } catch (err) {
+      Object.assign(object, data);
+    } catch {
       continue;
     }
   }
 
-  let csvObj = Object.values(obj);
-  const csvData = csvjson.toCSV(csvObj, {
+  const csvObject = Object.values(object);
+  const csvData = csvjson.toCSV(csvObject, {
     delimiter: ',',
     wrap: false,
     headers: 'relative',
   });
 
-  fs.writeFileSync(`TrellisFLDocsReport${now.toISOString().split('T')[0]}.csv`, csvData, { encoding: 'utf8' });
+  fs.writeFileSync(
+    `TrellisFLDocsReport${now.toISOString().split('T')[0]}.csv`,
+    csvData,
+    { encoding: 'utf8' },
+  );
   console.log('done');
 }
 
 export async function generateIncrementalFLVendorsReport(inDate?: string) {
-  let obj: any = {};
+  const object: any = {};
 
   const oada = await connect({
     domain,
     token,
   });
-  const { data: dates } = await oada.get({
+  const { data: dates } = (await oada.get({
     path: `/bookmarks/services/fl-sync/jobs/reports/businesses-report/day-index`,
-  }) as unknown as any;
+  })) as unknown as any;
 
   const today = inDate ? new Date(inDate) : new Date();
   // @ts-expect-error you can subtract dates
   const now = new Date(today - today.getTimezoneOffset() * 60 * 1000);
   // @ts-expect-error you can subtract dates
-  const lastWeek = new Date(now - (7 * 24 * 60 * 60 * 1000));
+  const lastWeek = new Date(now - 7 * 24 * 60 * 60 * 1000);
 
-  for (let i = 0; i < 7; i++) {
+  for (let index = 0; index < 7; index++) {
     // @ts-expect-error you can subtract dates
-    const day = new Date(today - i * 24 * 60 * 60 * 1000);
+    const day = new Date(today - index * 24 * 60 * 60 * 1000);
     const date = day.toISOString().split('T')[0];
 
     try {
-      const { data: report } = await oada.get({
+      const { data: report } = (await oada.get({
         path: `/bookmarks/services/fl-sync/jobs/reports/businesses-report/day-index/${date}`,
-      }) as unknown as any;
-      
+      })) as unknown as any;
+
       const data = Object.fromEntries(
         Object.entries(report)
-        .filter(([key, _]: [string, unknown]) => !key.startsWith('_'))
-        .map(([key, item]) => [
-          key,
-          Object.fromEntries(
-            // @ts-ignore
-            Object.entries(item).map(([k, it]: [string, string]) => [k, it.replaceAll(',', '')])
-          )
-        ])
+          .filter(([key, _]: [string, unknown]) => !key.startsWith('_'))
+          .map(([key, item]) => [
+            key,
+            Object.fromEntries(
+              // @ts-expect-error
+              Object.entries(item).map(([k, it]: [string, string]) => [
+                k,
+                it.replaceAll(',', ''),
+              ]),
+            ),
+          ]),
       );
 
-      Object.assign(obj, data);
-    } catch (err) {
+      Object.assign(object, data);
+    } catch {
       continue;
     }
   }
 
-  let csvObj = Object.values(obj);
-  const csvData = csvjson.toCSV(csvObj, {
+  const csvObject = Object.values(object);
+  const csvData = csvjson.toCSV(csvObject, {
     delimiter: ',',
     wrap: false,
     headers: 'relative',
   });
 
-  fs.writeFileSync(`TrellisFLVendorsReport${now.toISOString().split('T')[0]}.csv`, csvData, { encoding: 'utf8' });
+  fs.writeFileSync(
+    `TrellisFLVendorsReport${now.toISOString().split('T')[0]}.csv`,
+    csvData,
+    { encoding: 'utf8' },
+  );
   console.log('done');
 }
 
 setInterval(() => {
   console.log('stay alive');
 }, 3000);
-//await loadVendors();
-//await makeVendors();
-//await makeReport();
-//validateReportResponses();
-//processReportResponses();
-//await vendorPrepPriorToHandleReport();
-//await copyProdData();
+// Await loadVendors();
+// await makeVendors();
+// await makeReport();
+// validateReportResponses();
+// processReportResponses();
+// await vendorPrepPriorToHandleReport();
+// await copyProdData();
 
-//await tradingPartnerPrep06142023();
-//await tradingPartnerFix07102023();
-//await updateFlInternalIds();
-//await fixJobs();
-//await generateFLVendorsReport();
+// await tradingPartnerPrep06142023();
+// await tradingPartnerFix07102023();
+// await updateFlInternalIds();
+// await fixJobs();
+// await generateFLVendorsReport();
 
-//await generateFLDocsReport('2023-09-11');
+// await generateFLDocsReport('2023-09-11');
 await generateIncrementalFLVendorsReport('2023-09-11');
 process.exit();

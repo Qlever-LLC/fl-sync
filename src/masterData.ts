@@ -27,7 +27,7 @@ import type { Job, WorkerFunction } from '@oada/jobs';
 import type Resource from '@oada/types/oada/resource.js';
 
 import tree from './tree.masterData.js';
-//import type TradingPartner from '@oada/types/trellis/trading-partners/trading-partner.js';
+// Import type TradingPartner from '@oada/types/trellis/trading-partners/trading-partner.js';
 import type { FlBusiness } from './mirrorWatch.js';
 import { postUpdate } from '@oada/jobs';
 
@@ -115,7 +115,7 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
   });
 
   /*
-  if ((ensureJob?.result?.matches ?? []).length > 1) {
+  If ((ensureJob?.result?.matches ?? []).length > 1) {
     info(
       // @ts-expect-error fl-bus doesn't exist on Json
       `Food Logiq Business [${job.config['fl-business'].business._id}] inputs returned multiple trading-partner matches`
@@ -138,8 +138,8 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
 
   // @ts-expect-error annoying Json type
   if (!job.config['fl-business'].internalId && ensureJob.result.new) {
-    const msg = `FL Business is missing an 'internalId'.`;
-    await postUpdate(oada, job.oadaId, msg, 'fl-business-incomplete');
+    const message = `FL Business is missing an 'internalId'.`;
+    await postUpdate(oada, job.oadaId, message, 'fl-business-incomplete');
     await oada.put({
       path: `/${job.oadaId}`,
       data: {
@@ -157,51 +157,59 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
       .every((k) => k.indexOf(ensureJob?.result?.entry.externalIds) > 0)
   ) {
     try {
-      const { result: updateResult } = await doJob(oada as unknown as OADAClient, {
-        type: 'trading-partners-update',
-        service: TP_MANAGER_SERVICE,
-        config: {
-          element: {
-            masterid: ensureJob.result.entry.masterid,
-            externalIds: element.externalIds,
+      const { result: updateResult } = await doJob(
+        oada as unknown as OADAClient,
+        {
+          type: 'trading-partners-update',
+          service: TP_MANAGER_SERVICE,
+          config: {
+            element: {
+              masterid: ensureJob.result.entry.masterid,
+              externalIds: element.externalIds,
+            },
           },
         },
-      });
+      );
       const updateXids = (updateResult?.externalIds ?? []) as string[];
       if (updateXids.length !== element.externalIds.length) {
         const xids = element.externalIds.filter(
-          (xid) => !updateXids.includes(xid)
+          (xid) => !updateXids.includes(xid),
         );
-        const msg = `The following failed to update for trading-partner ${
+        const message = `The following failed to update for trading-partner ${
           ensureJob.result.entry.masterid
         }: ${xids.join(', ')}`;
-        await postUpdate(oada, job.oadaId, msg, 'fl-business-incomplete');
+        await postUpdate(oada, job.oadaId, message, 'fl-business-incomplete');
         await oada.put({
           path: `/${job.oadaId}`,
           data: {
-            'fl-business-incomplete-reason':
-              `Conflicting internalIds: ${xids.join(',')}`,
+            'fl-business-incomplete-reason': `Conflicting internalIds: ${xids.join(',')}`,
           },
         });
       }
-      await postUpdate(oada, job.oadaId, `Updated trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`, 'tp-updated');
+
+      await postUpdate(
+        oada,
+        job.oadaId,
+        `Updated trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`,
+        'tp-updated',
+      );
       return {
         ...ensureJob.result,
         entry: updateResult,
       };
-    } catch(err) {
+    } catch {
       warn(
         // @ts-expect-error fl-bus doesn't exist on Json
-        `Food Logiq Business [${job.config['fl-business'].business._id}] externalID update failed.`
+        `Food Logiq Business [${job.config['fl-business'].business._id}] externalID update failed.`,
       );
-      const msg = `Failed to update trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`;
-      await postUpdate(oada, job.oadaId, msg, 'tp-update-failed');
+      const message = `Failed to update trading-partner ${ensureJob.result.entry.masterid} with FL internalId(s)`;
+      await postUpdate(oada, job.oadaId, message, 'tp-update-failed');
       await oada.put({
-          path: `/${job.oadaId}`,
-          data: {
-            'fl-business-incomplete-reason': `Other Internal Failure. See job ${job.oadaId} for details.`,
-          },
-        })
+        path: `/${job.oadaId}`,
+        data: {
+          'fl-business-incomplete-reason': `Other Internal Failure. See job ${job.oadaId} for details.`,
+        },
+      });
     }
   }
 
@@ -209,7 +217,7 @@ export const handleFlBusiness: WorkerFunction = async (job, { oada }) => {
 };
 
 /**
- * assigns fl business data into the trading partner template
+ * Assigns fl business data into the trading partner template
  * @param {*} item fl business
  * @returns
  */
@@ -219,6 +227,7 @@ export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
     const iids = bus.internalId.split(',').map((iid) => `sap:${iid.trim()}`);
     externalIds = [...externalIds, ...iids];
   }
+
   return {
     ..._.cloneDeep(trellisTPTemplate),
     name: bus.business.name || '',
@@ -237,30 +246,34 @@ export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
  * @param masterid string that contains internalid from FL or
  * random string created by sap-sync
  */
-async function updateMasterId(flBusiness: any, masterid: string, oada: OADAClient) {
+async function updateMasterId(
+  flBusiness: any,
+  masterid: string,
+  oada: OADAClient,
+) {
   await oada.put({
     path: `${SERVICE_PATH}/businesses/${flBusiness._id}`,
-    data: ({ masterid }) as JsonObject,
+    data: { masterid } as JsonObject,
   });
   info(`${SERVICE_PATH}/businesses/<bid> updated with masterid [${masterid}].`);
 
   await oada.put({
     path: `/${masterid}/_meta`,
-    data: ({
+    data: {
       services: {
         'fl-sync': {
           businesses: {
-            [flBusiness._id]: { _id: masterid}
-          }
-        }
-      }
-    }) as JsonObject
+            [flBusiness._id]: { _id: masterid },
+          },
+        },
+      },
+    } as JsonObject,
   });
   info(`${TL_TP}/ updated with masterid [${masterid}].`);
 } // UpdateMasterId
 
 const trellisTPTemplate: TradingPartnerNoLinks = {
-  masterid: '', // internal trellis resource id 
+  masterid: '', // Internal trellis resource id
   companycode: '',
   vendorid: '',
   partnerid: '',
@@ -268,8 +281,8 @@ const trellisTPTemplate: TradingPartnerNoLinks = {
   address: '', // Both
   city: '', // Both
   state: '', // Both
-  //type: 'CUSTOMER', // Both
-  //source: SourceType.Business,
+  // type: 'CUSTOMER', // Both
+  // source: SourceType.Business,
   coi_emails: '', // Business
   fsqa_emails: '', // Business
   email: '', // Both
@@ -304,9 +317,9 @@ export async function watchTrellisFLBusinesses(conn: OADAClient, service: Servic
   });
 } // WatchTrellisFLBusinesses
 */
-export type EnsureResult = {
+export interface EnsureResult {
   entry?: any;
   matches?: any[];
   exact?: boolean;
   new?: boolean;
-};
+}

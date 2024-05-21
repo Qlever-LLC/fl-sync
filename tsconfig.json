@@ -1,5 +1,5 @@
 {
-  "extends": "@tsconfig/node16",
+  "extends": "@tsconfig/node20",
   "compilerOptions": {
     "composite": true,
     "module": "node16",
@@ -9,7 +9,7 @@
     "importHelpers": true,
     "alwaysStrict": true,
     "strict": true,
-    "importsNotUsedAsValues": "error",
+    //"verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": false,
     "noUnusedParameters": true,

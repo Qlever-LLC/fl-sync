@@ -34,42 +34,42 @@ export async function flToTrellis(flDocument: FlObject) {
 
   for (const key of Object.keys(shareSpecificAttributes).filter(
     (attributePath: string) =>
-      _.has(flDocument, `shareSource.shareSpecificAttributes.${attributePath}`)
+      _.has(flDocument, `shareSource.shareSpecificAttributes.${attributePath}`),
   )) {
     const trellisPath =
       shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
     const flPath = `shareSource.shareSpecificAttributes.${key}`;
     const flValue = _.get(flDocument, flPath);
     info(
-      `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`
+      `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,
     );
     _.set(document, trellisPath, flValue);
   }
 
   // Handle any default attributes
   for (const flPath of Object.keys(defaultAttributes).filter(
-    (attributePath: string) => _.has(flDocument, attributePath)
+    (attributePath: string) => _.has(flDocument, attributePath),
   )) {
     const trellisPath =
       defaultAttributes[flPath as keyof typeof defaultAttributes];
     const flValue = _.get(flDocument, flPath);
     info(
-      `Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`
+      `Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,
     );
     _.set(document, trellisPath, flValue);
   }
 
-  //Handle document date separately. This is required for LF.
+  // Handle document date separately. This is required for LF.
   if (!document.document_date && document.effective_date) {
-    document.document_date = document.effective_date;// ||
-//      _.get(flDocument, 'versionInfo.createdAt').slice(0, 10);
+    document.document_date = document.effective_date; // ||
+    //      _.get(flDocument, 'versionInfo.createdAt').slice(0, 10);
     info(
-      `Setting document date from effective or create date: ${document.document_date}`
+      `Setting document date from effective or create date: ${document.document_date}`,
     );
   }
 
   switch (flDocumentType) {
-    case 'Certificate of Insurance':
+    case 'Certificate of Insurance': {
       document.holder = {
         name: flDocument.shareSource.sourceBusiness.name,
         location: {
@@ -82,9 +82,11 @@ export async function flToTrellis(flDocument: FlObject) {
         },
       };
       break;
+    }
 
-    default:
+    default: {
       break;
+    }
   }
 
   return {

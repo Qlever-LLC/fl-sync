@@ -68,6 +68,6 @@ export const tree: Record<string, any> = {
       },
     },
   },
-};
+} as const;
 
 export default tree;

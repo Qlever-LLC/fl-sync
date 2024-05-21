@@ -23,9 +23,11 @@ const temporary = {
     '_rev': 0,
     'documents': {
       '_type': 'application/vnd.oada.trellisfw.documents.1+json',
-      '*': { // Document type list
+      '*': {
+        // Document type list
         '_type': 'application/vnd.oada.trellisfw.documents.1+json',
-        '*': { // Document list
+        '*': {
+          // Document list
           _type: 'application/vnd.oada.trellisfw.document.1+json',
         },
       },
@@ -37,7 +39,7 @@ const temporary = {
       },
     },
   },
-};
+} as const;
 export const tree: Record<string, any> = {
   bookmarks: {
     _type: 'application/vnd.oada.bookmarks.1+json',
@@ -149,6 +151,6 @@ export const tree: Record<string, any> = {
       },
     },
   },
-};
+} as const;
 
 export default tree;
