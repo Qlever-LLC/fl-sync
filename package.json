@@ -44,8 +44,9 @@
     ]
   },
   "dependencies": {
-    "@oada/client": "^5.1.0",
+    "@oada/client": "^5.1.1",
     "@oada/jobs": "^4.5.1",
+    "@oada/lib-prom": "^3.8.0",
     "@oada/list-lib": "4.3.0",
     "@oada/poll": "^1.0.4",
     "@oada/types": "^3.5.3",
@@ -127,5 +128,8 @@
     "prettier": "^3.2.5",
     "typescript": "5.4.5"
   },
-  "packageManager": "yarn@4.2.2"
+  "packageManager": "yarn@4.2.2",
+  "resolutions": {
+    "@oada/client": "portal:/home/sanoel/client"
+  }
 }

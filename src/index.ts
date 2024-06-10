@@ -442,7 +442,6 @@ async function fetchAndSync({
   } catch (cError: unknown) {
     info({ error: cError }, 'getBusinesses Error, Please check error logs');
     throw cError;
-    // If (key !== 'd4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e') return
   }
 } // FetchAndSync
 

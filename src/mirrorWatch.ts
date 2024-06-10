@@ -28,6 +28,7 @@ import md5 from 'md5';
 import crypto from 'crypto';
 import oError from '@overleaf/o-error';
 import pointer from 'json-pointer';
+import { Gauge } from '@oada/lib-prom';
 
 import type {
   Change,
@@ -181,8 +182,8 @@ const fTypes = {
 const flTypes = new Map(Object.entries(fTypes));
 
 const rejectable = {
-  'Certificate of Insurance': 'Certificate of Insurance',
-  'cois': 'cois',
+//  'Certificate of Insurance': 'Certificate of Insurance',
+//  'cois': 'cois',
 };
 
 async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob) {
