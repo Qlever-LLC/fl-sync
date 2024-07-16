@@ -14,7 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module.exports = {
+
+/* eslint-disable unicorn/no-null */
+
+export default {
   'food-logiq-mirror': {
     _id: 'bs-0002',
     createdAt: '2021-02-03T19:14:36.373Z',

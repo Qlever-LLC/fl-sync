@@ -20,11 +20,11 @@ import config from './config.js';
 import _ from 'lodash';
 import debug from 'debug';
 
-import { doJob } from '@oada/client/jobs';
-import type { JsonObject, OADAClient } from '@oada/client';
 import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
+import type { JsonObject, OADAClient } from '@oada/client';
 import type { Job, WorkerFunction } from '@oada/jobs';
 import type Resource from '@oada/types/oada/resource.js';
+import { doJob } from '@oada/client/jobs';
 
 import tree from './tree.masterData.js';
 // Import type TradingPartner from '@oada/types/trellis/trading-partners/trading-partner.js';

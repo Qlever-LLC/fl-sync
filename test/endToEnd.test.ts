@@ -1,4 +1,4 @@
-/*
+/**
  * @license
  * Copyright 2022 Qlever LLC
  *
@@ -15,24 +15,27 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/prevent-abbreviations */
-import fs from 'node:fs';
-import FormData from 'form-data';
-import type { JsonObject, OADAClient } from '@oada/client';
-import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
-import { default as axios } from 'axios';
-import type { FlObject } from '../dist/mirrorWatch.js';
-import type { TreeKey } from '@oada/types/oada/tree/v1.js';
-import { coi } from './documents/coi.js';
-import config from '../dist/config.js';
-import { connect, doJob } from '@oada/client';
-import { isObj as isObject } from '../dist/mirrorWatch.js';
-import moment from 'moment';
-import { initialize as service } from '../dist/index.js';
-import { setTimeout } from 'node:timers/promises';
+/* eslint-disable unicorn/prevent-abbreviations, unicorn/no-null, sonarjs/no-duplicate-string */
+
 import test from 'ava';
-import { tree } from '../dist/tree.js';
+
+import { createReadStream } from 'node:fs';
+import fs from 'node:fs/promises';
+import { setTimeout } from 'node:timers/promises';
+
+import FormData from 'form-data';
+import { default as axios } from 'axios';
+
+import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
+import type { JsonObject, OADAClient } from '@oada/client';
+import { connect } from '@oada/client';
+import { doJob } from '@oada/client/jobs';
+
+import type { TreeKey } from '@oada/types/oada/tree/v1.js';
+import config from '../dist/config.js';
 import mirrorTree from '../dist/tree.mirrorWatch.js';
+import { initialize as service } from '../dist/index.js';
+import { tree } from '../dist/tree.js';
 
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'
 const FL_TOKEN = config.get('foodlogiq.token') || '';
@@ -118,12 +121,14 @@ test.before(async () => {
     onNewList: AssumeState.Handled,
   });
   docsWatch.on(ChangeType.ItemChanged, async ({ change }) => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
     const ch = await change;
     // @ts-expect-error
     if (ch.body?.['food-logiq-mirror']?.shareSource?.originalId) {
-      // @ts-expect-error
       supplierIdToCommunityId.set(
+        // @ts-expect-error
         ch.body['food-logiq-mirror'].shareSource.originalId,
+        // @ts-expect-error
         ch.body['food-logiq-mirror']._id,
       );
     }
@@ -395,7 +400,7 @@ test.skip(`Should correctly handle a doc that gets approved "accidentally" then 
   t.truthy(approvedJob?.value?.result?.message?.includes('interrupted'));
 });
 
-test.skip(`Should generate report items for successful jobs`, async (t) => {
+test.skip(`Should generate report items for successful jobs`, (t) => {
   t.timeout(300_000);
 });
 
@@ -665,8 +670,8 @@ const bus = {
 };
 
 async function postDocument(document: any, filename: string) {
-  const file = fs.readFileSync(`./test/pdfs/${filename}`, {
-    encoding: 'utf-8',
+  const file = await fs.readFile(`./test/pdfs/${filename}`, {
+    encoding: 'utf8',
   });
   const { data } = await axios({
     method: 'post',
@@ -688,7 +693,7 @@ async function postDocument(document: any, filename: string) {
     attachments: [data.attachment],
   };
   fd.append('document', JSON.stringify(aDoc));
-  fd.append('attachments', fs.createReadStream(`./test/pdfs/${filename}`));
+  fd.append('attachments', createReadStream(`./test/pdfs/${filename}`));
 
   const { data: newDoc } = await axios({
     method: 'post',

@@ -20,36 +20,34 @@ import config from './config.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import type { AxiosRequestConfig } from 'axios';
+import { type AxiosRequestConfig, default as axios } from 'axios';
 import Bluebird from 'bluebird';
 import type { Moment } from 'moment';
 import { Service } from '@oada/jobs';
 import _ from 'lodash';
-import { default as axios } from 'axios';
 import debug from 'debug';
 import esMain from 'es-main';
 import moment from 'moment';
 
-import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
 import type { Change, JsonObject, OADAClient } from '@oada/client';
 import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
 import {
+  type FlObject,
   handleAssessmentJob,
   handleDocumentJob,
   startJobCreator,
 } from './mirrorWatch.js';
-import type { FlObject } from './mirrorWatch.js';
 import {
   docReportConfig,
   tpReportConfig,
   tpReportFilter,
 } from './reportConfig.js';
 // Import { businessesReportConfig } from './businessesReportConfig.js';
+import { handleFlBusiness } from './masterData.js';
 import { startIncidents } from './flIncidentsCsv.js';
 import tree from './tree.js';
-import { handleFlBusiness } from './masterData.js';
 
 const DOMAIN = config.get('trellis.domain');
 const TRELLIS_TOKEN = config.get('trellis.token');
@@ -262,7 +260,8 @@ export async function fetchCommunityResources({
   // Repeat for additional pages of FL results
   if (response.data.hasNextPage && pageIndex < 1000) {
     info(
-      `Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)
+      `Finished page ${pageIndex}. Item ${
+        response.data.pageItemCount * (pageIndex + 1)
       }/${response.data.totalItemCount}`,
     );
     if (type === 'documents') info(`Pausing for ${delay / 60_000} minutes`);
@@ -351,8 +350,8 @@ async function fetchAndSync({
 }: {
   from: string;
   to:
-  | string
-  | ((input: { business: { _id: string } }) => string | PromiseLike<string>);
+    | string
+    | ((input: { business: { _id: string } }) => string | PromiseLike<string>);
   pageIndex?: number;
   forEach: (input: { business: { _id: string } }) => PromiseLike<void>;
 }) {
@@ -434,7 +433,8 @@ async function fetchAndSync({
     // Repeat for additional pages of FL results
     if (response.data.hasNextPage) {
       info(
-        `fetchAndSync Finished page ${pageIndex}. Item ${response.data.pageItemCount * (pageIndex + 1)
+        `fetchAndSync Finished page ${pageIndex}. Item ${
+          response.data.pageItemCount * (pageIndex + 1)
         }/${response.data.totalItemCount}`,
       );
       await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach });
@@ -475,7 +475,7 @@ export async function initialize({
 }) {
   try {
     info(
-      `<<<<<<<<<       Initializing fl-sync service. [v${process.env.npm_package_version}]       >>>>>>>>>>`
+      `<<<<<<<<<       Initializing fl-sync service. [v${process.env.npm_package_version}]       >>>>>>>>>>`,
     );
     TOKEN = await getToken();
     // Connect to oada

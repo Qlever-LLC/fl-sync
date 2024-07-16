@@ -14,7 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module.exports = {
+
+/* eslint-disable sonarjs/no-duplicate-string */
+
+export default {
   bookmarks: {
     _type: 'application/vnd.oada.bookmarks.1+json',
     _rev: 0,

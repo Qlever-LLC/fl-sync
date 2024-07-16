@@ -22,6 +22,8 @@ import type { FlAssessment } from './mirrorWatch.js';
 
 const info = debug('fl-sync:mirror-watch:info');
 
+const DEPTH = 5;
+
 /**
  * Checks assessment
  * @param {*} assessment
@@ -56,7 +58,7 @@ export function checkAssessment(assessment: FlAssessment) {
         ),
       ),
     )
-    .flat(5)
+    .flat(DEPTH)
     .some(Boolean);
   return { failed, reasons };
 } // CheckAssessment
@@ -68,6 +70,7 @@ const checkAssessments = new Map(
      * @param {*} assessment
      * @returns
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     '606cc945c8f60c000e53947f'(assessment: FlAssessment) {
       const reasons: string[] = [];
       info(`Checking COI assessment ${assessment._id}`);
@@ -162,7 +165,7 @@ const checkAssessments = new Map(
           }),
         ),
       );
-      const thing = failed.flat(5);
+      const thing = failed.flat(DEPTH);
       return { failed: thing.some(Boolean), reasons };
     },
   }),

@@ -17,18 +17,20 @@
 
 import config from './config.js';
 
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 
-import type { OADAClient } from '@oada/client';
-import { connect } from '@oada/client';
 import _ from 'lodash';
 import { default as axios } from 'axios';
-// @ts-expect-error
+// @ts-expect-error no types
 import csvjson from 'csvjson';
 import debug from 'debug';
 import ksuid from 'ksuid';
 import moment from 'moment';
+
+import type { Job } from '@oada/jobs';
 import type Link from '@oada/types/oada/link/v1.js';
+import type { OADAClient } from '@oada/client';
+import { connect } from '@oada/client';
 
 const DOMAIN = config.get('trellis.domain');
 const TOKEN = config.get('trellis.token');
@@ -39,9 +41,10 @@ const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
+
 const info = debug('fl-sync:info');
-// Const trace = debug('fl-sync:trace');
-// const error = debug('fl-sync:error');
+const trace = debug('fl-sync:trace');
+const error = debug('fl-sync:error');
 
 const humanReadableJobError = {
   'target-other': 'Other target errors',
@@ -107,12 +110,11 @@ export async function makeFinalReport() {
     );
 
     for await (const bid of busKeys) {
-      const docs = await oada
+      const { data: docs } = await oada
         .get({
           path: `${SERVICE_PATH}/businesses/${bid}/documents`,
         })
-        .then((r) => r.data)
-        .catch(() => { });
+        .catch(() => ({ data: undefined }));
       if (!docs) {
         return;
       }
@@ -126,12 +128,11 @@ export async function makeFinalReport() {
           return;
         }
 
-        const document = await oada
+        const { data: document } = await oada
           .get({
             path: `${SERVICE_PATH}/businesses/${bid}/documents/${docId}`,
           })
-          .then((r) => r.data)
-          .catch(() => { });
+          .catch(() => ({ data: undefined }));
 
         if (!document) {
           return;
@@ -172,15 +173,13 @@ export async function makeFinalReport() {
           'food-logiq-mirror.versionInfo.createdAt',
         );
         if (status) {
-          finalReport.flStatuses[status] = finalReport.flStatuses[status] || {};
-          finalReport.flStatuses[status].total =
-            finalReport.flStatuses[status].total || 0;
+          finalReport.flStatuses[status] ??= {};
+          finalReport.flStatuses[status].total ??= 0;
           finalReport.flStatuses[status].total++;
         }
 
         if (status && user && user === FL_TRELLIS_USER) {
-          finalReport.flStatuses[status].byUs =
-            finalReport.flStatuses[status].byUs || 0;
+          finalReport.flStatuses[status].byUs ??= 0;
           finalReport.flStatuses[status].byUs++;
         }
 
@@ -192,13 +191,16 @@ export async function makeFinalReport() {
               Authorization: `${FL_TOKEN}`,
             },
           });
-        } catch (error: unknown) {
+        } catch (cError: unknown) {
           // @ts-expect-error stupid errors
-          if (error.response.status === 404) {
-            console.log(`Document has been deleted in FL`, { docid: docId, bid });
+          if (cError.response.status === 404) {
+            error(`Document has been deleted in FL`, {
+              docid: docId,
+              bid,
+            });
             otherReport.flDeleted[docId] = { docid: docId, bid, status, user };
             finalReport.flDeleted++;
-          } else throw error as Error;
+          } else throw cError as Error;
         }
 
         // 2. Get the associated job
@@ -211,16 +213,15 @@ export async function makeFinalReport() {
           return;
         }
 
-        const jobs: Record<string, Link> = _.get(meta, 'services.fl-sync.jobs') ?? {};
+        const jobs = (_.get(meta, 'services.fl-sync.jobs') ??
+          {}) as unknown as Record<string, Link>;
         if (Object.keys(jobs).length <= 0) {
-          finalReport.missingFlSyncJob = finalReport.missingFlSyncJob ?? 0;
+          finalReport.missingFlSyncJob ??= 0;
           finalReport.missingFlSyncJob++;
-          finalReport.flStatuses[status].missingFlSyncJob =
-            finalReport.flStatuses[status].missingFlSyncJob ?? 0;
+          finalReport.flStatuses[status].missingFlSyncJob ??= 0;
           finalReport.flStatuses[status].missingFlSyncJob++;
-          otherReport.missingFlSyncJobs = otherReport.missingFlSyncJobs ?? {};
-          otherReport.missingFlSyncJobs[status] =
-            otherReport.missingFlSyncJobs[status] ?? {};
+          otherReport.missingFlSyncJobs ??= {};
+          otherReport.missingFlSyncJobs[status] ??= {};
           otherReport.missingFlSyncJobs[status][docId] = {
             docid: docId,
             bid,
@@ -228,11 +229,13 @@ export async function makeFinalReport() {
             user,
           };
           if (status === 'approved') {
-            console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-            console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-            console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-            console.log({ docid: docId, bid, status, user });
-            otherReport.approvedButNoJob[docId] = { docid: docId, bid, status, user };
+            trace({ docid: docId, bid, status, user });
+            otherReport.approvedButNoJob[docId] = {
+              docid: docId,
+              bid,
+              status,
+              user,
+            };
           }
 
           return;
@@ -242,16 +245,15 @@ export async function makeFinalReport() {
         if (!jobkey) {
           return;
         }
+
         const jobId = jobs[jobkey]?._id;
 
-        const job: any = await oada
-          .get({
-            path: `/${jobId}`,
-          })
-          .then((r) => r.data);
+        const { data: job } = (await oada.get({
+          path: `/${jobId}`,
+        })) as unknown as { data: Job };
 
         // 3. Find the reason for failure
-        const jobError: string = _.get(job, 'result.JobError');
+        const jobError: string | undefined = _.get(job, 'result.JobError');
         if (jobError) {
           finalReport['job-errors'][jobError] =
             finalReport['job-errors'][jobError] || 0;
@@ -264,7 +266,6 @@ export async function makeFinalReport() {
             'Date Created': createDate,
             'Supplier': busName,
             'FoodLogiQ Status': status,
-            // @ts-expect-error
             'Trellis Result': humanReadableJobError[jobError],
             'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
             'FoodLogiQ Document ID': docId,
@@ -275,7 +276,7 @@ export async function makeFinalReport() {
         }
 
         if (job.status === 'success') {
-          finalReport.jobSuccess = finalReport.jobSuccess || 0;
+          finalReport.jobSuccess ??= 0;
           finalReport.jobSuccess++;
 
           spreadsheet.push({
@@ -289,7 +290,7 @@ export async function makeFinalReport() {
             'FoodLogiQ Document ID': docId,
             'FoodLogiQ Supplier ID': bid,
           });
-          console.log({ docid: docId, jobid: jobId, status: job.status });
+          info({ docid: docId, jobid: jobId, status: job.status });
         } else {
           finalReport.otherErrors++;
           otherReport.otherErrors[docId] = { docid: docId, bid, jobid: jobId };
@@ -310,21 +311,22 @@ export async function makeFinalReport() {
         const coiId = _.get(job, 'trellisDoc.key');
 
         if (coiId) {
-          const coiMeta = await oada
-            .get({
-              path: `/resources/${coiId}/_meta`,
-            })
-            .then((r) => r.data);
+          const { data: coiMeta } = await oada.get({
+            path: `/resources/${coiId}/_meta`,
+          });
 
           const entryId = _.get(coiMeta, 'services.lf-sync.LaserficheEntryID');
           if (entryId) {
             finalReport.inLaserfiche++;
           } else {
             finalReport.notInLaserfiche++;
-            finalReport.flStatuses[status].notInLaserfiche =
-              finalReport.flStatuses[status].notInLaserfiche || 0;
+            finalReport.flStatuses[status].notInLaserfiche ??= 0;
             finalReport.flStatuses[status].notInLaserfiche++;
-            otherReport.notInLaserfiche[docId] = { docid: docId, bid, jobid: jobId };
+            otherReport.notInLaserfiche[docId] = {
+              docid: docId,
+              bid,
+              jobid: jobId,
+            };
             if (status === 'approved') {
               otherReport.approvedNotInLaserfiche[docId] = {
                 docid: docId,
@@ -340,12 +342,12 @@ export async function makeFinalReport() {
       }
     }
 
-    console.log(finalReport);
-    fs.writeFileSync(
+    info(finalReport);
+    await fs.writeFile(
       './scripts/finalReportDocs-Prod.json',
       JSON.stringify(otherReport),
     );
-    fs.writeFileSync(
+    await fs.writeFile(
       './scripts/finalReport-Prod.json',
       JSON.stringify(finalReport),
     );
@@ -389,13 +391,13 @@ export async function makeFinalReport() {
     info(finalReport);
     let csv = csvjson.toCSV(spreadsheet, { delimiter: ',', wrap: false });
     csv = fixHeaders(csv, Object.keys(spreadsheet[0]));
-    fs.writeFileSync('./scripts/finalReport-Prod.csv', csv);
+    await fs.writeFile('./scripts/finalReport-Prod.csv', csv);
     info('Done with CSV');
 
     clearInterval(mint);
     return csv;
-  } catch (error: unknown) {
-    console.log(error);
+  } catch (cError: unknown) {
+    error(cError);
   }
 }
 
@@ -409,8 +411,8 @@ function fixHeaders(csv: string, headers: string[]) {
 export function mostRecentKsuid(keys: string[]) {
   return keys.length > 0
     ? keys
-      .map((k) => ksuid.parse(k))
-      .reduce((a, b) => (a.compare(b) > 0 ? a : b)).string
+        .map((k) => ksuid.parse(k))
+        .reduce((a, b) => (a.compare(b) > 0 ? a : b)).string
     : undefined;
 }
 

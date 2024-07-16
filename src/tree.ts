@@ -14,6 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/* eslint-disable sonarjs/no-duplicate-string */
+
 // import type { Tree } from '@oada/list-lib';
 
 const docsTree = {

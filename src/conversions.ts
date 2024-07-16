@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-import type { FlObject } from './mirrorWatch.js';
 import _ from 'lodash';
 import debug from 'debug';
+
+import type { FlObject } from './mirrorWatch.js';
 
 const info = debug('fl-sync:mirror-watch:info');
 
 export function fromOadaType(type: string) {
-  const vals = Object.values(conversions);
-
-  return vals.find((v) => v.urlName === type);
+  const values = Object.values(conversions);
+  return values.find((v) => v.urlName === type);
 }
 
 export async function flToTrellis(flDocument: FlObject) {

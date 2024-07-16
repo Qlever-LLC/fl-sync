@@ -1,4 +1,4 @@
-/*
+/**
  * @license
  * Copyright 2022 Qlever LLC
  *
@@ -80,13 +80,42 @@ test.before(async (t) => {
     }),
   );
 
+  test.after(async () => {
+    /*
+    Let data = await oada.get({
+      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
+    }).then(r => r.data);
+    // @ts-ignore
+    let list = Object.keys(data).filter(k => k.charAt(0) !== '_')
+
+    for (const i of list) {
+      await oada.delete({
+        path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${i}`,
+      })
+    }
+
+    let d = await oada.get({
+      path: `${SERVICE_PATH}/businesses`,
+    }).then(r => r.data);
+    // @ts-ignore
+    let l = Object.keys(d).filter(k => k.charAt(0) !== '_')
+    l = l.filter(k => k !== '61c22e047953d4000ee0363f')
+
+    for (const i of l) {
+      await oada.delete({
+        path: `${SERVICE_PATH}/businesses/${i}`,
+      })
+    }
+   */
+  });
+
   // Blow away the existing coi docs created
   const keys = await oada
     .get({
       path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois`,
     })
     .then((r) =>
-      Object.keys(r.data || {}).filter((key) => !key.startsWith('_')),
+      Object.keys(r.data ?? {}).filter((key) => !key.startsWith('_')),
     )
     .catch((error) => {
       if (error.status !== 404) throw error;
@@ -115,8 +144,8 @@ test.skip('Should fail and warn suppliers when multiple PDFs are attached on COI
     data,
     'multi-files-attached',
   );
-  t.assert(jobKeys[jobKey]);
-  t.is(Object.keys(jobKeys).length, keyCount + 1);
+  t.assert(jobKeys?.[jobKey!]);
+  t.is(Object.keys(jobKeys ?? {}).length, keyCount + 1);
 });
 
 // TODO: Find an example of this and get the flId
@@ -128,8 +157,8 @@ test.skip('Should allow suppliers to upload multiple files attached on some doc 
     data,
     'multi-files-attached',
   );
-  t.assert(jobKeys[jobKey]);
-  t.is(Object.keys(jobKeys).length, keyCount + 1);
+  t.assert(jobKeys?.[jobKey!]);
+  t.is(Object.keys(jobKeys ?? {}).length, keyCount + 1);
 });
 
 test.skip(`Should fail on Target fail due to multiple COIs in one pdf`, async (t) => {
@@ -140,7 +169,7 @@ test.skip(`Should fail on Target fail due to multiple COIs in one pdf`, async (t
     data,
     'target-multiple-docs-combined',
   );
-  t.assert(jobKeys[jobKey]);
+  t.assert(jobKeys?.[jobKey!]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
 });
 
@@ -154,7 +183,7 @@ test.skip('Should fail when attachments cannot be retrieved.', async (t) => {
     data,
     'bad-fl-attachments',
   );
-  t.assert(jobKeys[jobKey]);
+  t.assert(jobKeys[jobKey!]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
 });
 
@@ -168,7 +197,7 @@ test.skip(`Should fail on Target validation failure (COI)`, async (t) => {
     data,
     'target-validation',
   );
-  t.assert(jobKeys[jobKey]);
+  t.assert(jobKeys[jobKey!]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
 });
 
@@ -181,7 +210,7 @@ test.skip(`Should fail on Target validation failure (COI) - specific holder chec
     data,
     'target-validation',
   );
-  t.assert(jobKeys[jobKey]);
+  t.assert(jobKeys[jobKey!]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
 });
 
@@ -193,7 +222,7 @@ test.skip(`Should fail on Target fail on unrecognized format`, async (t) => {
     data,
     'target-unrecognized',
   );
-  t.assert(jobKeys[jobKey]);
+  t.assert(jobKeys[jobKey!]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
 });
 
@@ -206,13 +235,13 @@ test.skip(`Should fail on Target failure to identify doc`, async (t) => {
     data,
     'target-unrecognized',
   );
-  t.assert(jobKeys[jobKey]);
+  t.assert(jobKeys[jobKey!]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
 });
 
 // File is not a Textual PDF,requires OCR to be processed
 // These are now hanging. Inquire...
-test.skip(`Should fail on Target failure due to not text pdf, needs OCR`, async (t) => {
+test.skip('Should fail on Target failure due to not text pdf, needs OCR', async (t) => {
   t.timeout(200_000);
   const _id = 'resources/206fbmvoqSwsgeclcHpTceT10kU';
   const data = await getFlDocument(_id);
@@ -220,17 +249,17 @@ test.skip(`Should fail on Target failure due to not text pdf, needs OCR`, async 
     data,
     'target-unrecognized',
   );
-  t.assert(jobKeys[jobKey]);
-  t.is(Object.keys(jobKeys).length, keyCount + 1);
+  t.assert(jobKeys?.[jobKey!]);
+  t.is(Object.keys(jobKeys ?? {}).length, keyCount + 1);
 });
 
-test(`Should approve a valid COI document.`, async (t) => {
+test('Should approve a valid COI document.', async (t) => {
   t.timeout(300_000);
   const data = coi;
   data.attachments.pop();
   const { jobKey } = await postAndPause(data, oada);
   await setTimeout(100_000);
-  console.log(
+  t.log(
     'CONTINUING',
     `${SERVICE_PATH}/jobs/success/day-index/${moment().format(
       'YYYY-MM-DD',
@@ -244,14 +273,14 @@ test(`Should approve a valid COI document.`, async (t) => {
       )}/${jobKey}`,
     })
     .catch((error) => {
-      console.log(error);
+      t.log(error);
       return { status: 0 };
     });
 
   t.is(job.status, 200);
 });
 
-test.skip(`Should reject a COI with expirations that do not match the user-entered date.`, async (t) => {
+test.skip('Should reject a COI with expirations that do not match the user-entered date.', async (t) => {
   t.timeout(300_000);
   const _id = 'resources/29gNgxGtGRIQhOW087Kf7yfbWnC';
   const data = await getFlDocument(_id);
@@ -259,20 +288,18 @@ test.skip(`Should reject a COI with expirations that do not match the user-enter
     data,
     'document-validation',
   );
-  t.assert(jobKeys[jobKey]);
-  t.is(Object.keys(jobKeys).length, keyCount + 1);
+  t.assert(jobKeys?.[jobKey!]);
+  t.is(Object.keys(jobKeys ?? {}).length, keyCount + 1);
 
-  const document = await oada
-    .get({
-      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
-    })
-    .then((r) => r.data as JsonObject);
+  const { data: document } = await oada.get({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
+  });
   if (!isObject(document)) throw new Error('bad doc');
   const flDocument = document['food-logiq-mirror'] as unknown as FlObject;
   t.is(flDocument.shareSource.approvalInfo.status, 'rejected');
 });
 
-test.skip(`Should reject a COI with insufficient policy coverage.`, async (t) => {
+test.skip('Should reject a COI with insufficient policy coverage.', async (t) => {
   t.timeout(300_000);
   const _id = 'resources/29gLjzngLbcCVUMbBf3PjO6UMg0';
   const data = await getFlDocument(_id);
@@ -280,11 +307,11 @@ test.skip(`Should reject a COI with insufficient policy coverage.`, async (t) =>
     data,
     'associated-assessment-rejected',
   );
-  t.assert(jobKeys[jobKey]);
+  t.assert(jobKeys[jobKey!]);
   t.is(Object.keys(jobKeys).length, keyCount + 1);
 });
 
-test.skip(`Shouldn't queue a job if already approved by non-trellis user.`, async (t) => {
+test.skip("Shouldn't queue a job if already approved by non - trellis user.", async (t) => {
   const flId = '618ab8c04f52f0000eae7220';
   const { data } = await axios({
     method: 'get',
@@ -293,16 +320,13 @@ test.skip(`Shouldn't queue a job if already approved by non-trellis user.`, asyn
       Authorization: `${FL_TOKEN}`,
     },
   }).then((r) => {
-    console.log(r);
+    t.log(r);
     return r;
   });
 
   // Mock the mirroring of the doc
   data.shareSource.sourceBusiness._id = SUPPLIER;
-  console.log(
-    'putting',
-    `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
-  );
+  t.log('putting', `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`);
   await oada.put({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
     data: { 'food-logiq-mirror': data },
@@ -310,18 +334,17 @@ test.skip(`Shouldn't queue a job if already approved by non-trellis user.`, asyn
   });
   await setTimeout(15_000);
 
-  const result = await oada
-    .get({
-      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta`,
-    })
-    .then((r) => r.data as JsonObject);
-  t.is(result.status, 200);
+  const { data: result } = await oada.get({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta`,
+  });
+  // @ts-expect-error
+  t.is(result?.status, 200);
 
   //  T.assert(jobKeys[jobKey])
   //  t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
-test.skip(`Shouldn't queue a job if already rejected by non-trellis user.`, async (t) => {
+test.skip("Shouldn't queue a job if already rejected by non-trellis user.", async (t) => {
   const flId = '618ab8c04f52f0000eae7220';
   const { data } = await axios({
     method: 'get',
@@ -330,16 +353,13 @@ test.skip(`Shouldn't queue a job if already rejected by non-trellis user.`, asyn
       Authorization: `${FL_TOKEN}`,
     },
   }).then((r: any) => {
-    console.log(r);
+    t.log(r);
     return r;
   });
 
   // Mock the mirroring of the doc
   data.shareSource.sourceBusiness._id = SUPPLIER;
-  console.log(
-    'putting',
-    `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
-  );
+  t.log('putting', `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`);
   await oada.put({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}`,
     data: { 'food-logiq-mirror': data },
@@ -347,18 +367,17 @@ test.skip(`Shouldn't queue a job if already rejected by non-trellis user.`, asyn
   });
   await setTimeout(15_000);
 
-  const result = await oada
-    .get({
-      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta`,
-    })
-    .then((r) => r.data as JsonObject);
-  t.is(result.status, 200);
+  const { data: result } = await oada.get({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta`,
+  });
+  // @ts-expect-error
+  t.is(result?.status, 200);
   // T.assert(jobKeys[jobKey])
   // t.is(Object.keys(jobKeys).length, keyCount+1);
 });
 
 /*
-It(`Should handle an fl-sync job that is queued on startup.`, async () => {
+Test('Should handle an fl-sync job that is queued on startup.', async () => {
   //Post a dummy job to the job queue
 
   // Mock the mirroring of the doc
@@ -384,50 +403,20 @@ It(`Should handle an fl-sync job that is queued on startup.`, async () => {
 // test.skip(`Should fail on Target fail due to corrupted pdf`, async (t) => {
 // });
 
-test.after(async () => {
-  /*
-  Let data = await oada.get({
-    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
-  }).then(r => r.data);
-  // @ts-ignore
-  let list = Object.keys(data).filter(k => k.charAt(0) !== '_')
-
-  for (const i of list) {
-    await oada.delete({
-      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${i}`,
-    })
-  }
-
-  let d = await oada.get({
-    path: `${SERVICE_PATH}/businesses`,
-  }).then(r => r.data);
-  // @ts-ignore
-  let l = Object.keys(d).filter(k => k.charAt(0) !== '_')
-  l = l.filter(k => k !== '61c22e047953d4000ee0363f')
-
-  for (const i of l) {
-    await oada.delete({
-      path: `${SERVICE_PATH}/businesses/${i}`,
-    })
-  }
- */
-});
-
 async function postDocument(data: any, oada: OADAClient) {
-  const result = await oada
+  const { data: result } = await oada
     .get({
       path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
     })
-    .then((r: any) => r.data)
     .catch((error) => {
       if (error.status === 404) {
-        return {};
+        return { data: undefined };
       }
 
-      throw error;
+      throw error as Error;
     });
-  if (typeof result !== 'object') throw new Error('Bad data');
-  const bef = new Set(Object.keys(result).filter((k) => !k.startsWith('_')));
+  if (typeof result !== 'object') throw new TypeError('Bad data');
+  const bef = new Set(Object.keys(result!).filter((k) => !k.startsWith('_')));
   await axios({
     method: 'post',
     url: `${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`,
@@ -456,7 +445,7 @@ async function getFlDocument(_id: string) {
   });
   if (
     typeof resp !== 'object' ||
-    Buffer.isBuffer(resp) ||
+    resp instanceof Uint8Array ||
     Array.isArray(resp) ||
     !resp?.['food-logiq-mirror']
   ) {
@@ -478,8 +467,11 @@ async function postAndPause(data: unknown, oada: OADAClient) {
       if (r && typeof r.data === 'object') {
         return Object.keys(r.data)[0];
       }
+
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      return undefined;
     });
-  const jobKey = jobId!.replace(/^resources\//, '');
+  const jobKey = jobId?.replace(/^resources\//, '');
   if (jobId === undefined) throw new Error('no job id');
 
   return { jobKey, jobId, flId };
@@ -500,17 +492,15 @@ async function rerunFlDocument(data: unknown, failType: string) {
         return 4; // Number of internal _-prefixed keys of an empty resource
       }
 
-      throw error;
+      throw error as Error;
     });
 
   const { flId, jobId, jobKey } = await postAndPause(data, oada);
   await setTimeout(40_000);
 
-  const jobKeys = await oada
-    .get({
-      path: jobsResultPath,
-    })
-    .then((r) => r.data as JsonObject);
+  const { data: jobKeys } = (await oada.get({
+    path: jobsResultPath,
+  })) as { data: Record<string, unknown> };
 
   return { jobKeys, jobKey, flId, jobId, keyCount };
 }

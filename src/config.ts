@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+/* eslint-disable unicorn/no-null */
+
 import 'dotenv/config';
 
 import convict from 'convict';
