@@ -17,7 +17,6 @@
 
 import config from './config.js';
 
-import { default as axios } from 'axios';
 import debug from 'debug';
 
 import type { JsonObject } from '@oada/client';
@@ -140,21 +139,24 @@ export async function spawnAssessment(
   assessmentTemplate.performedOnBusiness.name = bName;
 
   // Spawning the assessment with some (not all) values
-  const result = await axios({
-    method: updateFlId ? 'get' : 'post',
-    url: updateFlId
+  const result = await fetch(
+    updateFlId
       ? `${PATH_SPAWN_ASSESSMENT}/${updateFlId}`
       : PATH_SPAWN_ASSESSMENT,
-    headers: { Authorization: FL_TOKEN },
-    data: assessmentTemplate,
-  }).catch((cError: unknown) => {
+    {
+      method: updateFlId ? 'get' : 'post',
+      headers: { Authorization: FL_TOKEN },
+      body: JSON.stringify(assessmentTemplate),
+    },
+  ).catch((cError: unknown) => {
     error(cError, '--> Error when spawning an assessment.');
     throw cError as Error;
   });
+  const data = (await result.json()) as any;
 
   // Setting the assessment if to be modified
-  const SPAWNED_ASSESSMENT_ID = result ? result.data._id : updateFlId;
-  const ASSESSMENT_BODY = result.data;
+  const SPAWNED_ASSESSMENT_ID = result ? data._id : updateFlId;
+  const ASSESSMENT_BODY = data;
   const answersTemplate = [];
 
   // Populating answers in the COI assessment
@@ -238,7 +240,7 @@ export async function spawnAssessment(
     PATH_TO_UPDATE_ASSESSMENT,
     ASSESSMENT_BODY,
   );
-  return response || result;
+  return response || data;
 } // SpawnAssessment
 
 /**
@@ -257,11 +259,10 @@ export async function linkAssessmentToDocument(
     `Creating FL Link from assessment [${assessment._id}] to document [${document._id}]`,
   );
 
-  return axios({
+  return fetch(PATH_LINK_ASSESSMENT, {
     method: 'post',
-    url: PATH_LINK_ASSESSMENT,
     headers: { Authorization: FL_TOKEN },
-    data: [
+    body: JSON.stringify([
       {
         businessId: bid,
         from: assessment,
@@ -269,7 +270,7 @@ export async function linkAssessmentToDocument(
         linkTypeDisplay: 'Sources',
         to: document,
       },
-    ],
+    ]),
   }).catch((cError: Error) => {
     error(cError);
   });
@@ -278,23 +279,30 @@ export async function linkAssessmentToDocument(
 /**
  * updates the content of a spawned assessment
  * @param path spawned assessment url
- * @param data complete content of the assessment
+ * @param body complete content of the assessment
  */
-async function updateAssessment(path: string, data: FlAssessment) {
-  trace(`Updating assessment [${data._id}] after creation`);
+async function updateAssessment(path: string, body: FlAssessment) {
+  trace(`Updating assessment [${body._id}] after creation`);
   try {
-    const result = await axios({
+    const result = await fetch(path, {
       method: 'put',
-      url: path,
       headers: { Authorization: FL_TOKEN },
-      data,
+      body: JSON.stringify(body),
     });
-
-    info('--> assessment created. ', result.data._id);
-    return result;
+    const data = (await result.json()) as any;
+    info('--> assessment created. %s', data._id);
+    return data;
   } catch (cError: unknown) {
-    error({ error: cError }, '--> Error when updating the assessment.');
-    error('Request was:', { url: path, data: JSON.stringify(data) });
+    error(
+      {
+        err: cError,
+        request: {
+          url: path,
+          data: JSON.stringify(body),
+        },
+      },
+      '--> Error when updating the assessment.',
+    );
     throw cError as Error;
   }
 } // UpdateAssessment

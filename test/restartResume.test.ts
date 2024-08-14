@@ -27,7 +27,6 @@ import type { Job, Logger } from '@oada/jobs';
 import type { JsonObject, OADAClient } from '@oada/client';
 import { ListWatch } from '@oada/list-lib';
 import type { TreeKey } from '@oada/types/oada/tree/v1.js';
-import _ from 'lodash';
 import { connect } from '@oada/client';
 
 import { handleDocumentJob, isObj, postJob } from '../dist/mirrorWatch.js';
@@ -253,5 +252,5 @@ export async function targetWatchOnAdd(item: any, key: string) {
         [key]: { _id },
       },
     });
-  } catch {}
+  } catch { }
 }

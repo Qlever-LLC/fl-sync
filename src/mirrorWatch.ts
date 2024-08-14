@@ -22,10 +22,8 @@ import { setTimeout } from 'node:timers/promises';
 
 import { Gauge } from '@oada/lib-prom';
 
-import _ from 'lodash';
-import { default as axios } from 'axios';
 import debug from 'debug';
-import jszip from 'jszip';
+import JSZip from 'jszip';
 import md5 from 'md5';
 import oError from '@overleaf/o-error';
 import pointer from 'json-pointer';
@@ -278,16 +276,18 @@ async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob) {
 async function approveFlDocument(documentId: string, jobId: string) {
   info(`[job ${jobId}] Approving associated FL Doc ${documentId}`);
   try {
-    await axios({
-      method: 'put',
-      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
-      headers: { Authorization: FL_TOKEN },
-      data: {
-        status: 'Approved',
-        comment: '',
-        visibleForSupplier: false,
+    await fetch(
+      `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
+      {
+        method: 'put',
+        headers: { Authorization: FL_TOKEN },
+        body: JSON.stringify({
+          status: 'Approved',
+          comment: '',
+          visibleForSupplier: false,
+        }),
       },
-    });
+    );
   } catch (error_: unknown) {
     throw new Error('Approval request failed', { cause: error_ });
   }
@@ -319,6 +319,7 @@ export const handleAssessmentJob: WorkerFunction = async (
       );
     }
 
+    // eslint-disable-next-line sonarjs/no-duplicate-string
     const item = itemData['food-logiq-mirror'] as unknown as FlAssessment;
 
     if (!item || !isObj(item)) return {};
@@ -353,14 +354,16 @@ export const handleAssessmentJob: WorkerFunction = async (
         },
       });
       info(`[job ${docJobId}] Assessment Auto-${item.state}. [${item._id}]`);
-      await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${
+      await fetch(
+        `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${
           item._id
         }/${failed ? 'reject' : 'approve'}spawnedassessment`,
-        headers: { Authorization: FL_TOKEN },
-        data: item,
-      });
+        {
+          method: 'put',
+          headers: { Authorization: FL_TOKEN },
+          body: JSON.stringify(item),
+        },
+      );
       info(`[job ${docJobId}] Assessment Reasons: ${reasons.join(';')}`);
 
       const docJob = assessmentToFlId.get(item._id);
@@ -429,21 +432,23 @@ export async function postTpDocument({
   const type = item?.shareSource?.type?.name;
 
   // 1. Retrieve the attachments and unzip
-  const { data: zipFile } = await axios({
-    method: 'get',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
-    headers: { Authorization: FL_TOKEN },
-    responseEncoding: 'binary',
-  }).catch((error_) => {
+  const response = await fetch(
+    `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
+    {
+      method: 'get',
+      headers: { Authorization: FL_TOKEN },
+    },
+  ).catch((error_) => {
     if (error_.response?.status === 404) {
       info(`Bad attachments on item ${item._id}. Throwing JobError`);
       throw new JobError(attachmentsErrorMessage, 'bad-fl-attachments');
     } else throw error_;
   });
+  const zipFile = await response.arrayBuffer();
 
   trace(`Got attachments for FL mirror ${item._id}`);
 
-  const zip = await new jszip().loadAsync(zipFile);
+  const zip = await new JSZip().loadAsync(zipFile);
 
   const files = Object.keys(zip.files);
 
@@ -974,26 +979,38 @@ async function constructCOIAssessment(
   updateFlId?: string | void,
 ) {
   const policies = Object.values(result.policies);
-  const cgl = (_.find(policies, ['type', 'Commercial General Liability']) ??
-    {}) as GeneralLiability;
-  const general = Number.parseInt(cgl.each_occurrence || '0');
-  const aggregate = Number.parseInt(cgl.general_aggregate || '0');
-  const product = Number.parseInt(cgl['products_-_compop_agg'] || '0');
+  const cgl = (policies.find(
+    (policy) =>
+      typeof policy !== 'string' &&
+      policy.type === 'Commercial General Liability',
+  ) ?? {}) as GeneralLiability;
+  const general = Number.parseInt(cgl.each_occurrence || '0', 10);
+  const aggregate = Number.parseInt(cgl.general_aggregate || '0', 10);
+  const product = Number.parseInt(cgl['products_-_compop_agg'] || '0', 10);
 
-  const al = (_.find(policies, ['type', 'Automobile Liability']) ??
-    {}) as AutoLiability;
-  const auto = Number.parseInt(al.combined_single_limit || '0');
+  const al = (policies.find(
+    (policy) =>
+      typeof policy !== 'string' && policy.type === 'Automobile Liability',
+  ) ?? {}) as AutoLiability;
+  const auto = Number.parseInt(al.combined_single_limit || '0', 10);
 
-  const ul = (_.find(policies, ['type', 'Umbrella Liability']) ??
-    {}) as UmbrellaLiability;
-  const umbrella = Number.parseInt(ul.each_occurrence || '0');
+  const ul = (policies.find(
+    (policy) =>
+      typeof policy !== 'string' && policy.type === 'Umbrella Liability',
+  ) ?? {}) as UmbrellaLiability;
+  const umbrella = Number.parseInt(ul.each_occurrence || '0', 10);
 
-  const wc = _.find(policies, ['type', `Worker's Compensation`]);
+  const wc = policies.find(
+    (policy) =>
+      typeof policy !== 'string' && policy.type === `Worker's Compensation`,
+  );
   const worker = Boolean(wc);
 
-  const element = (_.find(policies, ['type', `Employers' Liability`]) ??
-    {}) as EmployersLiability;
-  const employer = Number.parseInt(element.el_each_accident || '0');
+  const element = (policies.find(
+    (policy) =>
+      typeof policy !== 'string' && policy.type === `Employers' Liability`,
+  ) ?? {}) as EmployersLiability;
+  const employer = Number.parseInt(element.el_each_accident || '0', 10);
 
   const assess = await spawnAssessment(bid, bname, {
     general,
@@ -1010,7 +1027,7 @@ async function constructCOIAssessment(
     await linkAssessmentToDocument(
       CO_ID,
       {
-        _id: assess.data._id,
+        _id: assess._id,
         type: 'assessment',
       },
       {
@@ -1071,9 +1088,9 @@ async function handleScrapedResult(
     } = configData as unknown as JobConfig;
 
     // 3. Fetch and validate the fl-mirror against the result
-    const flMirrorData = await CONNECTION.get({
+    const { data: flMirrorData } = (await CONNECTION.get({
       path: `/${mirrorid}`,
-    }).then((r) => r.data as JsonObject);
+    })) as { data: JsonObject };
     if (!isObj(flMirrorData)) {
       throw new Error(
         `Could not retrieve 'food-logiq-mirror' from request data.`,
@@ -1161,7 +1178,7 @@ async function handleScrapedResult(
         );
 
         if (!assessmentId) {
-          assessmentId = assess.data._id;
+          assessmentId = assess._id;
           assessmentToFlId.set(assessmentId as string, {
             jobId: docJobId,
             mirrorid,
@@ -1237,11 +1254,14 @@ async function rejectFlDocument(
   info(`[job ${jobId}] Rejecting FL document [${documentId}]. ${message}`);
 
   // Extra check prior to rejection.
-  const { data: doc } = await axios({
-    method: 'get',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}`,
-    headers: { Authorization: FL_TOKEN },
-  });
+  const response = await fetch(
+    `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}`,
+    {
+      method: 'get',
+      headers: { Authorization: FL_TOKEN },
+    },
+  );
+  const doc = (await response.json()) as any;
   if (doc?.shareSource?.approvalInfo?.status === 'Approved') {
     await postUpdate(
       CONNECTION,
@@ -1259,16 +1279,18 @@ async function rejectFlDocument(
     return;
   }
 
-  await axios({
-    method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
-    headers: { Authorization: FL_TOKEN },
-    data: {
-      status: 'Rejected',
-      comment: `${message} Please correct and resubmit or reach out to the Smithfield FSQA team`,
-      visibleForSupplier: true,
+  await fetch(
+    `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
+    {
+      method: 'put',
+      headers: { Authorization: FL_TOKEN },
+      body: JSON.stringify({
+        status: 'Rejected',
+        comment: `${message} Please correct and resubmit or reach out to the Smithfield FSQA team`,
+        visibleForSupplier: true,
+      }),
     },
-  });
+  );
   await CONNECTION.put({
     path: `/${jobId}`,
     data: {
@@ -1286,25 +1308,23 @@ export async function startJobCreator(oada: OADAClient) {
     setConnection(oada);
     await CONNECTION.get({
       path: `${SERVICE_PATH}`,
-    })
-      .then((r) => r.data)
-      .catch(async (cError) => {
-        if (cError.status === 404) {
-          await CONNECTION.put({
-            path: `${SERVICE_PATH}`,
-            data: {},
-            tree,
-          });
-          await CONNECTION.put({
-            path: `${SERVICE_PATH}/businesses`,
-            data: {},
-            tree,
-          });
-          return {};
-        }
+    }).catch(async (cError) => {
+      if (cError.status === 404) {
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}`,
+          data: {},
+          tree,
+        });
+        await CONNECTION.put({
+          path: `${SERVICE_PATH}/businesses`,
+          data: {},
+          tree,
+        });
+        return {};
+      }
 
-        throw cError as Error;
-      });
+      throw cError as Error;
+    });
 
     info(`Path: ${SERVICE_PATH}/businesses`);
 
@@ -1516,10 +1536,7 @@ async function queueAssessmentJob(change: JsonObject, path: string) {
 
       case 'Rejected': {
         // 2b. Notify, clean up, and remove after rejection
-        const reasons: string = _.get(
-          docJob,
-          'fail-reasons',
-        ) as unknown as string;
+        const reasons = `${docJob?.['fail-reasons']}`;
 
         const message = `A supplier Assessment associated with this document has been rejected for the following reasons: ${reasons}.`;
         // Reject the assessment job;
@@ -1670,8 +1687,8 @@ async function queueDocumentJob(fullData: JsonObject, path: string) {
       return;
     }
 
-    const status = item.shareSource && item.shareSource.approvalInfo.status;
-    const approvalUser = _.get(item, `shareSource.approvalInfo.setBy._id`);
+    const status = item?.shareSource?.approvalInfo?.status;
+    const approvalUser = item?.shareSource?.approvalInfo?.setBy?._id;
     info(
       `approvalInfo user: ${approvalUser} (${
         approvalUser === FL_TRELLIS_USER ||
@@ -1687,16 +1704,18 @@ async function queueDocumentJob(fullData: JsonObject, path: string) {
       info(
         `Document [${item._id}] has a supplier update. Setting status to 'Awaiting Approval'.`,
       );
-      await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item.shareSource.draftVersionId}/approvalStatus`,
-        headers: { Authorization: FL_TOKEN },
-        data: {
-          status: 'Awaiting Approval',
-          visibleForSupplier: false,
-          comment: '',
+      await fetch(
+        `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item.shareSource.draftVersionId}/approvalStatus`,
+        {
+          method: 'put',
+          headers: { Authorization: FL_TOKEN },
+          body: JSON.stringify({
+            status: 'Awaiting Approval',
+            visibleForSupplier: false,
+            comment: '',
+          }),
         },
-      });
+      );
       return;
     }
 
@@ -1733,21 +1752,19 @@ async function queueDocumentJob(fullData: JsonObject, path: string) {
       for (const [docJobId, docJob] of flSyncJobMatches) {
         await finishDocument(docJobId, item._id, masterid, status);
       }
-    } else {
       // C. Document handled by others
-      if (status === 'Approved') {
-        info(
-          `Already approved document[${item._id}]; bid[${bid}]; ApprovalUser was not us. Reprocessing and ushering through.`,
-        );
-        // Run it through target and move it to trading-partner /bookmarks
-        jobConfig['allow-rejection'] = false;
-        await postJob(CONNECTION, jobConfig, status);
-      } else {
-        info(
-          `Document ${item._id} approvalUser was not us. status !== Approved. Skipping. Killing any running jobs.`,
-        );
-        await cancelDocJobs(item._id);
-      }
+    } else if (status === 'Approved') {
+      info(
+        `Already approved document[${item._id}]; bid[${bid}]; ApprovalUser was not us. Reprocessing and ushering through.`,
+      );
+      // Run it through target and move it to trading-partner /bookmarks
+      jobConfig['allow-rejection'] = false;
+      await postJob(CONNECTION, jobConfig, status);
+    } else {
+      info(
+        `Document ${item._id} approvalUser was not us. status !== Approved. Skipping. Killing any running jobs.`,
+      );
+      await cancelDocJobs(item._id);
     }
   } catch (cError: unknown) {
     throw oError.tag(cError as Error, 'queueDocumentJob Failed', fullData._id);
@@ -1780,6 +1797,7 @@ export interface FlAssessment {
           }>;
           answerRows: Array<{
             answers: Array<{
+              column?: string;
               answerBool?: boolean;
               answerNumeric?: number;
             }>;
@@ -1824,6 +1842,9 @@ export interface FlObject {
     isDeleted: boolean;
     approvalInfo: {
       status: string;
+      setBy: {
+        _id: string;
+      };
     };
     shareSpecificAttributes: {
       effectiveDate: string;

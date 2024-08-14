@@ -21,8 +21,6 @@ import fs from 'node:fs/promises';
 import { setTimeout } from 'node:timers/promises';
 
 import Fuse from 'fuse.js';
-import _ from 'lodash';
-import { default as axios } from 'axios';
 import { connect } from '@oada/client';
 import { doJob } from '@oada/client/jobs';
 // @ts-expect-error no types
@@ -47,6 +45,8 @@ const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const info = debug('fl-sync:vendorsReport:info');
+const warn = debug('fl-sync:vendorsReport:warn');
+const trace = debug('fl-sync:vendorsReport:trace');
 const error = debug('fl-sync:vendorsReport:error');
 
 const INSTRUCTION_HEADER = `Place one X per set of rows with the same FL Name to select a match. Leave blank to select no matches`;
@@ -57,11 +57,9 @@ export async function makeReport() {
     token,
   });
   try {
-    const businesses = await oada
-      .get({
-        path: `/bookmarks/services/fl-sync/businesses`,
-      })
-      .then((r) => r.data as JsonObject);
+    const { data: businesses } = (await oada.get({
+      path: `/bookmarks/services/fl-sync/businesses`,
+    })) as { data: JsonObject };
 
     const businessKeys = Object.keys(businesses).filter(
       (key) => !key.startsWith('_'),
@@ -125,7 +123,7 @@ export async function makeVendors() {
         config: { element },
       });
     } catch (error_: unknown) {
-      console.log(error_);
+      error(error_);
     }
   }
 }
@@ -509,19 +507,23 @@ async function updateFlInternalIds() {
       internalIds.every((k) => sapids.includes(k))
     ) {
       const memberId = flBus['food-logiq-mirror']._id;
-      const { data: member } = await axios({
-        method: 'get',
-        url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
-        headers: { Authorization: FL_TOKEN },
-      });
+      const res = await fetch(
+        `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
+        {
+          method: 'get',
+          headers: { Authorization: FL_TOKEN },
+        },
+      );
+      const member = (await res.json()) as any;
       member.internalId = sapid;
-      info(`Putting internalId ${sapid} to fl: ${member.business._id}`);
+      info(`Putting internalId ${sapid} to fl: ${member?.business?._id}`);
       /*
-      Await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
-        headers: { Authorization: FL_TOKEN },
-        data: member,
+      await fetch(
+        `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
+        {
+          method: 'put',
+          headers: { Authorization: FL_TOKEN },
+          data: member,
       });
       */
     } else {
@@ -1027,7 +1029,7 @@ async function tradingPartnerFix07102023() {
     .filter((key) => !key.includes('index'));
 
   for await (const tpKey of tpKeys) {
-    console.log({ tpKey });
+    trace({ tpKey });
     const { data: tp } = (await prod.get({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
     })) as unknown as { data: any };
@@ -1054,7 +1056,7 @@ async function tradingPartnerFix07102023() {
         },
       });
     } else {
-      console.log('No foodlogiq id found for TP:', tp._id);
+      warn('No foodlogiq id found for TP:', tp._id);
     }
   }
 
@@ -1137,7 +1139,7 @@ async function fixJobs() {
         object.externalIds.includes(`foodlogiq:${job.config.bid}`),
       ) as { masterid: string };
       if (!result?.masterid) {
-        console.log('no masterid for flId', job.config.bid);
+        warn('no masterid for flId', job.config.bid);
         continue;
       }
       // Console.log('Found masterid', result.masterid);
@@ -1150,7 +1152,7 @@ async function fixJobs() {
           },
         },
       });
-      console.log('put to job', jobKey);
+      trace('put to job', jobKey);
     }
   }
 
@@ -1160,11 +1162,13 @@ async function fixJobs() {
 // Generate the Vendors list that still requires an SAP ID
 // FYI this uses old non-v2 FL endpoints. v1 uses 'internalId' versus 'Internalid'
 async function generateFLVendorsReport() {
-  const { data } = (await axios({
-    method: 'get',
-    url: `${FL_DOMAIN}/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
-    headers: { Authorization: FL_TOKEN },
-  })) as unknown as any;
+  const { data } = (await fetch(
+    `${FL_DOMAIN}/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
+    {
+      method: 'get',
+      headers: { Authorization: FL_TOKEN },
+    },
+  )) as unknown as any;
 
   const csvObject = data
     .filter(

@@ -19,8 +19,6 @@
 import config from './config.js';
 
 import type { Moment, MomentInput } from 'moment';
-import type { AxiosRequestConfig } from 'axios';
-import { default as axios } from 'axios';
 import debug from 'debug';
 import moment from 'moment';
 import sql from 'mssql';
@@ -66,19 +64,19 @@ export async function fetchIncidentsCsv({
   pageIndex?: number;
 }) {
   pageIndex ??= 0;
-  const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?updated=${startTime}..${endTime}`;
-  const request: AxiosRequestConfig = {
-    method: `get`,
-    url,
-    headers: { Authorization: FL_TOKEN },
+  const parameters = new URLSearchParams({
+    updated: `${startTime}..${endTime}`,
+    pageIndex: `${pageIndex}`,
+  });
+  const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?${parameters}`;
+  const response = await fetch(url, { headers: { Authentication: FL_TOKEN } });
+  const data = (await response.json()) as {
+    hasNextPage?: boolean;
+    pageItemCount: number;
+    totalItemCount: number;
   };
-  if (pageIndex) {
-    request.params = { pageIndex };
-  }
 
-  const response = await axios(request);
-
-  const wb = xlsx.read(response.data, { type: 'string', cellDates: true });
+  const wb = xlsx.read(data, { type: 'string', cellDates: true });
   const sheetname = wb.SheetNames[0];
   if (sheetname === undefined) return;
   const sheet = wb.Sheets[String(sheetname)];
@@ -90,11 +88,11 @@ export async function fetchIncidentsCsv({
   }
 
   // Repeat for additional pages of FL results
-  if (response.data.hasNextPage && pageIndex < 1000) {
+  if (data.hasNextPage && pageIndex < 1000) {
     info(
       `Finished page ${pageIndex}. Item ${
-        response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`,
+        data.pageItemCount * (pageIndex + 1)
+      }/${data.totalItemCount}`,
     );
     await fetchIncidentsCsv({
       startTime,
@@ -132,12 +130,11 @@ export async function startIncidents(connection: OADAClient) {
     interval,
     name: 'foodlogiq-incidents',
     getTime: (async () => {
-      const r = await axios({
+      const r = await fetch(`${FL_DOMAIN}/businesses`, {
         method: 'head',
-        url: `${FL_DOMAIN}/businesses`,
         headers: { Authorization: FL_TOKEN },
       });
-      return r.headers.date;
+      return r.headers.get('Date');
     }) as unknown as () => Promise<string>,
   });
 

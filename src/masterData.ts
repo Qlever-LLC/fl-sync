@@ -17,7 +17,6 @@
 
 import config from './config.js';
 
-import _ from 'lodash';
 import debug from 'debug';
 
 import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
@@ -229,7 +228,7 @@ export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
   }
 
   return {
-    ..._.cloneDeep(trellisTPTemplate),
+    ...structuredClone(trellisTPTemplate),
     name: bus.business.name || '',
     address: bus.business.address.addressLineOne || '',
     city: bus.business.address.city || '',

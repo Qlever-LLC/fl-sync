@@ -19,8 +19,6 @@ import config from './config.js';
 
 import fs from 'node:fs/promises';
 
-import _ from 'lodash';
-import { default as axios } from 'axios';
 // @ts-expect-error no types
 import csvjson from 'csvjson';
 import debug from 'debug';
@@ -46,7 +44,7 @@ const info = debug('fl-sync:info');
 const trace = debug('fl-sync:trace');
 const error = debug('fl-sync:error');
 
-const humanReadableJobError = {
+const humanReadableJobError: Record<string, string> = {
   'target-other': 'Other target errors',
   'associated-assessment-rejected': 'Assessment failure',
   'document-validation': 'Document data did not match Food LogiQ data',
@@ -128,17 +126,18 @@ export async function makeFinalReport() {
           return;
         }
 
-        const { data: document } = await oada
+        const { data: document } = (await oada
           .get({
             path: `${SERVICE_PATH}/businesses/${bid}/documents/${docId}`,
           })
-          .catch(() => ({ data: undefined }));
+          .catch(() => ({ data: undefined }))) as { data: any };
 
         if (!document) {
           return;
         }
 
-        const type = _.get(document, 'food-logiq-mirror.shareSource.type.name');
+        // eslint-disable-next-line sonarjs/no-duplicate-string
+        const type = `${document?.['food-logiq-mirror']?.shareSource?.type?.name}`;
         if (type !== 'Certificate of Insurance') {
           return;
         }
@@ -155,23 +154,13 @@ export async function makeFinalReport() {
           return;
         }
 
-        const documentName = _.get(document, 'food-logiq-mirror.name');
-        const busName = _.get(
-          document,
-          'food-logiq-mirror.shareSource.sourceBusiness.name',
-        );
-        const status = `${_.get(
-          document,
-          'food-logiq-mirror.shareSource.approvalInfo.status',
-        )!}`;
-        const user = _.get(
-          document,
-          'food-logiq-mirror.shareSource.approvalInfo.setBy._id',
-        );
-        const createDate = _.get(
-          document,
-          'food-logiq-mirror.versionInfo.createdAt',
-        );
+        const documentName = `${document?.['food-logiq-mirror']?.name} `;
+        const busName = `${document?.['food-logiq-mirror']?.shareSource?.sourceBusiness?.name}`;
+        const status = `${
+          document?.['food-logiq-mirror']?.shareSource?.approvalInfo?.status
+        }`;
+        const user = `${document?.['food-logiq-mirror']?.shareSource?.approvalInfo?.setBy?._id}`;
+        const createDate = `${document?.['food-logiq-mirror']?.versionInfo?.createdAt}`;
         if (status) {
           finalReport.flStatuses[status] ??= {};
           finalReport.flStatuses[status].total ??= 0;
@@ -184,13 +173,15 @@ export async function makeFinalReport() {
         }
 
         try {
-          await axios({
-            method: 'head',
-            url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}`,
-            headers: {
-              Authorization: `${FL_TOKEN}`,
+          await fetch(
+            `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}`,
+            {
+              method: 'head',
+              headers: {
+                Authorization: `${FL_TOKEN}`,
+              },
             },
-          });
+          );
         } catch (cError: unknown) {
           // @ts-expect-error stupid errors
           if (cError.response.status === 404) {
@@ -204,16 +195,16 @@ export async function makeFinalReport() {
         }
 
         // 2. Get the associated job
-        const { data: meta } = await oada
+        const { data: meta } = (await oada
           .get({
             path: `${SERVICE_PATH}/businesses/${bid}/documents/${docId}/_meta`,
           })
-          .catch(() => ({ data: undefined }));
+          .catch(() => ({ data: undefined }))) as { data: any };
         if (!meta) {
           return;
         }
 
-        const jobs = (_.get(meta, 'services.fl-sync.jobs') ??
+        const jobs = (meta?.services?.['fl-sync']?.jobs ??
           {}) as unknown as Record<string, Link>;
         if (Object.keys(jobs).length <= 0) {
           finalReport.missingFlSyncJob ??= 0;
@@ -253,7 +244,8 @@ export async function makeFinalReport() {
         })) as unknown as { data: Job };
 
         // 3. Find the reason for failure
-        const jobError: string | undefined = _.get(job, 'result.JobError');
+        // @ts-expect-error TODO: fix type for job
+        const jobError: string | undefined = job?.result?.JobError;
         if (jobError) {
           finalReport['job-errors'][jobError] =
             finalReport['job-errors'][jobError] || 0;
@@ -308,14 +300,16 @@ export async function makeFinalReport() {
           return;
         }
 
-        const coiId = _.get(job, 'trellisDoc.key');
+        // @ts-expect-error TODO: fix type for job
+        const coiId: unknown = job?.trellisDoc?.key;
 
         if (coiId) {
-          const { data: coiMeta } = await oada.get({
+          const { data: coiMeta } = (await oada.get({
             path: `/resources/${coiId}/_meta`,
-          });
+          })) as { data: any };
 
-          const entryId = _.get(coiMeta, 'services.lf-sync.LaserficheEntryID');
+          const entryId: unknown =
+            coiMeta?.services?.['lf-sync']?.LaserficheEntryID;
           if (entryId) {
             finalReport.inLaserfiche++;
           } else {

@@ -20,16 +20,14 @@ import config from './config.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import { type AxiosRequestConfig, default as axios } from 'axios';
+import moment, { type Moment } from 'moment';
 import Bluebird from 'bluebird';
-import type { Moment } from 'moment';
-import { Service } from '@oada/jobs';
-import _ from 'lodash';
 import debug from 'debug';
+import equal from 'deep-equal';
 import esMain from 'es-main';
-import moment from 'moment';
 
 import type { Change, JsonObject, OADAClient } from '@oada/client';
+import { Service } from '@oada/jobs';
 import { connect } from '@oada/client';
 import { poll } from '@oada/poll';
 
@@ -85,7 +83,7 @@ let CONNECTION: OADAClient;
 async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
   for await (const change of changes) {
     try {
-      if (_.has(change.body, 'autoapprove-assessments')) {
+      if (change.body && 'autoapprove-assessments' in change.body) {
         setAutoApprove(Boolean(change.body['autoapprove-assessments']));
       }
     } catch (cError: unknown) {
@@ -145,15 +143,10 @@ export async function handleItem(
   let bid;
   try {
     let sync;
-    if (type === 'assessments') {
-      bid = _.has(item, 'performedOnBusiness._id')
-        ? item.performedOnBusiness._id
-        : undefined;
-    } else {
-      bid = _.has(item, 'shareSource.sourceBusiness._id')
-        ? item.shareSource.sourceBusiness._id
-        : undefined;
-    }
+    bid =
+      type === 'assessments'
+        ? item?.performedOnBusiness?._id
+        : item?.shareSource?.sourceBusiness?._id;
 
     if (!bid) {
       error(`FL BID undefined for this [${type}] item with _id [${item._id}].`);
@@ -167,7 +160,7 @@ export async function handleItem(
       };
 
       // Check for changes to the resources
-      const equals = _.isEqual(resp['food-logiq-mirror'], item);
+      const equals = equal(resp['food-logiq-mirror'], item);
       if (!equals || FL_FORCE_WRITE) {
         info(
           `Document difference in FL doc [${item._id}] detected. Syncing...`,
@@ -219,7 +212,7 @@ export async function fetchCommunityResources({
   type,
   startTime,
   endTime,
-  pageIndex,
+  pageIndex = 0,
   oada,
 }: {
   type: string;
@@ -228,26 +221,30 @@ export async function fetchCommunityResources({
   pageIndex?: number;
   oada?: OADAClient;
 }) {
-  pageIndex ??= 0;
-  const url =
-    type === 'assessments'
-      ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?lastUpdateAt=${startTime}..${endTime}`
-      : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?sourceCommunities=${COMMUNITY_ID}&versionUpdated=${startTime}..${endTime}`;
-  const request: AxiosRequestConfig = {
-    method: `get`,
-    url,
-    headers: { Authorization: FL_TOKEN },
-  };
-  if (pageIndex) {
-    request.params = { pageIndex };
+  const parameters = new URLSearchParams({
+    pageIndex: `${pageIndex}`,
+  });
+  if (type === 'assessments') {
+    parameters.append('lastUpdatedAt', `${startTime}..${endTime}`);
+  } else {
+    parameters.append('versionUpdated', `${startTime}..${endTime}`);
+    parameters.append('sourceCommunities', COMMUNITY_ID);
   }
 
-  const response = await axios(request);
+  const url =
+    type === 'assessments'
+      ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?${parameters}`
+      : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?${parameters}`;
+  const response = await fetch(url, {
+    method: `get`,
+    headers: { Authorization: FL_TOKEN },
+  });
+  const data = (await response.json()) as any;
   const delay = 0;
 
   // Manually check for changes; Only update the resource if it has changed!
   try {
-    for await (const item of response.data.pageItems as FlObject[]) {
+    for await (const item of data.pageItems as FlObject[]) {
       let retries = 5;
       // eslint-disable-next-line no-await-in-loop
       while (retries-- > 0 && !(await handleItem(type, item, oada)));
@@ -258,11 +255,11 @@ export async function fetchCommunityResources({
   }
 
   // Repeat for additional pages of FL results
-  if (response.data.hasNextPage && pageIndex < 1000) {
+  if (data.hasNextPage && pageIndex < 1000) {
     info(
       `Finished page ${pageIndex}. Item ${
-        response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`,
+        data.pageItemCount * (pageIndex + 1)
+      }/${data.totalItemCount}`,
     );
     if (type === 'documents') info(`Pausing for ${delay / 60_000} minutes`);
     if (type === 'documents') await setTimeout(delay);
@@ -345,7 +342,7 @@ export async function pollFl(lastPoll: Moment, end: Moment) {
 async function fetchAndSync({
   from,
   to,
-  pageIndex,
+  pageIndex = 0,
   forEach,
 }: {
   from: string;
@@ -355,22 +352,18 @@ async function fetchAndSync({
   pageIndex?: number;
   forEach: (input: { business: { _id: string } }) => PromiseLike<void>;
 }) {
-  pageIndex ??= 0;
   try {
-    const request: AxiosRequestConfig = {
+    const url = new URL(from);
+    url.searchParams.append('pageIndex', `${pageIndex}`);
+    const response = await fetch(url, {
       method: `get`,
-      url: from,
       headers: { Authorization: FL_TOKEN },
-    };
-    if (pageIndex) {
-      request.params = { pageIndex };
-    }
-
-    const response = await axios(request);
+    });
+    const data = (await response.json()) as any;
 
     // Manually check for changes; Only update the resource if it has changed!
     await Bluebird.map(
-      response.data.pageItems,
+      data.pageItems,
       async (item: FlObject) => {
         let sync;
         if (to) {
@@ -391,7 +384,7 @@ async function fetchAndSync({
             }
 
             // Check for changes to the resources
-            const equals = _.isEqual(resp?.['food-logiq-mirror'], item);
+            const equals = equal(resp?.['food-logiq-mirror'], item);
             if (equals)
               info(
                 `No resource difference in FL item [${item._id}]. Skipping...`,
@@ -431,11 +424,11 @@ async function fetchAndSync({
     );
 
     // Repeat for additional pages of FL results
-    if (response.data.hasNextPage) {
+    if (data.hasNextPage) {
       info(
         `fetchAndSync Finished page ${pageIndex}. Item ${
-          response.data.pageItemCount * (pageIndex + 1)
-        }/${response.data.totalItemCount}`,
+          data.pageItemCount * (pageIndex + 1)
+        }/${data.totalItemCount}`,
       );
       await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach });
     }
@@ -512,14 +505,11 @@ export async function initialize({
         interval: INTERVAL_MS,
         name: 'food-logiq-poll',
         async getTime() {
-          const {
-            headers: { date },
-          } = await axios({
+          const { headers } = await fetch(`${FL_DOMAIN}/businesses`, {
             method: 'head',
-            url: `${FL_DOMAIN}/businesses`,
             headers: { Authorization: FL_TOKEN },
           });
-          return date!;
+          return headers.get('Date')!;
         },
       });
       info('Started fl-sync poller.');

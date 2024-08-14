@@ -18,11 +18,9 @@
 // Load config first so it can set up env
 import config from './config.js';
 
-import type { AxiosRequestConfig } from 'axios';
 import type { Moment } from 'moment';
-import _ from 'lodash';
-import { default as axios } from 'axios';
 import debug from 'debug';
+import equal from 'deep-equal';
 import moment from 'moment';
 
 import type { JsonObject, OADAClient } from '@oada/client';
@@ -55,7 +53,7 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
       };
 
       // Check for changes to the resources
-      const equals = _.isEqual(resp['food-logiq-mirror'], item);
+      const equals = equal(resp['food-logiq-mirror'], item);
       if (!equals) {
         info(
           `Document difference in FL doc [${item._id}] detected. Syncing...`,
@@ -109,21 +107,22 @@ export async function fetchIncidents({
   oada: OADAClient;
 }) {
   pageIndex ??= 0;
-  const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents?updated=${startTime}..${endTime}`;
-  const request: AxiosRequestConfig = {
-    method: `get`,
-    url,
-    headers: { Authorization: FL_TOKEN },
-  };
-  if (pageIndex) {
-    request.params = { pageIndex };
-  }
-
-  const response = await axios(request);
+  const parameters = new URLSearchParams({
+    updated: `${startTime}..${endTime}`,
+    pageIndex: `${pageIndex}`,
+  });
+  const response = await fetch(
+    `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents?${parameters}`,
+    {
+      method: `get`,
+      headers: { Authorization: FL_TOKEN },
+    },
+  );
+  const data = (await response.json()) as any;
 
   // Manually check for changes; Only update the resource if it has changed!
   try {
-    for await (const item of response.data.pageItems as FlIncident[]) {
+    for await (const item of data.pageItems as FlIncident[]) {
       let retries = 5;
       // eslint-disable-next-line no-await-in-loop
       while (retries-- > 0 && !(await handleItem(item, oada)));
@@ -134,11 +133,11 @@ export async function fetchIncidents({
   }
 
   // Repeat for additional pages of FL results
-  if (response.data.hasNextPage && pageIndex < 1000) {
+  if (data.hasNextPage && pageIndex < 1000) {
     info(
       `Finished page ${pageIndex}. Item ${
-        response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`,
+        data.pageItemCount * (pageIndex + 1)
+      }/${data.totalItemCount}`,
     );
     await fetchIncidents({
       startTime,
@@ -167,7 +166,7 @@ export async function pollIncidents(
 export async function fetchIncidentTypes({
   startTime,
   endTime,
-  pageIndex,
+  pageIndex = 0,
   oada,
 }: {
   startTime: string;
@@ -175,22 +174,22 @@ export async function fetchIncidentTypes({
   pageIndex?: number;
   oada: OADAClient;
 }) {
-  pageIndex ??= 0;
-  const url = `${FL_DOMAIN}/businesses/${CO_ID}/incidentTypes?updated=${startTime}..${endTime}`;
-  const request: AxiosRequestConfig = {
-    method: `get`,
-    url,
-    headers: { Authorization: FL_TOKEN },
-  };
-  if (pageIndex) {
-    request.params = { pageIndex };
-  }
-
-  const response = await axios(request);
+  const parameters = new URLSearchParams({
+    updated: `${startTime}..${endTime}`,
+    pageIndex: `${pageIndex}`,
+  });
+  const response = await fetch(
+    `${FL_DOMAIN}/businesses/${CO_ID}/incidentTypes?${parameters}`,
+    {
+      method: `get`,
+      headers: { Authorization: FL_TOKEN },
+    },
+  );
+  const data = (await response.json()) as any;
 
   // Manually check for changes; Only update the resource if it has changed!
   try {
-    for await (const item of response.data.items as FlIncidentType[]) {
+    for await (const item of data.items as FlIncidentType[]) {
       let retries = 5;
       // eslint-disable-next-line no-await-in-loop
       while (retries-- > 0 && !(await handleIncidentType(item, oada)));
@@ -201,11 +200,11 @@ export async function fetchIncidentTypes({
   }
 
   // Repeat for additional pages of FL results
-  if (response.data.has_more) {
+  if (data.has_more) {
     info(
       `Finished page ${pageIndex}. Item ${
-        response.data.items.length * (pageIndex + 1)
-      }/${response.data.total}`,
+        data.items.length * (pageIndex + 1)
+      }/${data.total}`,
     );
     await fetchIncidentTypes({
       startTime,
@@ -231,7 +230,7 @@ export async function handleIncidentType(
       };
 
       // Check for changes to the resources
-      const equals = _.isEqual(resp['food-logiq-mirror'], item);
+      const equals = equal(resp['food-logiq-mirror'], item);
       if (!equals) {
         info(
           `Document difference in FL doc [${item._id}] detected. Syncing...`,

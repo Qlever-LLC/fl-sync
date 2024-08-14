@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import _ from 'lodash';
 import debug from 'debug';
 
 import type { FlAssessment } from './mirrorWatch.js';
@@ -77,16 +76,16 @@ const checkAssessments = new Map(
       const failed = assessment.sections.map((section) =>
         section.subsections.map((subsection) =>
           subsection.questions.map((question) => {
-            const umbrellaIndex = _.findIndex(
-              question.productEvaluationOptions.columns,
-              ['name', 'Umbrella Coverage'],
-            );
+            const umbrellaIndex =
+              question.productEvaluationOptions.columns.findIndex(
+                (column) => column.name === 'Umbrella Coverage',
+              );
             const { _id } =
               question.productEvaluationOptions.columns[umbrellaIndex]!;
-            const umbrella = _.findIndex(
-              question.productEvaluationOptions.answerRows[0]!.answers,
-              ['column', _id],
-            );
+            const umbrella =
+              question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
+                (answer) => answer.column === _id,
+              );
             return question.productEvaluationOptions.columns.map((column) => {
               let value;
               let requirement;
@@ -99,10 +98,10 @@ const checkAssessments = new Map(
                 column.name !== 'Umbrella Coverage' &&
                 column.type === 'numeric'
               ) {
-                const answerIndex = _.findIndex(
-                  question.productEvaluationOptions.answerRows[0]!.answers,
-                  ['column', column._id],
-                );
+                const answerIndex =
+                  question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
+                    (answer) => answer.column === column._id,
+                  );
                 const value =
                   question?.productEvaluationOptions?.answerRows?.[0]
                     ?.answers?.[answerIndex]?.answerNumeric;
@@ -145,10 +144,10 @@ const checkAssessments = new Map(
                   );
                   reasons.push(reason);
                 } else if (column.type === 'bool') {
-                  const answerIndex = _.findIndex(
-                    question.productEvaluationOptions.answerRows[0]!.answers,
-                    ['column', column._id],
-                  );
+                  const answerIndex =
+                    question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
+                      (answer) => answer.column === column._id,
+                    );
                   const value =
                     question?.productEvaluationOptions?.answerRows?.[0]
                       ?.answers?.[answerIndex]?.answerBool;
