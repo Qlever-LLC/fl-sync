@@ -21,7 +21,6 @@ import test from 'ava';
 
 import { setTimeout } from 'node:timers/promises';
 
-import { default as axios } from 'axios';
 import moment from 'moment';
 
 import type { JsonObject, OADAClient } from '@oada/client';
@@ -80,35 +79,6 @@ test.before(async (t) => {
     }),
   );
 
-  test.after(async () => {
-    /*
-    Let data = await oada.get({
-      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
-    }).then(r => r.data);
-    // @ts-ignore
-    let list = Object.keys(data).filter(k => k.charAt(0) !== '_')
-
-    for (const i of list) {
-      await oada.delete({
-        path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${i}`,
-      })
-    }
-
-    let d = await oada.get({
-      path: `${SERVICE_PATH}/businesses`,
-    }).then(r => r.data);
-    // @ts-ignore
-    let l = Object.keys(d).filter(k => k.charAt(0) !== '_')
-    l = l.filter(k => k !== '61c22e047953d4000ee0363f')
-
-    for (const i of l) {
-      await oada.delete({
-        path: `${SERVICE_PATH}/businesses/${i}`,
-      })
-    }
-   */
-  });
-
   // Blow away the existing coi docs created
   const keys = await oada
     .get({
@@ -136,6 +106,36 @@ test.before(async (t) => {
   });
   return oada;
 });
+
+test.after(async () => {
+  /*
+  Let data = await oada.get({
+    path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
+  }).then(r => r.data);
+  // @ts-ignore
+  let list = Object.keys(data).filter(k => k.charAt(0) !== '_')
+
+  for (const i of list) {
+    await oada.delete({
+      path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${i}`,
+    })
+  }
+
+  let d = await oada.get({
+    path: `${SERVICE_PATH}/businesses`,
+  }).then(r => r.data);
+  // @ts-ignore
+  let l = Object.keys(d).filter(k => k.charAt(0) !== '_')
+  l = l.filter(k => k !== '61c22e047953d4000ee0363f')
+
+  for (const i of l) {
+    await oada.delete({
+      path: `${SERVICE_PATH}/businesses/${i}`,
+    })
+  }
+ */
+});
+
 
 test.skip('Should fail and warn suppliers when multiple PDFs are attached on COI documents.', async (t) => {
   t.timeout(200_000);
@@ -313,16 +313,16 @@ test.skip('Should reject a COI with insufficient policy coverage.', async (t) =>
 
 test.skip("Shouldn't queue a job if already approved by non - trellis user.", async (t) => {
   const flId = '618ab8c04f52f0000eae7220';
-  const { data } = await axios({
-    method: 'get',
-    url: `${FL_DOMAIN}/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${flId}`,
-    headers: {
-      Authorization: `${FL_TOKEN}`,
-    },
-  }).then((r) => {
-    t.log(r);
-    return r;
-  });
+  const response = await fetch(
+    `${FL_DOMAIN}/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${flId}`,
+    {
+      method: 'get',
+      headers: {
+        Authorization: `${FL_TOKEN}`,
+      },
+    });
+  t.log(response);
+  const data = await response.json() as any;
 
   // Mock the mirroring of the doc
   data.shareSource.sourceBusiness._id = SUPPLIER;
@@ -346,16 +346,16 @@ test.skip("Shouldn't queue a job if already approved by non - trellis user.", as
 
 test.skip("Shouldn't queue a job if already rejected by non-trellis user.", async (t) => {
   const flId = '618ab8c04f52f0000eae7220';
-  const { data } = await axios({
-    method: 'get',
-    url: `${FL_DOMAIN}/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${flId}`,
-    headers: {
-      Authorization: `${FL_TOKEN}`,
-    },
-  }).then((r: any) => {
-    t.log(r);
-    return r;
-  });
+  const response = await fetch(
+    `${FL_DOMAIN}/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${flId}`,
+    {
+      method: 'get',
+      headers: {
+        Authorization: `${FL_TOKEN}`,
+      },
+    });
+  t.log(response);
+  const data = await response.json() as any;
 
   // Mock the mirroring of the doc
   data.shareSource.sourceBusiness._id = SUPPLIER;
@@ -417,19 +417,20 @@ async function postDocument(data: any, oada: OADAClient) {
     });
   if (typeof result !== 'object') throw new TypeError('Bad data');
   const bef = new Set(Object.keys(result!).filter((k) => !k.startsWith('_')));
-  await axios({
-    method: 'post',
-    url: `${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`,
-    data,
-    headers: {
-      Authorization: `${FL_TOKEN}`,
-    },
-  });
+  await fetch(
+    `${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`,
+    {
+      method: 'post',
+      body: JSON.stringify(data),
+      headers: {
+        Authorization: `${FL_TOKEN}`,
+      },
+    });
   await setTimeout(INTERVAL_MS + 5000);
   const { data: resp } = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
   });
-  if (typeof resp !== 'object') throw new Error('Bad data');
+  if (typeof resp !== 'object') throw new TypeError('Bad data');
   // @ts-expect-error
   const aft = Object.keys(resp).filter((k) => !k.startsWith('_'));
   let flId = aft.filter((k) => !bef.has(k));

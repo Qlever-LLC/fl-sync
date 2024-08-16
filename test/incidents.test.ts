@@ -23,7 +23,6 @@ import test from 'ava';
 
 import { setTimeout } from 'node:timers/promises';
 
-import { default as axios } from 'axios';
 import sql from 'mssql';
 
 import { ensureTable, fetchIncidentsCsv } from '../dist/flIncidentsCsv.js';
@@ -380,12 +379,13 @@ test('write a new incident and wait for Trellis to get it.', async (t) => {
   t.log({ query });
   const before = await sql.query(`${query}`);
   t.log(before);
-  await axios({
-    method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/${incidentId}`,
-    headers: { Authorization: FL_TOKEN },
-    data,
-  });
+  await fetch(
+    `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/${incidentId}`,
+    {
+      method: 'put',
+      headers: { Authorization: FL_TOKEN },
+      body: JSON.stringify(data),
+    });
   const startTime = new Date().toISOString().slice(0, 10);
   await fetchIncidentsCsv({ startTime, endTime: startTime });
   const after = await sql.query(`${query}`);

@@ -518,7 +518,7 @@ async function updateFlInternalIds() {
       member.internalId = sapid;
       info(`Putting internalId ${sapid} to fl: ${member?.business?._id}`);
       /*
-      await fetch(
+      Await fetch(
         `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
         {
           method: 'put',
