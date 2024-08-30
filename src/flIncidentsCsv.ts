@@ -18,9 +18,7 @@
 // Load config first so it can set up env
 import config from './config.js';
 
-import type { AxiosRequestConfig } from 'axios';
-import type { Moment } from 'moment';
-import { default as axios } from 'axios';
+import type { Moment, MomentInput } from 'moment';
 import debug from 'debug';
 import moment from 'moment';
 import sql from 'mssql';
@@ -66,19 +64,19 @@ export async function fetchIncidentsCsv({
   pageIndex?: number;
 }) {
   pageIndex ??= 0;
-  const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?updated=${startTime}..${endTime}`;
-  const request: AxiosRequestConfig = {
-    method: `get`,
-    url,
-    headers: { Authorization: FL_TOKEN },
+  const parameters = new URLSearchParams({
+    updated: `${startTime}..${endTime}`,
+    pageIndex: `${pageIndex}`,
+  });
+  const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?${parameters}`;
+  const response = await fetch(url, { headers: { Authentication: FL_TOKEN } });
+  const data = (await response.json()) as {
+    hasNextPage?: boolean;
+    pageItemCount: number;
+    totalItemCount: number;
   };
-  if (pageIndex) {
-    request.params = { pageIndex };
-  }
 
-  const response = await axios(request);
-
-  const wb = xlsx.read(response.data, { type: 'string', cellDates: true });
+  const wb = xlsx.read(data, { type: 'string', cellDates: true });
   const sheetname = wb.SheetNames[0];
   if (sheetname === undefined) return;
   const sheet = wb.Sheets[String(sheetname)];
@@ -90,11 +88,11 @@ export async function fetchIncidentsCsv({
   }
 
   // Repeat for additional pages of FL results
-  if (response.data.hasNextPage && pageIndex < 1000) {
+  if (data.hasNextPage && pageIndex < 1000) {
     info(
       `Finished page ${pageIndex}. Item ${
-        response.data.pageItemCount * (pageIndex + 1)
-      }/${response.data.totalItemCount}`,
+        data.pageItemCount * (pageIndex + 1)
+      }/${data.totalItemCount}`,
     );
     await fetchIncidentsCsv({
       startTime,
@@ -132,12 +130,11 @@ export async function startIncidents(connection: OADAClient) {
     interval,
     name: 'foodlogiq-incidents',
     getTime: (async () => {
-      const r = await axios({
+      const r = await fetch(`${FL_DOMAIN}/businesses`, {
         method: 'head',
-        url: `${FL_DOMAIN}/businesses`,
         headers: { Authorization: FL_TOKEN },
       });
-      return r.headers.date;
+      return r.headers.get('Date');
     }) as unknown as () => Promise<string>,
   });
 
@@ -181,13 +178,15 @@ export async function ensureTable() {
 */
 
 // 1. If its a thing with some slashes in parentheses, allow them to be in any order;
-function checkSlashThings(row: any) {
+function checkSlashThings(row: Row) {
   const pattern = / \((?:[^()/]+\/)+[^()/]+\)/;
 
-  const matches = Object.keys(allColumns).filter((key) => pattern.test(key));
+  const matches = Object.keys(allColumns).filter(
+    (key): key is keyof typeof allColumns => pattern.test(key),
+  );
 
   const keys = Object.keys(row).filter(
-    (key) => !(key in allColumns) && pattern.test(key),
+    (key): key is keyof Row => !(key in allColumns) && pattern.test(key),
   );
   for (const key of keys) {
     const parts = key.split(' (');
@@ -198,6 +197,7 @@ function checkSlashThings(row: any) {
       const cSet = cParts[1]!.replace(/\)$/, '').split('/').sort();
       const same = cSet.every((item, index) => set[index] === item);
       if (same) {
+        // @ts-expect-error idk what this is
         row[col] = row[key];
         delete row[key];
       }
@@ -213,7 +213,8 @@ const noDelete = new Set([
   'incidentDate (Incident Date/Date of Delivery/Delivery Date)',
 ]);
 
-const alters = {
+const alters: Record<keyof Row, keyof Row> = {
+  // @ts-expect-error
   'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options? (Be sure to include your FoodLogiQ Incident ID in your email)':
     'Did you email your Distribution Account Rep and _SupplyChain@Potbelly.com for recovery options?',
   'Community': 'community (Community/Business Name)',
@@ -223,12 +224,15 @@ const alters = {
 };
 
 // Handle schema changes over time (get csv output for whole history versus a small, recent window and results will vary a lot)
-function handleSchemaChanges(row: any) {
+function handleSchemaChanges(row: Row) {
   if ('CREDIT NOTE' in row) {
+    // @ts-expect-error these types confuse ts
+    // eslint-disable-next-line sonarjs/no-duplicate-string
     row['Credit Note'] = row['CREDIT NOTE'];
     delete row['CREDIT NOTE'];
   }
 
+  // eslint-disable-next-line sonarjs/no-duplicate-string
   if (!('Credit note to supplier' in row)) {
     row['Credit note to supplier'] = row['Credit Note'];
   }
@@ -239,12 +243,13 @@ function handleSchemaChanges(row: any) {
 
   row = checkSlashThings(row);
 
-  for (const oldKey in alters) {
+  for (const [oldKey, alter] of Object.entries(alters)) {
     if (oldKey in row) {
+      const key = oldKey as keyof Row;
       // @ts-expect-error description
-      row[alters[oldKey]] = row[alters[oldKey]] || row[oldKey];
-      if (!noDelete.has(oldKey)) {
-        delete row[oldKey];
+      row[alter] ??= row[oldKey];
+      if (!noDelete.has(key)) {
+        delete row[key];
       }
     }
   }
@@ -269,16 +274,14 @@ async function syncToSql(csvData: any) {
   await sql.connect(sqlConfig);
 
   for await (const row of csvData) {
-    info(`Input Row: ${JSON.stringify(row, null, 2)}`);
     let newRow = handleSchemaChanges(row);
     newRow = handleTypes(newRow);
     newRow = ensureNotNull(newRow);
+    info({ row, newRow }, 'Input Row and new Row');
 
-    info(`newRow: ${JSON.stringify(newRow, null, 2)}`);
+    const columnKeys = Object.keys(allColumns).sort() as Array<keyof Row>;
 
     const request = new sql.Request();
-
-    const columnKeys = Object.keys(allColumns).sort();
 
     const selectString = columnKeys
       .map((key, index) => {
@@ -296,7 +299,7 @@ async function syncToSql(csvData: any) {
 
     const values = columnKeys.map((_, index) => `@val${index}`).join(',');
 
-    const query = `MERGE
+    const query = /* sql */ `MERGE
     INTO ${table} WITH (HOLDLOCK) AS target
       USING (SELECT ${selectString}) AS source
       (${cols})
@@ -312,33 +315,33 @@ async function syncToSql(csvData: any) {
   }
 }
 
-function handleTypes(newRow: any) {
-  const columnKeys = Object.keys(allColumns).sort();
+function handleTypes(newRow: Row) {
+  const columnKeys = Object.keys(allColumns).sort() as Array<
+    keyof typeof allColumns
+  >;
 
   return Object.fromEntries(
     columnKeys.map((key) => {
-      if (allColumns[key]!.type.includes('DATE')) {
-        if (moment.isDate(newRow[key])) {
-          return [key, moment(newRow[key]).toDate()];
+      if (allColumns[key].type.includes('DATE')) {
+        const value = newRow[key] as MomentInput;
+        if (moment.isDate(value)) {
+          return [key, moment(value).toDate()];
         }
 
-        if (moment(newRow[key], 'MMM DD, YYYY', true).isValid()) {
-          return [key, moment(newRow[key], 'MMM DD, YYYY').toDate()];
+        if (moment(value, 'MMM DD, YYYY', true).isValid()) {
+          return [key, moment(value, 'MMM DD, YYYY').toDate()];
         }
 
-        if (moment(newRow[key], 'MMMM D, YYYY hh:mma', true).isValid()) {
-          return [
-            key,
-            moment(newRow[key], 'MMMM D, YYYY hh:mma', true).toDate(),
-          ];
+        if (moment(value, 'MMMM D, YYYY hh:mma', true).isValid()) {
+          return [key, moment(value, 'MMMM D, YYYY hh:mma', true).toDate()];
         }
 
-        if (moment(newRow[key], 'YYYY-MM-DD', true).isValid()) {
-          return [key, moment(newRow[key], 'YYYY-MM-DD', true).toDate()];
+        if (moment(value, 'YYYY-MM-DD', true).isValid()) {
+          return [key, moment(value, 'YYYY-MM-DD', true).toDate()];
         }
       }
 
-      if (allColumns[key]!.type === 'BIT') {
+      if (allColumns[key].type === 'BIT') {
         if (newRow[key] === true || newRow[key] === false) {
           return [key, newRow[key]];
         }
@@ -358,12 +361,12 @@ function handleTypes(newRow: any) {
             return [key, newRow[key].toLowerCase() === 'true'];
           }
 
-          return [key, null];
+          return [key, undefined];
         }
       }
 
-      if (allColumns[key]!.type.includes('DECIMAL')) {
-        if (!isNaN(Number(newRow[key]))) {
+      if (allColumns[key].type.includes('DECIMAL')) {
+        if (!Number.isNaN(Number(newRow[key]))) {
           return [
             key,
             Number(newRow[key]) > SQL_MAX_VALUE
@@ -373,7 +376,7 @@ function handleTypes(newRow: any) {
         }
 
         if (typeof newRow[key] === 'string') {
-          return [key, null];
+          return [key, undefined];
         }
       }
 
@@ -382,27 +385,27 @@ function handleTypes(newRow: any) {
         typeof newRow[key] === 'string' &&
         ['', 'na', 'n/a'].includes(newRow[key].toLowerCase())
       ) {
-        return [key, null];
+        return [key, undefined];
       }
 
       if (!newRow[key]) {
-        return [key, null];
+        return [key, undefined];
       }
 
       if (
-        allColumns[key]!.type.includes('VARCHAR') &&
+        allColumns[key].type.includes('VARCHAR') &&
         typeof newRow[key] === 'string'
       ) {
         return [key, newRow[key]];
       }
 
-      return [key, null];
+      return [key, undefined];
     }),
   );
   return newRow;
 }
 
-function ensureNotNull(newRow: any) {
+function ensureNotNull(newRow: Row) {
   const nonNulls = Object.values(allColumns).filter(
     (col) =>
       (newRow[col.name] === null || newRow[col.name] === undefined) &&
@@ -410,12 +413,16 @@ function ensureNotNull(newRow: any) {
   );
   for (const { name, type } of nonNulls) {
     if (type === 'BIT') {
+      // @ts-expect-error these types confuse ts
       newRow[name] = false;
     } else if (type.includes('VARCHAR')) {
+      // @ts-expect-error these types confuse ts
       newRow[name] = '';
     } else if (type.includes('DECIMAL')) {
+      // @ts-expect-error these types confuse ts
       newRow[name] = 0;
     } else if (type === 'DATE') {
+      // @ts-expect-error these types confuse ts
       newRow[name] = newRow['Created At'];
     }
   }
@@ -424,7 +431,7 @@ function ensureNotNull(newRow: any) {
 }
 
 interface Column {
-  name: string;
+  name: keyof Row;
   allowNull: boolean;
   type: string;
 }
@@ -433,10 +440,11 @@ interface Column {
 // 1) removed [CREDIT NOTE] as duplicate of [Credit Note]
 // 2) trimmed the really long potbelly column name that was > 128 characters
 // 3) set Id to VARCHAR(100)
-const allColumns: Record<string, Column> = {
+const allColumns: Record<keyof Row, Column> = {
   'Id': { name: 'Id', type: 'VARCHAR(100)', allowNull: false },
   'Incident ID': {
     name: 'Incident ID',
+    // eslint-disable-next-line sonarjs/no-duplicate-string
     type: 'VARCHAR(max)',
     allowNull: false,
   },
@@ -873,6 +881,7 @@ const allColumns: Record<string, Column> = {
   },
   'Quantity Credit Amount (Not Dollars)': {
     name: 'Quantity Credit Amount (Not Dollars)',
+    // eslint-disable-next-line sonarjs/no-duplicate-string
     type: 'DECIMAL(38, 0)',
     allowNull: true,
   },

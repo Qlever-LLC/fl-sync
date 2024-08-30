@@ -1,4 +1,4 @@
-/*
+/**
  * @license
  * Copyright 2022 Qlever LLC
  *
@@ -15,24 +15,27 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/prevent-abbreviations */
-
-import { connect, doJob } from '@oada/client';
-import type { JsonObject, OADAClient } from '@oada/client';
-import { Service, parseAttachment } from '@oada/jobs';
-import type { TreeKey } from '@oada/types/oada/tree/v1.js';
+/* eslint-disable unicorn/prevent-abbreviations, sonarjs/no-duplicate-string */
 
 import config from '../dist/config.js';
-import debug from 'debug';
-import type { FlBusiness } from '../dist/mirrorWatch.js';
-import { handleFlBusiness, mapTradingPartner } from '../dist/masterData.js';
+
 import test from 'ava';
-import ksuid from 'ksuid';
-import { tree } from '../dist/tree.js';
-import { tpReportConfig, tpReportFilter } from '../dist/reportConfig.js';
+
 import { setTimeout } from 'node:timers/promises';
-import { parse } from 'node:path';
+
+import debug from 'debug';
+import ksuid from 'ksuid';
+
+import type { JsonObject, OADAClient } from '@oada/client';
+import { Service, parseAttachment } from '@oada/jobs';
+import { connect } from '@oada/client';
+import { doJob } from '@oada/client/jobs';
+
+import { handleFlBusiness, mapTradingPartner } from '../dist/masterData.js';
+import { tpReportConfig, tpReportFilter } from '../dist/reportConfig.js';
+import type { FlBusiness } from '../dist/mirrorWatch.js';
 import { prepTpEmail } from '../dist/index.js';
+import { tree } from '../dist/tree.js';
 
 const warn = debug('fl-sync:warn');
 const TOKEN = process.env.TOKEN ?? ''; // || config.get('trellis.token') || '';

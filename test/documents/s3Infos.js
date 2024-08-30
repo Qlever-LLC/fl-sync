@@ -14,6 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/* eslint-disable sonarjs/no-duplicate-string */
+
 export const others = {
   'multiple-cois': {
     '6284fa41f9c461000ffd19cf': {
@@ -38,6 +41,7 @@ export const others = {
     },
   },
 };
+
 /* Bad doc attachment
  *bid:5bae1421dd01530001b56f0f item:60d5cb749c09d3000ed43659
 BucketName: "flq-connect-production"
@@ -308,15 +312,14 @@ export const types = {
       updatedAt: '0001-01-01T00:00:00Z',
     },
   },
-  'Pure Food Guaranty and Indemnification Agr6284fa41f9c461000ffd19cfeement (LOG)':
-    {
-      '60ca45a6aeb961000e3a92c7': {
-        BucketName: 'flq-connect-production',
-        S3Name: '60ca459d9c09d3000feefcfc',
-        fileName: 'Smithfield Letter of G 202106162021.pdf',
-        updatedAt: '0001-01-01T00:00:00Z',
-      },
+  'Pure Food Guaranty and Indemnification Agreement (LOG)': {
+    '60ca45a6aeb961000e3a92c7': {
+      BucketName: 'flq-connect-production',
+      S3Name: '60ca459d9c09d3000feefcfc',
+      fileName: 'Smithfield Letter of G 202106162021.pdf',
+      updatedAt: '0001-01-01T00:00:00Z',
     },
+  },
   'Rate Sheet': {
     '60db48509c09d3000f7a60f0': {
       BucketName: 'flq-connect-production',
@@ -382,7 +385,8 @@ export const types = {
     '61dc587514a99d000e413aa3': {
       BucketName: 'flq-connect-production',
       S3Name: '61dc5828719715000e70b985',
-      fileName: 'SQF Edition 9 J&B Wholesale Distributing, Inc. Certficate.pdf',
+      fileName:
+        'SQF Edition 9 J&B Wholesale Distributing, Inc. Certificate.pdf',
       updatedAt: '0001-01-01T00:00:00Z',
     },
   },

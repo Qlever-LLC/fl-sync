@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-import _ from 'lodash';
 import debug from 'debug';
 
 import type { FlAssessment } from './mirrorWatch.js';
 
 const info = debug('fl-sync:mirror-watch:info');
+
+const DEPTH = 5;
 
 /**
  * Checks assessment
@@ -56,7 +57,7 @@ export function checkAssessment(assessment: FlAssessment) {
         ),
       ),
     )
-    .flat(5)
+    .flat(DEPTH)
     .some(Boolean);
   return { failed, reasons };
 } // CheckAssessment
@@ -68,22 +69,23 @@ const checkAssessments = new Map(
      * @param {*} assessment
      * @returns
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     '606cc945c8f60c000e53947f'(assessment: FlAssessment) {
       const reasons: string[] = [];
       info(`Checking COI assessment ${assessment._id}`);
       const failed = assessment.sections.map((section) =>
         section.subsections.map((subsection) =>
           subsection.questions.map((question) => {
-            const umbrellaIndex = _.findIndex(
-              question.productEvaluationOptions.columns,
-              ['name', 'Umbrella Coverage'],
-            );
+            const umbrellaIndex =
+              question.productEvaluationOptions.columns.findIndex(
+                (column) => column.name === 'Umbrella Coverage',
+              );
             const { _id } =
               question.productEvaluationOptions.columns[umbrellaIndex]!;
-            const umbrella = _.findIndex(
-              question.productEvaluationOptions.answerRows[0]!.answers,
-              ['column', _id],
-            );
+            const umbrella =
+              question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
+                (answer) => answer.column === _id,
+              );
             return question.productEvaluationOptions.columns.map((column) => {
               let value;
               let requirement;
@@ -96,10 +98,10 @@ const checkAssessments = new Map(
                 column.name !== 'Umbrella Coverage' &&
                 column.type === 'numeric'
               ) {
-                const answerIndex = _.findIndex(
-                  question.productEvaluationOptions.answerRows[0]!.answers,
-                  ['column', column._id],
-                );
+                const answerIndex =
+                  question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
+                    (answer) => answer.column === column._id,
+                  );
                 const value =
                   question?.productEvaluationOptions?.answerRows?.[0]
                     ?.answers?.[answerIndex]?.answerNumeric;
@@ -142,10 +144,10 @@ const checkAssessments = new Map(
                   );
                   reasons.push(reason);
                 } else if (column.type === 'bool') {
-                  const answerIndex = _.findIndex(
-                    question.productEvaluationOptions.answerRows[0]!.answers,
-                    ['column', column._id],
-                  );
+                  const answerIndex =
+                    question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
+                      (answer) => answer.column === column._id,
+                    );
                   const value =
                     question?.productEvaluationOptions?.answerRows?.[0]
                       ?.answers?.[answerIndex]?.answerBool;
@@ -162,7 +164,7 @@ const checkAssessments = new Map(
           }),
         ),
       );
-      const thing = failed.flat(5);
+      const thing = failed.flat(DEPTH);
       return { failed: thing.some(Boolean), reasons };
     },
   }),

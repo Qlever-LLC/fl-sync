@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import type { FlObject } from './mirrorWatch.js';
 import type { Moment } from 'moment';
 import debug from 'debug';
-import { fromOadaType } from './conversions.js';
 import moment from 'moment';
+
+import type { FlObject } from './mirrorWatch.js';
+import { fromOadaType } from './conversions.js';
 
 const info = debug('fl-sync:mirror-watch:info');
 const error = debug('fl-sync:mirror-watch:error');
@@ -151,7 +152,7 @@ const validation = {
   },
   'Product Specification': (trellisDoc: any, flMirror: FlObject) => {
   },
-  'Pure Food Guaranty and Indemnification Agr6284fa41f9c461000ffd19cfeement (LOG)': (trellisDoc: any, flMirror: FlObject) => {
+  'Pure Food Guaranty and Indemnification Agreement (LOG)': (trellisDoc: any, flMirror: FlObject) => {
   },
   'Rate Sheet': (trellisDoc: any, flMirror: FlObject) => {
   },

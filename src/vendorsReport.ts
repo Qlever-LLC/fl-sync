@@ -22,8 +22,7 @@ import { default as axios } from 'axios';
 import type { JsonObject, OADAClient } from '@oada/client';
 import { connect } from '@oada/client';
 import { doJob } from '@oada/client/jobs';
-import _ from 'lodash';
-// @ts-expect-error
+// @ts-expect-error no types
 import csvjson from 'csvjson';
 import debug from 'debug';
 import Fuse from 'fuse.js';
@@ -38,6 +37,8 @@ const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const info = debug('fl-sync:vendorsReport:info');
+const warn = debug('fl-sync:vendorsReport:warn');
+const trace = debug('fl-sync:vendorsReport:trace');
 const error = debug('fl-sync:vendorsReport:error');
 
 const INSTRUCTION_HEADER = `Place one X per set of rows with the same FL Name to select a match. Leave blank to select no matches`;
@@ -48,11 +49,9 @@ export async function makeReport() {
     token,
   });
   try {
-    const businesses = await oada
-      .get({
-        path: `/bookmarks/services/fl-sync/businesses`,
-      })
-      .then((r) => r.data as JsonObject);
+    const { data: businesses } = (await oada.get({
+      path: `/bookmarks/services/fl-sync/businesses`,
+    })) as { data: JsonObject };
 
     const businessKeys = Object.keys(businesses).filter(
       (key) => !key.startsWith('_'),
@@ -88,7 +87,7 @@ export async function makeReport() {
       }
     }
   } catch (error_: unknown) {
-    console.log(error_);
+    error(error_);
   }
 }
 
@@ -116,7 +115,7 @@ export async function makeVendors() {
         config: { element },
       });
     } catch (error_: unknown) {
-      console.log(error_);
+      error(error_);
     }
   }
 }
@@ -131,7 +130,7 @@ function mapVendor(vendor: any) {
     address: vendor.StreetAddress,
     city: vendor.City,
     state: vendor.Region,
-    phone: vendor.Telephone1 || vendor.Telephone2,
+    phone: vendor.Telephone1 ?? vendor.Telephone2,
     zip: vendor.PostalCode,
     ein1: vendor.TaxNumber2,
     ein2: vendor.TaxNumber2,
@@ -178,9 +177,7 @@ async function loadVendors() {
     'externalIds',
   ];
   const searchKeysList = new Set(
-    searchKeys.map((index_) =>
-      typeof index_ === 'string' ? index_ : index_.name,
-    ),
+    searchKeys.map((index) => (typeof index === 'string' ? index : index.name)),
   );
   const options = {
     includeScore: true,
@@ -189,7 +186,7 @@ async function loadVendors() {
     // minMatchCharLength: 3,
     useExtendedSearch: true,
   };
-  const index = new Fuse<typeof values[0]>([], options);
+  const index = new Fuse<(typeof values)[0]>([], options);
 
   const collection = Object.values(values || {}).filter(
     (value) => value !== undefined,
@@ -202,13 +199,11 @@ async function loadVendors() {
     token,
   });
 
-  const businesses = await conn
-    .get({
-      path: `/bookmarks/services/fl-sync/businesses`,
-    })
-    .then((r) => r.data as JsonObject);
+  const { data: businesses } = await conn.get({
+    path: `/bookmarks/services/fl-sync/businesses`,
+  });
 
-  const businessKeys = Object.keys(businesses).filter(
+  const businessKeys = Object.keys(businesses as JsonObject).filter(
     (key) => !key.startsWith('_'),
   );
 
@@ -240,7 +235,7 @@ async function loadVendors() {
         // @ts-expect-error
         'FL Name': foodlogiq.name.replace(',', ''),
         'FL Address':
-          `${foodlogiq.address || ' '} - ${foodlogiq.city || ' '} - ${foodlogiq.state || ' '}`.replace(
+          `${foodlogiq.address ?? ' '} - ${foodlogiq.city ?? ' '} - ${foodlogiq.state ?? ' '}`.replace(
             ',',
             '',
           ),
@@ -256,7 +251,7 @@ async function loadVendors() {
         // @ts-expect-error
         'FL Name': foodlogiq.name.replace(',', ''),
         'FL Address':
-          `${foodlogiq.address || ' '} - ${foodlogiq.city || ' '} - ${foodlogiq.state || ' '}`.replace(
+          `${foodlogiq.address ?? ' '} - ${foodlogiq.city ?? ' '} - ${foodlogiq.state ?? ' '}`.replace(
             ',',
             '',
           ),
@@ -279,7 +274,7 @@ async function loadVendors() {
     headers: 'relative',
   });
 
-  fs.writeFileSync('vendorsReport.csv', csvData, { encoding: 'utf8' });
+  await fs.writeFile('vendorsReport.csv', csvData, { encoding: 'utf8' });
 }
 
 // Basically, try a bunch of different permutations of the given attributes and
@@ -350,13 +345,13 @@ function findMultipleXs(rows: any) {
     headers: 'relative',
   });
 
-  fs.writeFileSync('vendorsReportMultipleMatches.csv', csvData, { encoding: 'utf8' })
+  await fs.writeFile('vendorsReportMultipleMatches.csv', csvData, { encoding: 'utf8' })
   */
   return rows.map((r: any) => ids.includes(r['FL ID']));
 }
 
 //
-function reduceForPerfectMatches(rows: any) {
+async function reduceForPerfectMatches(rows: any) {
   const highScoreIds = new Set(
     Array.from(
       new Set(
@@ -376,14 +371,14 @@ function reduceForPerfectMatches(rows: any) {
     headers: 'relative',
   });
 
-  fs.writeFileSync('vendorsReportReduced.csv', csvData, { encoding: 'utf8' });
+  await fs.writeFile('vendorsReportReduced.csv', csvData, { encoding: 'utf8' });
   return found;
 }
 
 // Validate the report responses and identify which ones require additional work
-function validateReportResponses() {
+async function validateReportResponses() {
   const rows = csvjson.toObject(
-    fs.readFileSync('./Vendor Report - Updated 05.04.23.csv', {
+    await fs.readFile('./Vendor Report - Updated 05.04.23.csv', {
       encoding: 'utf8',
     }),
     {
@@ -432,9 +427,7 @@ async function fixVendors(oada: OADAClient, matches: any[]) {
     });
 
     if (fromTP.length !== 1 || toTP.length !== 1) {
-      console.log(
-        `Multiple TP results found for food logiq: ${flId}, sap: ${sapid}`,
-      );
+      info(`Multiple TP results found for food logiq: ${flId}, sap: ${sapid}`);
       continue;
     }
 
@@ -459,7 +452,7 @@ async function updateFlInternalIds() {
     token,
   });
   const rows = csvjson.toObject(
-    fs.readFileSync('./VendorReport-05-19-23.csv', { encoding: 'utf8' }),
+    await fs.readFile('./VendorReport-05-19-23.csv', { encoding: 'utf8' }),
     {
       delimiter: ',',
       quote: '"',
@@ -506,23 +499,27 @@ async function updateFlInternalIds() {
       internalIds.every((k) => sapids.includes(k))
     ) {
       const memberId = flBus['food-logiq-mirror']._id;
-      const { data: member } = await axios({
-        method: 'get',
-        url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
-        headers: { Authorization: FL_TOKEN },
-      });
+      const res = await fetch(
+        `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
+        {
+          method: 'get',
+          headers: { Authorization: FL_TOKEN },
+        },
+      );
+      const member = (await res.json()) as any;
       member.internalId = sapid;
-      console.log(`Putting internalId ${sapid} to fl: ${member.business._id}`);
+      info(`Putting internalId ${sapid} to fl: ${member?.business?._id}`);
       /*
-      Await axios({
-        method: 'put',
-        url: `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
-        headers: { Authorization: FL_TOKEN },
-        data: member,
+      Await fetch(
+        `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
+        {
+          method: 'put',
+          headers: { Authorization: FL_TOKEN },
+          data: member,
       });
       */
     } else {
-      console.log('internalId already set for FL vendor', bid);
+      info('internalId already set for FL vendor', bid);
     }
   }
 }
@@ -534,7 +531,7 @@ async function processReportResponses() {
     domain,
     token,
   });
-  const { matches } = validateReportResponses();
+  const { matches } = await validateReportResponses();
 
   //  Await fixVendors(prod, matches);
 }
@@ -601,7 +598,7 @@ async function copyProdData() {
 
   let passed = false;
   for await (const tpKey of tpKeys) {
-    console.log({ tpKey });
+    info({ tpKey });
     if (tpKey === '5ddd8032343c9b000126f0f8') passed = true;
     if (!passed) continue;
     let { data: tp } = (await prod.get({
@@ -638,7 +635,7 @@ async function copyProdData() {
         doc = Object.fromEntries(
           Object.entries(doc).filter(([k, _]) => !k.startsWith('_')),
         );
-        console.log(
+        info(
           { doc },
           `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
         );
@@ -646,16 +643,20 @@ async function copyProdData() {
           await dev.head({
             path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
           });
-        } catch (error_: any) {
-          if (error_.status !== 404) throw error_;
+        } catch (error_: unknown) {
+          // @ts-expect-error error bs
+          if (error_.status !== 404) {
+            throw error_;
+          }
+
           try {
             await dev.put({
               path: `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
               data: doc,
               tree,
             });
-          } catch (error_: any) {
-            console.log(error_);
+          } catch (error_: unknown) {
+            error(error_);
           }
 
           await setTimeout(500);
@@ -932,11 +933,11 @@ async function tradingPartnerPrep06142023() {
 
   for await (const tpKey of tpKeys) {
     if (list.has(tpKey)) {
-      console.log('skipping', tpKey);
+      info('skipping', tpKey);
       continue;
     }
 
-    console.log({ tpKey });
+    info({ tpKey });
     const { data: tp } = (await prod.get({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
     })) as unknown as { data: OldTradingPartner };
@@ -974,7 +975,7 @@ async function tradingPartnerPrep06142023() {
           `foodlogiq:${change[0].body.foodlogiq.business._id}`,
         ];
       } else {
-        console.log('No foodlogiq id found for TP:', tp._id);
+        error('No foodlogiq id found for TP:', tp._id);
       }
     }
 
@@ -989,7 +990,7 @@ async function tradingPartnerPrep06142023() {
     await prod.delete({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}/foodlogiq`,
     });
-    console.log('done with tp');
+    info('done with tp');
   }
   process.exit();
 }
@@ -1011,7 +1012,7 @@ async function tradingPartnerFix07102023() {
     .filter((key) => !key.includes('index'));
 
   for await (const tpKey of tpKeys) {
-    console.log({ tpKey });
+    trace({ tpKey });
     const { data: tp } = (await prod.get({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
     })) as unknown as { data: any };
@@ -1038,7 +1039,7 @@ async function tradingPartnerFix07102023() {
         },
       });
     } else {
-      console.log('No foodlogiq id found for TP:', tp._id);
+      warn('No foodlogiq id found for TP:', tp._id);
     }
   }
 
@@ -1121,7 +1122,7 @@ async function fixJobs() {
         object.externalIds.includes(`foodlogiq:${job.config.bid}`),
       ) as { masterid: string };
       if (!result?.masterid) {
-        console.log('no masterid for flId', job.config.bid);
+        warn('no masterid for flId', job.config.bid);
         continue;
       }
       // Console.log('Found masterid', result.masterid);
@@ -1134,7 +1135,7 @@ async function fixJobs() {
           },
         },
       });
-      console.log('put to job', jobKey);
+      trace('put to job', jobKey);
     }
   }
 
@@ -1144,11 +1145,13 @@ async function fixJobs() {
 // Generate the Vendors list that still requires an SAP ID
 // FYI this uses old non-v2 FL endpoints. v1 uses 'internalId' versus 'Internalid'
 async function generateFLVendorsReport() {
-  const { data } = (await axios({
-    method: 'get',
-    url: `${FL_DOMAIN}/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
-    headers: { Authorization: FL_TOKEN },
-  })) as unknown as any;
+  const { data } = (await fetch(
+    `${FL_DOMAIN}/businesses/${CO_ID}/communities/${COMMUNITY_ID}/memberships`,
+    {
+      method: 'get',
+      headers: { Authorization: FL_TOKEN },
+    },
+  )) as unknown as any;
 
   const csvObject = data
     .filter(
@@ -1176,7 +1179,7 @@ async function generateFLVendorsReport() {
   });
 
   const date = Date.now().toLocaleString().split('T')[0];
-  fs.writeFileSync(`Vendor Report${date}.csv`, csvData, { encoding: 'utf8' });
+  await fs.writeFile(`Vendor Report${date}.csv`, csvData, { encoding: 'utf8' });
 }
 
 export async function generateFLDocsReport(inDate?: string) {
@@ -1237,12 +1240,12 @@ export async function generateFLDocsReport(inDate?: string) {
     headers: 'relative',
   });
 
-  fs.writeFileSync(
+  await fs.writeFile(
     `TrellisFLDocsReport${now.toISOString().split('T')[0]}.csv`,
     csvData,
     { encoding: 'utf8' },
   );
-  console.log('done');
+  info('done');
 }
 
 export async function generateIncrementalFLVendorsReport(inDate?: string) {
@@ -1300,16 +1303,16 @@ export async function generateIncrementalFLVendorsReport(inDate?: string) {
     headers: 'relative',
   });
 
-  fs.writeFileSync(
+  await fs.writeFile(
     `TrellisFLVendorsReport${now.toISOString().split('T')[0]}.csv`,
     csvData,
     { encoding: 'utf8' },
   );
-  console.log('done');
+  info('done');
 }
 
 setInterval(() => {
-  console.log('stay alive');
+  info('stay alive');
 }, 3000);
 // Await loadVendors();
 // await makeVendors();

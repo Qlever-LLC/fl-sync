@@ -1,4 +1,4 @@
-/*
+/**
  * @license
  * Copyright 2022 Qlever LLC
  *
@@ -17,18 +17,20 @@
 
 /* eslint-disable unicorn/prevent-abbreviations */
 
-import _ from 'lodash';
 import config from '../dist/config.js';
+
 import test from 'ava';
-import type { JsonObject, OADAClient } from '@oada/client';
-import type { Job, Logger } from '@oada/jobs';
-import { ListWatch } from '@oada/list-lib';
+
 import { setTimeout } from 'node:timers/promises';
+
+import type { Job, Logger } from '@oada/jobs';
+import type { JsonObject, OADAClient } from '@oada/client';
+import { ListWatch } from '@oada/list-lib';
+import type { TreeKey } from '@oada/types/oada/tree/v1.js';
 import { connect } from '@oada/client';
 
-import type { JobConfig } from '../dist/mirrorWatch.js';
-import type { TreeKey } from '@oada/types/oada/tree/v1.js';
 import { handleDocumentJob, isObj, postJob } from '../dist/mirrorWatch.js';
+import type { JobConfig } from '../dist/mirrorWatch.js';
 import { mostRecentKsuid } from '../dist/report.js';
 import { initialize as service } from '../dist/index.js';
 import { tree } from '../dist/tree.js';
@@ -140,7 +142,7 @@ test('A job that is started should be resumed on restart of the service', async 
     path,
   });
 
-  handleDocumentJob(job as unknown as Job, {
+  void handleDocumentJob(job as unknown as Job, {
     oada,
     jobId: jobKey,
     log: undefined as unknown as Logger,
@@ -250,5 +252,5 @@ export async function targetWatchOnAdd(item: any, key: string) {
         [key]: { _id },
       },
     });
-  } catch {}
+  } catch { }
 }

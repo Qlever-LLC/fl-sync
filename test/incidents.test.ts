@@ -14,14 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { default as axios } from 'axios';
+
+/* eslint-disable sonarjs/no-duplicate-string, unicorn/no-null */
+
 import config from '../dist/config.js';
-import { ensureTable, fetchIncidentsCsv } from '../dist/flIncidentsCsv.js';
-import { setTimeout } from 'node:timers/promises';
-import sql from 'mssql';
-// Import moment from 'moment';
-// @ts-expect-error
+
 import test from 'ava';
+
+import { setTimeout } from 'node:timers/promises';
+
+import sql from 'mssql';
+
+import { ensureTable, fetchIncidentsCsv } from '../dist/flIncidentsCsv.js';
+// Import moment from 'moment';
+//
 const FL_TOKEN = config.get('foodlogiq.token') || '';
 const FL_DOMAIN = config.get('foodlogiq.domain') || '';
 const CO_ID = config.get('foodlogiq.community.owner.id');
@@ -53,32 +59,32 @@ const sqlConfig = {
 // @ts-expect-error mssql docs show an await on connect...
 await sql.connect(sqlConfig);
 
-test.before(async (t: any) => {
+test.before((t) => {
   t.timeout(60_000);
 });
 
-test.skip('test csv stuff', async (t: any) => {
+test.skip('test csv stuff', async (t) => {
   t.timeout(200_000);
   const result = await ensureTable();
-  console.log(result);
+  t.log(result);
   t.truthy(result);
 });
 
-test.skip('test big initial load of csv data', async (t: any) => {
+test.skip('test big initial load of csv data', async (t) => {
   t.timeout(200_000);
   const startTime = '2021-09-01';
   const endTime = '2022-09-13';
   await fetchIncidentsCsv({ startTime, endTime });
 });
 
-test.skip('test short period of csv data', async (t: any) => {
+test.skip('test short period of csv data', async (t) => {
   t.timeout(200_000);
   const startTime = '2022-09-15';
   const endTime = '2022-09-28';
   await fetchIncidentsCsv({ startTime: endTime, endTime: '' });
 });
 
-test('write a new incident and wait for Trellis to get it.', async (t: any) => {
+test('write a new incident and wait for Trellis to get it.', async (t) => {
   t.timeout(200_000);
   const incidentId = '63331d4d73ff53000fe4679c';
   const data = {
@@ -364,25 +370,26 @@ test('write a new incident and wait for Trellis to get it.', async (t: any) => {
     },
     comment: 'some plant to plant comment before submitting',
   };
-  // @ts-expect-error
   data.extraAttributes.estNo = Number.parseInt(
-    Math.random() * 100_000,
+    `${Math.random() * 100_000}`,
+    10,
   ).toString();
   // Get the before state
   const query = `SELECT * FROM incidents WHERE Id = '${incidentId}'`;
-  console.log({ query });
+  t.log({ query });
   const before = await sql.query(`${query}`);
-  console.dir(before);
-  await axios({
-    method: 'put',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/${incidentId}`,
-    headers: { Authorization: FL_TOKEN },
-    data,
-  });
+  t.log(before);
+  await fetch(
+    `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/${incidentId}`,
+    {
+      method: 'put',
+      headers: { Authorization: FL_TOKEN },
+      body: JSON.stringify(data),
+    });
   const startTime = new Date().toISOString().slice(0, 10);
   await fetchIncidentsCsv({ startTime, endTime: startTime });
   const after = await sql.query(`${query}`);
-  console.log({ after });
+  t.log({ after });
   await setTimeout(20_000);
   t.not(before, after);
 });

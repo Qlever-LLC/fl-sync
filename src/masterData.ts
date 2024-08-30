@@ -17,13 +17,11 @@
 
 import config from './config.js';
 
-import _ from 'lodash';
 import debug from 'debug';
 
 import { doJob } from '@oada/client/jobs';
 import type { JsonObject, OADAClient } from '@oada/client';
 import type { Job, WorkerFunction } from '@oada/jobs';
-
 import tree from './tree.masterData.js';
 import type { FlBusiness } from './mirrorWatch.js';
 import { postUpdate } from '@oada/jobs';
@@ -226,7 +224,7 @@ export function mapTradingPartner(bus: FlBusiness): TradingPartnerNoLinks {
   }
 
   return {
-    ..._.cloneDeep(trellisTPTemplate),
+    ...structuredClone(trellisTPTemplate),
     name: bus.business.name || '',
     address: bus.business.address.addressLineOne || '',
     city: bus.business.address.city || '',

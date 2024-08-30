@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-import type { FlObject } from './mirrorWatch.js';
-import _ from 'lodash';
+// TODO: Remove lodash entirely
+import { get, has, set } from 'lodash-es';
 import debug from 'debug';
+
+import type { FlObject } from './mirrorWatch.js';
 
 const info = debug('fl-sync:mirror-watch:info');
 
 export function fromOadaType(type: string) {
-  const vals = Object.values(conversions);
-
-  return vals.find((v) => v.urlName === type);
+  const values = Object.values(conversions);
+  return values.find((v) => v.urlName === type);
 }
 
 export async function flToTrellis(flDocument: FlObject) {
@@ -34,35 +35,36 @@ export async function flToTrellis(flDocument: FlObject) {
 
   for (const key of Object.keys(shareSpecificAttributes).filter(
     (attributePath: string) =>
-      _.has(flDocument, `shareSource.shareSpecificAttributes.${attributePath}`),
+      has(flDocument, `shareSource.shareSpecificAttributes.${attributePath}`),
   )) {
     const trellisPath =
       shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
     const flPath = `shareSource.shareSpecificAttributes.${key}`;
-    const flValue = _.get(flDocument, flPath);
+    // @ts-expect-error TODO: fix types
+    const flValue: unknown = flDocument?.shareSource?.shareSpecificAttributes?.[key];
     info(
       `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,
     );
-    _.set(document, trellisPath, flValue);
+    set(document, trellisPath, flValue);
   }
 
   // Handle any default attributes
   for (const flPath of Object.keys(defaultAttributes).filter(
-    (attributePath: string) => _.has(flDocument, attributePath),
+    (attributePath: string) => has(flDocument, attributePath),
   )) {
     const trellisPath =
       defaultAttributes[flPath as keyof typeof defaultAttributes];
-    const flValue = _.get(flDocument, flPath);
+    const flValue = get(flDocument, flPath);
     info(
       `Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,
     );
-    _.set(document, trellisPath, flValue);
+    set(document, trellisPath, flValue);
   }
 
   // Handle document date separately. This is required for LF.
   if (!document.document_date && document.effective_date) {
     document.document_date = document.effective_date; // ||
-    //      _.get(flDocument, 'versionInfo.createdAt').slice(0, 10);
+    //      get(flDocument, 'versionInfo.createdAt').slice(0, 10);
     info(
       `Setting document date from effective or create date: ${document.document_date}`,
     );
