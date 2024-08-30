@@ -54,15 +54,11 @@ export const tree: Record<string, any> = {
       'trading-partners': {
         '_type': 'application/vnd.oada.trading-partners.1+json',
         '_rev': 0,
-        'masterid-index': {
-          '_type': 'application/vnd.oada.trading-partners.1+json',
-          '_rev': 0,
-          '*': {
-            _type: 'application/vnd.oada.trading-partner.1+json',
-            _rev: 0,
-            shared: docsTree,
-            bookmarks: docsTree,
-          },
+        '*': {
+          _type: 'application/vnd.oada.trading-partner.1+json',
+          _rev: 0,
+          shared: docsTree,
+          bookmarks: docsTree,
         },
       },
       'documents': {

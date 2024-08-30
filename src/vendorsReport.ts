@@ -18,9 +18,8 @@
 import config from './config.js';
 
 import fs from 'node:fs';
-import { type AxiosRequestConfig, default as axios } from 'axios';
+import { default as axios } from 'axios';
 import type { JsonObject, OADAClient } from '@oada/client';
-import { JsonPointer } from 'json-ptr';
 import { connect } from '@oada/client';
 import { doJob } from '@oada/client/jobs';
 import _ from 'lodash';
@@ -28,19 +27,12 @@ import _ from 'lodash';
 import csvjson from 'csvjson';
 import debug from 'debug';
 import Fuse from 'fuse.js';
-import moment from 'moment';
 import type { FlBusiness } from './mirrorWatch.js';
 import { type TradingPartner, mapTradingPartner } from './masterData.js';
 import { setTimeout } from 'node:timers/promises';
 import tree from './tree.masterData.js';
-import { tree as flTree } from './tree.js';
-import { handleFlBusiness } from './masterData.js';
 
 const { domain, token } = config.get('trellis');
-const SERVICE_NAME = config.get('service.name');
-const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
-const SUPPLIER = config.get('foodlogiq.testSupplier.id');
-const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const FL_DOMAIN = config.get('foodlogiq.domain');
@@ -999,15 +991,6 @@ async function tradingPartnerPrep06142023() {
     });
     console.log('done with tp');
   }
-
-  /*
-  Await prod.delete({
-    path: `/bookmarks/trellisfw/trading-partners/masterid-index`,
-  });
-  await prod.delete({
-    path: `/bookmarks/trellisfw/trading-partners/expand-index`,
-  });
-  */
   process.exit();
 }
 

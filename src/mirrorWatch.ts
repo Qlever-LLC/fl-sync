@@ -20,7 +20,7 @@ import config from './config.js';
 
 import { setTimeout } from 'node:timers/promises';
 
-import { default as axios, type AxiosRequestConfig } from 'axios';
+import { default as axios } from 'axios';
 import _ from 'lodash';
 import debug from 'debug';
 import jszip from 'jszip';
@@ -28,14 +28,11 @@ import md5 from 'md5';
 import crypto from 'crypto';
 import oError from '@overleaf/o-error';
 import pointer from 'json-pointer';
-import { Gauge } from '@oada/lib-prom';
+//import { Gauge } from '@oada/lib-prom';
 
 import type {
-  Change,
-  Json,
   JsonObject,
   OADAClient,
-  PUTRequest,
 } from '@oada/client';
 import type { Job, WorkerFunction } from '@oada/jobs';
 import { JobError, postUpdate } from '@oada/jobs';
@@ -48,12 +45,8 @@ import { getAutoApprove } from './index.js';
 import mirrorTree from './tree.mirrorWatch.js';
 import tree from './tree.js';
 import { validateResult } from './docTypeValidation.js';
-import { handleFlBusiness } from './masterData.js';
 import { doJob, JobEventType, JobsRequest } from '@oada/client/jobs';
-import type OADAJob from '@oada/types/oada/service/job.js';
 
-const DOMAIN = config.get('trellis.domain');
-const TRELLIS_TOKEN = config.get('trellis.token');
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
 const ASSESSMENT_TEMPLATE_ID = config.get('foodlogiq.assessment-template.id');
@@ -70,7 +63,6 @@ const warn = debug('fl-sync:mirror-watch:warn');
 const SERVICE_NAME = config.get('service.name');
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 const pending = `${SERVICE_PATH}/jobs/pending`;
-const MASTERID_INDEX_PATH = `/bookmarks/trellisfw/trading-partners/masterid-index`;
 const assessmentToFlId = new Map<
   string,
   { jobId: string; mirrorid: string; flId: string; assessmentJobId?: string }
@@ -189,7 +181,7 @@ const rejectable = {
 async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob) {
   const { status } = targetJob;
   const docJobId = docJob.oadaId as string;
-  const { bid, masterid, key } = docJob.config;
+  const { masterid, key } = docJob.config;
   if (docJob && docJob.config['allow-rejection'] === false) {
     info(
       `[job ${docJobId}] Target finished with status ${status} on already-approved doc.`,
@@ -822,7 +814,8 @@ async function finishDocument(
     const { result } = targetJob;
 
     let type = Object.keys(result || {})[0];
-    if (result && result.name && result.name === 'TimeoutError') {
+    //if (result && result.name && result.name === 'TimeoutError') {
+    if (result && (result.name || result.code)) {
       type = undefined;
     }
 
@@ -872,9 +865,27 @@ async function finishDocument(
         `[job ${docJobId}] Moving approved document to [/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`,
       );
       await CONNECTION.ensure({
+        path: `/${masterid}/bookmarks/trellisfw`,
+        data: {},
+        headers: {
+          'Content-Type': 'application/vnd.oada.trellisfw.1+json',
+        }
+      });
+      await CONNECTION.ensure({
+        path: `/${masterid}/bookmarks/trellisfw/documents`,
+        data: {},
+        headers: {
+          'Content-Type': 'application/vnd.trellisfw.documents.1+json',
+        }
+      });
+      await CONNECTION.ensure({
         path: `/${masterid}/bookmarks/trellisfw/documents/${type}`,
         data: {},
-        tree,
+        /*
+        headers: {
+          'Content-Type': `application/vnd.trellisfw.${type}.1+json`,
+        }
+          */
       });
       await CONNECTION.delete({
         path: `/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
@@ -882,6 +893,11 @@ async function finishDocument(
       await CONNECTION.put({
         path: `/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
         data: { _id, _rev: 0 },
+        /*
+        headers: {
+          'Content-Type': `application/vnd.trellisfw.${type}.1+json`,
+        }
+          */
       });
       await CONNECTION.delete({
         path: `/${masterid}/shared/trellisfw/documents/${type}/${key}`,
@@ -929,29 +945,44 @@ export interface TrellisCOI {
     al: AutoLiability;
     el: EmployersLiability;
     ul: UmbrellaLiability;
+    wc: WorkersCompensation;
   };
 }
 
-interface GeneralLiability {
-  'type': string;
-  'each_occurrence': string;
-  'general_aggregate': string;
-  'products_-_compop_agg': string;
+export interface GeneralLiability {
+  type: 'Commercial General Liability';
+  each_occurrence: number;
+  general_aggregate: number;
+  "products_-_compop_agg": number;
+  expire_date: string;
+  effective_date: string;
 }
 
-interface AutoLiability {
-  type: string;
-  combined_single_limit: string;
+export interface AutoLiability {
+  type: 'Automobile Liability';
+  combined_single_limit: number;
+  expire_date: string;
+  effective_date: string;
 }
 
-interface UmbrellaLiability {
-  type: string;
-  each_occurrence: string;
+export interface UmbrellaLiability {
+  type: 'Umbrella Liability';
+  each_occurrence: number | string;
+  expire_date: string;
+  effective_date: string;
 }
 
-interface EmployersLiability {
-  type: string;
-  el_each_accident: string;
+export interface EmployersLiability {
+  type: "Employers' Liability";
+  el_each_accident: number | string;
+  expire_date: string;
+  effective_date: string;
+}
+
+export interface WorkersCompensation {
+  type: "Worker's Compensation";
+  effective_date: string;
+  expire_date: string;
 }
 
 /**
@@ -974,24 +1005,24 @@ async function constructCOIAssessment(
   const policies = Object.values(result.policies);
   const cgl = (_.find(policies, ['type', 'Commercial General Liability']) ??
     {}) as GeneralLiability;
-  const general = Number.parseInt(cgl.each_occurrence || '0');
-  const aggregate = Number.parseInt(cgl.general_aggregate || '0');
-  const product = Number.parseInt(cgl['products_-_compop_agg'] || '0');
+  const general = Number.parseInt(String(cgl.each_occurrence) || '0');
+  const aggregate = Number.parseInt(String(cgl.general_aggregate) || '0');
+  const product = Number.parseInt(String(cgl['products_-_compop_agg']) || '0');
 
   const al = (_.find(policies, ['type', 'Automobile Liability']) ??
     {}) as AutoLiability;
-  const auto = Number.parseInt(al.combined_single_limit || '0');
+  const auto = Number.parseInt(String(al.combined_single_limit) || '0');
 
   const ul = (_.find(policies, ['type', 'Umbrella Liability']) ??
     {}) as UmbrellaLiability;
-  const umbrella = Number.parseInt(ul.each_occurrence || '0');
+  const umbrella = Number.parseInt(String(ul.each_occurrence) || '0');
 
   const wc = _.find(policies, ['type', `Worker's Compensation`]);
   const worker = Boolean(wc);
 
   const element = (_.find(policies, ['type', `Employers' Liability`]) ??
     {}) as EmployersLiability;
-  const employer = Number.parseInt(element.el_each_accident || '0');
+  const employer = Number.parseInt(String(element.el_each_accident) || '0');
 
   const assess = await spawnAssessment(bid, bname, {
     general,
@@ -1962,6 +1993,7 @@ type TargetJob = {
   result: Record<string, Record<string, { _id: string }>> | any;
   updates: Record<string, any>;
 };
+
 type FlSyncJob = {
   _id: string;
   oadaId: string;

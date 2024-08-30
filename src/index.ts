@@ -504,7 +504,7 @@ export async function initialize({
 
     // Some queued jobs may depend on the poller to complete, so start it now.
     if (polling === undefined || polling) {
-      await poll({
+      poll({
         connection: CONNECTION,
         basePath: SERVICE_PATH,
         pollOnStartup: true,
@@ -530,6 +530,7 @@ export async function initialize({
       const svc = new Service({
         name: SERVICE_NAME,
         oada: CONNECTION,
+        concurrency: 10,
         opts: { skipQueueOnStartup },
       });
 
