@@ -252,5 +252,5 @@ export async function targetWatchOnAdd(item: any, key: string) {
         [key]: { _id },
       },
     });
-  } catch { }
+  } catch {}
 }

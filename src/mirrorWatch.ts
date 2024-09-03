@@ -25,26 +25,20 @@ import _ from 'lodash';
 import debug from 'debug';
 import jszip from 'jszip';
 import md5 from 'md5';
-import crypto from 'crypto';
 import oError from '@overleaf/o-error';
 import pointer from 'json-pointer';
-//import { Gauge } from '@oada/lib-prom';
+// Import { Gauge } from '@oada/lib-prom';
 
-import type {
-  JsonObject,
-  OADAClient,
-} from '@oada/client';
-import type { Job, WorkerFunction } from '@oada/jobs';
-import { JobError, postUpdate } from '@oada/jobs';
-import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
-import {
-  type Job,
+import type { JsonObject, OADAClient } from '@oada/client';
+import type { type Job, Job ,
   JobError,
   type WorkerFunction,
+  WorkerFunction,
   postUpdate,
 } from '@oada/jobs';
+import { JobError, postUpdate } from '@oada/jobs';
+import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
 import { JobEventType, JobsRequest, doJob } from '@oada/client/jobs';
-import type { JsonObject, OADAClient } from '@oada/client';
 
 import { flToTrellis, fromOadaType } from './conversions.js';
 import { linkAssessmentToDocument, spawnAssessment } from './assessments.js';
@@ -54,7 +48,6 @@ import { handleFlBusiness } from './masterData.js';
 import mirrorTree from './tree.mirrorWatch.js';
 import tree from './tree.js';
 import { validateResult } from './docTypeValidation.js';
-import { doJob, JobEventType, JobsRequest } from '@oada/client/jobs';
 
 const FL_DOMAIN = config.get('foodlogiq.domain');
 const FL_TOKEN = config.get('foodlogiq.token');
@@ -189,7 +182,7 @@ const rejectable = {
 
 async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob) {
   const { status } = targetJob;
-  const docJobId = docJob.oadaId as string;
+  const docJobId = docJob.oadaId;
   const { masterid, key } = docJob.config;
   if (docJob && docJob.config['allow-rejection'] === false) {
     info(
@@ -836,7 +829,7 @@ async function finishDocument(
     const { result } = targetJob;
 
     let type = Object.keys(result || {})[0];
-    //if (result && result.name && result.name === 'TimeoutError') {
+    // If (result && result.name && result.name === 'TimeoutError') {
     if (result && (result.name || result.code)) {
       type = undefined;
     }
@@ -889,20 +882,20 @@ async function finishDocument(
         data: {},
         headers: {
           'Content-Type': 'application/vnd.oada.trellisfw.1+json',
-        }
+        },
       });
       await CONNECTION.ensure({
         path: `/${masterid}/bookmarks/trellisfw/documents`,
         data: {},
         headers: {
           'Content-Type': 'application/vnd.trellisfw.documents.1+json',
-        }
+        },
       });
       await CONNECTION.ensure({
         path: `/${masterid}/bookmarks/trellisfw/documents/${type}`,
         data: {},
         /*
-        headers: {
+        Headers: {
           'Content-Type': `application/vnd.trellisfw.${type}.1+json`,
         }
           */
@@ -914,7 +907,7 @@ async function finishDocument(
         path: `/${masterid}/bookmarks/trellisfw/documents/${type}/${key}`,
         data: { _id, _rev: 0 },
         /*
-        headers: {
+        Headers: {
           'Content-Type': `application/vnd.trellisfw.${type}.1+json`,
         }
           */
@@ -971,12 +964,12 @@ export interface TrellisCOI {
 }
 
 export interface GeneralLiability {
-  type: 'Commercial General Liability';
-  each_occurrence: number;
-  general_aggregate: number;
-  "products_-_compop_agg": number;
-  expire_date: string;
-  effective_date: string;
+  'type': 'Commercial General Liability';
+  'each_occurrence': number;
+  'general_aggregate': number;
+  'products_-_compop_agg': number;
+  'expire_date': string;
+  'effective_date': string;
 }
 
 export interface AutoLiability {
@@ -2034,9 +2027,9 @@ interface TargetJob {
   config: Record<string, any>;
   result: Record<string, Record<string, { _id: string }>> | any;
   updates: Record<string, any>;
-};
+}
 
-type FlSyncJob = {
+interface FlSyncJob {
   _id: string;
   oadaId: string;
   status: string;

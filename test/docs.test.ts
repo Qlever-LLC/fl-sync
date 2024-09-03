@@ -136,7 +136,6 @@ test.after(async () => {
  */
 });
 
-
 test.skip('Should fail and warn suppliers when multiple PDFs are attached on COI documents.', async (t) => {
   t.timeout(200_000);
   const data = coi;
@@ -320,9 +319,10 @@ test.skip("Shouldn't queue a job if already approved by non - trellis user.", as
       headers: {
         Authorization: `${FL_TOKEN}`,
       },
-    });
+    },
+  );
   t.log(response);
-  const data = await response.json() as any;
+  const data = (await response.json()) as any;
 
   // Mock the mirroring of the doc
   data.shareSource.sourceBusiness._id = SUPPLIER;
@@ -353,9 +353,10 @@ test.skip("Shouldn't queue a job if already rejected by non-trellis user.", asyn
       headers: {
         Authorization: `${FL_TOKEN}`,
       },
-    });
+    },
+  );
   t.log(response);
-  const data = await response.json() as any;
+  const data = (await response.json()) as any;
 
   // Mock the mirroring of the doc
   data.shareSource.sourceBusiness._id = SUPPLIER;
@@ -417,15 +418,13 @@ async function postDocument(data: any, oada: OADAClient) {
     });
   if (typeof result !== 'object') throw new TypeError('Bad data');
   const bef = new Set(Object.keys(result!).filter((k) => !k.startsWith('_')));
-  await fetch(
-    `${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`,
-    {
-      method: 'post',
-      body: JSON.stringify(data),
-      headers: {
-        Authorization: `${FL_TOKEN}`,
-      },
-    });
+  await fetch(`${FL_DOMAIN}/v2/businesses/${SUPPLIER}/documents`, {
+    method: 'post',
+    body: JSON.stringify(data),
+    headers: {
+      Authorization: `${FL_TOKEN}`,
+    },
+  });
   await setTimeout(INTERVAL_MS + 5000);
   const { data: resp } = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,

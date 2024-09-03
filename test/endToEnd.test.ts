@@ -237,8 +237,9 @@ test(`End to end basic COI approval`, async (t) => {
       headers: {
         Authorization: FL_TOKEN,
       },
-    });
-  const data = await response.json() as any;
+    },
+  );
+  const data = (await response.json()) as any;
 
   t.is(data.shareRecipients[0].approvalInfo.status, 'Approved');
 });
@@ -262,8 +263,9 @@ test(`End to end expired COI should be rejected`, async (t) => {
       headers: {
         Authorization: FL_TOKEN,
       },
-    });
-  const data = await response.json() as any;
+    },
+  );
+  const data = (await response.json()) as any;
 
   t.is(data.shareRecipients[0].approvalInfo.status, 'Rejected');
 });
@@ -290,8 +292,9 @@ test(`End to end multiple COIs in one PDF should be left alone`, async (t) => {
       headers: {
         Authorization: FL_TOKEN,
       },
-    });
-  const data = await response.json() as any;
+    },
+  );
+  const data = (await response.json()) as any;
 
   t.is(data.shareRecipients[0].approvalInfo.status, 'Awaiting Approval');
 });
@@ -678,20 +681,18 @@ async function postDocument(document: any, filename: string) {
   const file = await fs.readFile(`./test/pdfs/${filename}`, {
     encoding: 'utf8',
   });
-  const res = await fetch(
-    `${FL_DOMAIN}/attachment`,
-    {
-      method: 'post',
-      body: JSON.stringify({
-        ContentType: 'application/pdf',
-        FileName: filename,
-      }),
-      headers: {
-        'Authorization': FL_TOKEN,
-        'Content-Type': 'application/json',
-      },
-    });
-  const data = await res.json() as any;
+  const res = await fetch(`${FL_DOMAIN}/attachment`, {
+    method: 'post',
+    body: JSON.stringify({
+      ContentType: 'application/pdf',
+      FileName: filename,
+    }),
+    headers: {
+      'Authorization': FL_TOKEN,
+      'Content-Type': 'application/json',
+    },
+  });
+  const data = (await res.json()) as any;
 
   const fd = new FormData();
   const aDoc = {
@@ -711,7 +712,8 @@ async function postDocument(document: any, filename: string) {
         'Authorization': `${FL_TOKEN}`,
         'Content-Type': 'multipart/form-data',
       },
-    });
+    },
+  );
 
   return response.json() as any;
 }

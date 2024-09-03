@@ -1,13 +1,29 @@
+/**
+ * @license
+ * Copyright 2024 Qlever LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 import { default as axios } from 'axios';
-// @ts-ignore
+// @ts-expect-error
 import csvjson from 'csvjson';
-import { connect, type OADAClient } from '@oada/client';
+import { type OADAClient, connect } from '@oada/client';
 import { doJob } from '@oada/client/jobs';
 import debug from 'debug';
 import Excel from 'exceljs';
 import config from '../config.js';
 import jszip from 'jszip';
-// @ts-ignore
+// @ts-expect-error
 import jp from 'jsonpath';
 import type { AxiosRequestConfig } from 'axios';
 import { serializeError } from 'serialize-error'
@@ -27,9 +43,9 @@ const FL_DOMAIN = config.get('foodlogiq.domain');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 
-//let filename = 'cois-8-5-2024.json';
-let filename = 'cois-08-13-2024.json';
-//let fname = 'cois-08-09-2024.json';
+// Let filename = 'cois-8-5-2024.json';
+const filename = 'cois-08-13-2024.json';
+// Let fname = 'cois-08-09-2024.json';
 
 const fail = 'FFdc4242';
 const pass = 'FF77bc65';
@@ -37,19 +53,19 @@ const warnFill = 'FFf6ce1e';
 
 const limits : Record<string, Limit> = {
   '$.policies.cgl.each_occurrence': { 
-    limit: 2000000,
+    limit: 2_000_000,
     title: 'General Liability\n(Per Occurrence)\n(Greater than or equal to 2000000)'
   },
   '$.policies.cgl.general_aggregate': {
-    limit: 5000000,
+    limit: 5_000_000,
     title: 'General Liability\n(General Aggregate)\n(Greater than or equal to 5000000)'
   },
   '$.policies.al.combined_single_limit': {
-    limit: 1000000,
+    limit: 1_000_000,
     title: 'Automobile Liability\n(Greater than or equal to 1000000)'
   },
   '$.policies.el.el_each_accident': {
-    limit: 1000000,
+    limit: 1_000_000,
     title: `Employer's Liability\n(Greater than or equal to 1000000)`
   }
 }
@@ -61,12 +77,12 @@ const warn = debug('fl-sync:warn');
 let oada: OADAClient;
 try {
   oada = await connect( { domain, token});
-} catch(err) {
-  console.log(err);
+} catch(error_) {
+  console.log(error_);
 }
 
 async function generateCoiRecords(fname: string) {
-  let cois = await getCois(fname, []); 
+  const cois = await getCois(fname, []); 
   writeFileSync(fname, JSON.stringify(cois));
   console.log('done');
 }
@@ -87,7 +103,7 @@ async function fetchAttachments(item: any) {
   const zip = await new jszip().loadAsync(zipFile);
   const files = Object.keys(zip.files);
 
-  let resources = [];
+  const resources = [];
 
   for await (const fKey of files) {
 
@@ -98,15 +114,15 @@ async function fetchAttachments(item: any) {
 
     // Prepare the pdf resource
     const ab = await zip.file(fKey)!.async('uint8array');
-    const zdata = Buffer.alloc(ab.byteLength).map((_, i) => ab[i]!);
+    const zdata = Buffer.alloc(ab.byteLength).map((_, index) => ab[index]!);
 
     try {
-      let { headers } = await oada.post({
+      const { headers } = await oada.post({
         path: `/resources`,
         data: zdata,
         contentType: 'application/pdf',
       });
-      let _id = headers['content-location']!.replace(/^\//, '');
+      const _id = headers['content-location']!.replace(/^\//, '');
       resources.push(_id);
     } catch (cError) {
       throw Buffer.byteLength(zdata) === 0
@@ -114,18 +130,19 @@ async function fetchAttachments(item: any) {
         : (cError);
     }
   }
+
   return resources;
 }
 
 async function processCoi(coi: any, pdfs: any) {
-  //2. Post the pdfs
+  // 2. Post the pdfs
 
   let results : Record<string, any> = {};
-  let jobs : Record<string, any> = {};
+  const jobs : Record<string, any> = {};
 
   for await (const _id of pdfs) {
     try {
-      let { _id: jobId, result } = await doJob(oada, {
+      const { _id: jobId, result } = await doJob(oada, {
         "service": "target",
         "type": "transcription-only",
         "config": {
@@ -139,7 +156,7 @@ async function processCoi(coi: any, pdfs: any) {
       });
       jobs[_id] = jobId as string;
 
-      // result is a { cois: { abcx123: {_id: "resources/abc123"}}}
+      // Result is a { cois: { abcx123: {_id: "resources/abc123"}}}
       if (result!.cois) {
         results = {
           ...results,
@@ -148,16 +165,16 @@ async function processCoi(coi: any, pdfs: any) {
       } else {
         jobs[_id] = serializeError(result);
       }
-    } catch (e) {
-      jobs[_id] = serializeError(e);
-      results[_id] = serializeError(e);
-      console.log(e);
+    } catch (error_) {
+      jobs[_id] = serializeError(error_);
+      results[_id] = serializeError(error_);
+      console.log(error_);
     }
   }
 
   // Now go fetch all of the links
   for await (const [key, { _id }] of Object.entries(results)) {
-    let { data: doc } = await oada.get({
+    const { data: doc } = await oada.get({
       path: `/${_id}`,
     });
 
@@ -176,11 +193,11 @@ function combineCois(cois: Record<string, TrellisCOI>, _id: string): TrellisCOI 
     
   return {
     policies: {
-      // @ts-ignore
+      // @ts-expect-error
       expire_date: Object.values(cois)
         .flatMap(coi => Object.values(coi.policies || {}))
         .filter(p => typeof p !== 'string')
-         // @ts-ignore
+         // @ts-expect-error
         .map((policy: Policy) => policy.expire_date)
         .filter((date: string) => {
           const wierdDate = new Date(date).getFullYear() === 1900;
@@ -200,7 +217,7 @@ function combineCois(cois: Record<string, TrellisCOI>, _id: string): TrellisCOI 
 }
 
 async function getCois(fname: string, coiResults: any[], pageIndex?: number) {
-  let request : AxiosRequestConfig = {
+  const request : AxiosRequestConfig = {
     method: 'get',
     url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents?sourceCommunities=5fff03e0458562000f4586e9&approvalStatus=awaiting-review&shareSourceTypeId=60653e5e18706f0011074ec8`,
     headers: { Authorization: `${FL_TOKEN}` },
@@ -210,15 +227,15 @@ async function getCois(fname: string, coiResults: any[], pageIndex?: number) {
     request.params = { pageIndex };
   }
 
-  let { data: response } = await axios(request)
+  const { data: response } = await axios(request)
 
   // Manually check for changes; Only update the resource if it has changed!
-  let i = 0;
+  let index = 0;
   for await (const coi of response.pageItems) {
     try {
-      i++;
-      console.log(`processing coi ${(((pageIndex || 0))*50) + i} / ${response.totalItemCount} (${(((((pageIndex || 0))*50) + i)/(response.totalItemCount) * 100).toFixed(2)} %)`);
-      let pdfs = await fetchAttachments(coi);
+      index++;
+      console.log(`processing coi ${(((pageIndex || 0))*50) + index} / ${response.totalItemCount} (${(((((pageIndex || 0))*50) + index)/(response.totalItemCount) * 100).toFixed(2)} %)`);
+      const pdfs = await fetchAttachments(coi);
       coiResults.push({
         _id: coi._id,
         ...await processCoi(coi, pdfs)
@@ -255,37 +272,44 @@ function composePolicy(cois: Record<string, TrellisCOI>, type: PolicyType): Poli
 
   policies = policies.filter((p)=> p.type === type);
   
-  let combined : any = {};
+  const combined : any = {};
 
   for (const pol of policies) {
     switch(type) {
-      case 'Commercial General Liability':
+      case 'Commercial General Liability': {
         combined.each_occurrence = sum(combined, pol, 'each_occurrence') 
         combined.general_aggregate = sum(combined, pol, 'general_aggregate'); 
         combined["products_-_compop_agg"] = sum(combined, pol, "products_-_compop_agg");
         break;
+      }
 
-      case 'Automobile Liability':
+      case 'Automobile Liability': {
         combined.combined_single_limit = sum(combined, pol, 'combined_single_limit');
         break;
+      }
 
-      case 'Umbrella Liability':
+      case 'Umbrella Liability': {
         combined.each_occurrence = sum(combined, pol as UmbrellaLiability, 'each_occurrence');
         break;
+      }
 
-      case "Employers' Liability":
+      case "Employers' Liability": {
         combined.el_each_accident = sum(combined, pol as EmployersLiability, 'el_each_accident');
         break;
+      }
 
-      case "Worker's Compensation":
+      case "Worker's Compensation": {
         combined.effective_date = minimumDate(combined.effective_date, (pol as WorkersCompensation).effective_date);
         combined.expire_date = minimumDate(combined.expire_date, (pol as WorkersCompensation).expire_date);
         break;
+      }
       
-      default:
+      default: {
         break;
+      }
     }
   }
+
   return combined;
 }
 
@@ -297,7 +321,7 @@ function minimumDate(a: string, b: string) {
 }
 
 function sum(a: Record<string, any>, b: Record<string, any>, key: string) {
-  return (parseInt(a[key]) || 0) + (parseInt(b[key]) || 0); 
+  return (Number.parseInt(a[key]) || 0) + (Number.parseInt(b[key]) || 0); 
 }
 
 type Policy =
@@ -319,9 +343,10 @@ async function generateCoiReport(path: string) {
   const json = readFileSync(path, 'utf8');
   const data = JSON.parse(json);
   const results : Array<Record<string, ExcelRow>> = [];
-  for await (let item of data) {
+  for await (const item of data) {
     results.push(await assessCoi(item));
   }
+
   writeExcelFile(results);
 }
 
@@ -360,18 +385,18 @@ async function assessCoi({
   trace(error, attachments);
 
   if (!coi) {
-    let { data } = await getFlDoc(_id);
+    const { data } = await getFlDoc(_id);
     coi = data
   }
 
-  let reasons = [];
+  const reasons = [];
   // Check if the coverages are satisfactory
-  const umbrella = parseInt(String(combined?.policies?.ul?.each_occurrence ?? '0'));
+  const umbrella = Number.parseInt(String(combined?.policies?.ul?.each_occurrence ?? '0'));
   const limitResults = Object.fromEntries(
     Object.entries(limits).map(([path, limit]) => {
       const value = (jp.query(combined ?? {}, path))[0] ?? '';
-      // compute the "effective" coverage with umbrella liability included
-      const effValue = parseInt(value ?? '0') + umbrella;
+      // Compute the "effective" coverage with umbrella liability included
+      const effValue = Number.parseInt(value ?? '0') + umbrella;
 
       return [
         limit.title, 
@@ -386,43 +411,44 @@ async function assessCoi({
     })
   );
 
-  // @ts-ignore
-  //const warnBadDates = allExpirations.some((date) => new Date(date).getFullYear() === 1900)
+  // @ts-expect-error
+  // const warnBadDates = allExpirations.some((date) => new Date(date).getFullYear() === 1900)
   let warnBadDate = false;
-  // @ts-ignore
-  const allExpirations = Object.values(attachments || {}).map(({ policies }) =>
-    // @ts-ignore
+  // @ts-expect-error
+  const allExpirations = Object.values(attachments || {}).flatMap(({ policies }) =>
+    // @ts-expect-error
     Object.values(policies || {}).map(({ expire_date }) => expire_date)
-  ).flat()
+  )
   .filter((date) => {
-    // @ts-ignore
+    // @ts-expect-error
     const wierdDate = new Date(date).getFullYear() === 1900;
     if (wierdDate) {
       warn('Bad policy date extracted on COI', _id);
       warnBadDate = true;
     }
+
     return !wierdDate;
   })
 
-  // @ts-ignore
+  // @ts-expect-error
   const minExpiration = allExpirations.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
 
   const limitsPassed = Object.values(limitResults).every(({ pass }) => pass)
 
   // Verify Expiration Dates
-  let expiryPassed = minExpiration//combined?.policies?.expire_date
-  //@ts-ignore
+  const expiryPassed = minExpiration// Combined?.policies?.expire_date
+  // @ts-expect-error
     && new Date(minExpiration) > new Date();
-    //&& new Date(combined.policies.expire_date) > new Date();
+    // && new Date(combined.policies.expire_date) > new Date();
  
-  let flExp = new Date(coi.expirationDate)
+  const flExp = new Date(coi.expirationDate)
   flExp.setHours(0);
   
-  let expiryMismatch = expiryPassed &&
+  const expiryMismatch = expiryPassed &&
     new Date(combined.policies.expire_date) <= flExp;
   
   if (expiryMismatch) {
-    //console.log(expiryMismatch, _id, combined.policies.expire_date, flExp);
+    // Console.log(expiryMismatch, _id, combined.policies.expire_date, flExp);
     warn(`The policy expiration date does not match the FL expiration date.`)
   }
 
@@ -435,6 +461,7 @@ async function assessCoi({
     if (workersExpired)
       reasons.push(`Worker's Comp policy has expired.`);
   }
+
   const workersPassed = workersExists && !workersExpired;
 
   const assessment = {
@@ -457,7 +484,7 @@ async function assessCoi({
       value: assessment.passed ? 
         'Approve'
         : parsingError ? 'Parsing Error' : `Reject${assessment.reasons ? `: ${assessment.reasons}` : ''}`,
-      ...(assessment.passed ? {fill: pass}: parsingError ? {fill: warnFill } : {}), //{fill: fail}),
+      ...(assessment.passed ? {fill: pass}: parsingError ? {fill: warnFill } : {}), // {fill: fail}),
     },
     /*
     'Parsing Errors': {
@@ -468,9 +495,9 @@ async function assessCoi({
     */
     'Min. Policy Expir. Date': {
       /*
-      value: (combined?.policies?.expire_date || '').split('T')[0],
+      Value: (combined?.policies?.expire_date || '').split('T')[0],
       */
-       //@ts-ignore
+       // @ts-expect-error
       value: minExpiration ? minExpiration.split('T')[0] : '',
       ...(expiryPassed ? {} 
         : parsingError ? {}
@@ -479,12 +506,12 @@ async function assessCoi({
       ),
     },
     ...Object.fromEntries(Object.entries(limitResults)
-      .map(([, obj]) => (
+      .map(([, object]) => (
         [
-          obj?.title, 
+          object?.title, 
           {
-            value: obj?.value,
-            ...(obj.pass ? {} : parsingError ? {} : {fill: fail}),
+            value: object?.value,
+            ...(object.pass ? {} : parsingError ? {} : {fill: fail}),
           }
         ])
       )
@@ -516,7 +543,7 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>) {
     }]
   });
   // Another dataset for storing our full COI data info
-  //const fullDataset = workbook.addWorksheet("Full Dataset");
+  // const fullDataset = workbook.addWorksheet("Full Dataset");
 
   /*
   worksheet.tables[tableKey].table.style = {
@@ -530,7 +557,7 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>) {
     'Trading Partner': 40,
     'FL Document Name': 40,
     'Approval Recommendation': 30,
-    //'Parsing Errors': 30,
+    // 'Parsing Errors': 30,
     'Min. Policy Expir. Date': 30,
     ...Object.fromEntries(
       Object.values(limits).map(({ title }) => [title, 20])
@@ -555,7 +582,7 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>) {
         // I thought this hyperlink was causing the script to take longer to run, but
         // its it doesn't seem to always be the case... If necessary, try uncommenting
         // the following line and commenting out the ones after that.
-        //cell.value = value;
+        // cell.value = value;
         cell.value = {
           text: value,
           hyperlink,
@@ -563,6 +590,7 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>) {
       } else {
         cell.value = value;
       }
+
       if (fill) {
         cell.fill = {
           type: 'pattern',
@@ -573,6 +601,7 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>) {
       
     }
   }
+
   worksheet.getRow(1).height = 40;
 
   // Save the modified workbook
@@ -581,24 +610,25 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>) {
 
 async function modifyJsonFile() {
   const json = readFileSync('cois-08-05-2024.json', 'utf8');
-  let data = JSON.parse(json);
-  let out = [];
-  //@ts-ignore
+  const data = JSON.parse(json);
+  const out = [];
+  // @ts-expect-error
   for await (const item of data) {
 
     if (item.coi) {
       out.push(item);
     } else {
-      let { data } = await getFlDoc(item._id);
+      const { data } = await getFlDoc(item._id);
       out.push({
         ...item,
         coi: data
       })
     }
   }
+
   writeFileSync('cois-8-05-2024.json', JSON.stringify(out));
 }
 
-//generateCoiRecords('cois-08-13-2024.json');
+// GenerateCoiRecords('cois-08-13-2024.json');
 
 generateCoiReport(filename);

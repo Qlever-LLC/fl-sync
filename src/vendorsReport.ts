@@ -992,6 +992,7 @@ async function tradingPartnerPrep06142023() {
     });
     info('done with tp');
   }
+
   process.exit();
 }
 
