@@ -17,17 +17,19 @@
 
 import config from './config.js';
 
-import fs from 'node:fs';
-import { default as axios } from 'axios';
+import fs from 'node:fs/promises';
+
 import type { JsonObject, OADAClient } from '@oada/client';
 import { connect } from '@oada/client';
 import { doJob } from '@oada/client/jobs';
+
+import Fuse from 'fuse.js';
 // @ts-expect-error no types
 import csvjson from 'csvjson';
 import debug from 'debug';
-import Fuse from 'fuse.js';
-import type { FlBusiness } from './mirrorWatch.js';
+
 import { type TradingPartner, mapTradingPartner } from './masterData.js';
+import type { FlBusiness } from './mirrorWatch.js';
 import { setTimeout } from 'node:timers/promises';
 import tree from './tree.masterData.js';
 

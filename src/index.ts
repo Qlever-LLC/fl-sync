@@ -18,6 +18,13 @@
 // Load config first so it can set up env
 import config from './config.js';
 
+// Import this _before_ pino and/or DEBUG
+import '@oada/pino-debug';
+
+// Add prometheus support and default metrics
+// FIXME: Add your own metrics as well
+import '@oada/lib-prom';
+
 import { setTimeout } from 'node:timers/promises';
 
 import moment, { type Moment } from 'moment';

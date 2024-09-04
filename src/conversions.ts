@@ -40,8 +40,8 @@ export async function flToTrellis(flDocument: FlObject) {
     const trellisPath =
       shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
     const flPath = `shareSource.shareSpecificAttributes.${key}`;
-    // @ts-expect-error TODO: fix types
     const flValue: unknown =
+      // @ts-expect-error TODO: fix types
       flDocument?.shareSource?.shareSpecificAttributes?.[key];
     info(
       `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,

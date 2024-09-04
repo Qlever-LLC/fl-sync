@@ -20,31 +20,27 @@ import config from './config.js';
 import crypto from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 
-import { default as axios } from 'axios';
-import _ from 'lodash';
+import JSZip from 'jszip';
 import debug from 'debug';
-import jszip from 'jszip';
 import md5 from 'md5';
 import oError from '@overleaf/o-error';
 import pointer from 'json-pointer';
 // Import { Gauge } from '@oada/lib-prom';
 
-import type { JsonObject, OADAClient } from '@oada/client';
-import type { type Job, Job ,
+import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
+import {
+  type Job,
   JobError,
   type WorkerFunction,
-  WorkerFunction,
   postUpdate,
 } from '@oada/jobs';
-import { JobError, postUpdate } from '@oada/jobs';
-import { AssumeState, ChangeType, ListWatch } from '@oada/list-lib';
 import { JobEventType, JobsRequest, doJob } from '@oada/client/jobs';
+import type { JsonObject, OADAClient } from '@oada/client';
 
 import { flToTrellis, fromOadaType } from './conversions.js';
 import { linkAssessmentToDocument, spawnAssessment } from './assessments.js';
 import checkAssessment from './checkAssessments.js';
 import { getAutoApprove } from './index.js';
-import { handleFlBusiness } from './masterData.js';
 import mirrorTree from './tree.mirrorWatch.js';
 import tree from './tree.js';
 import { validateResult } from './docTypeValidation.js';
@@ -1017,19 +1013,29 @@ async function constructCOIAssessment(
   updateFlId?: string | void,
 ) {
   const policies = Object.values(result.policies);
-  const cgl = (_.find(policies, ['type', 'Commercial General Liability']) ??
-    {}) as GeneralLiability;
-  const general = Number.parseInt(String(cgl.each_occurrence) || '0');
-  const aggregate = Number.parseInt(String(cgl.general_aggregate) || '0');
-  const product = Number.parseInt(String(cgl['products_-_compop_agg']) || '0');
+  const cgl = (policies.find(
+    (policy) =>
+      typeof policy === 'object' &&
+      policy.type === 'Commercial General Liability',
+  ) ?? {}) as GeneralLiability;
+  const general = Number.parseInt(String(cgl.each_occurrence) || '0', 10);
+  const aggregate = Number.parseInt(String(cgl.general_aggregate) || '0', 10);
+  const product = Number.parseInt(
+    String(cgl['products_-_compop_agg']) || '0',
+    10,
+  );
 
-  const al = (_.find(policies, ['type', 'Automobile Liability']) ??
-    {}) as AutoLiability;
-  const auto = Number.parseInt(String(al.combined_single_limit) || '0');
+  const al = (policies.find(
+    (policy) =>
+      typeof policy === 'object' && policy.type === 'Automobile Liability',
+  ) ?? {}) as AutoLiability;
+  const auto = Number.parseInt(String(al.combined_single_limit) || '0', 10);
 
-  const ul = (_.find(policies, ['type', 'Umbrella Liability']) ??
-    {}) as UmbrellaLiability;
-  const umbrella = Number.parseInt(String(ul.each_occurrence) || '0');
+  const ul = (policies.find(
+    (policy) =>
+      typeof policy === 'object' && policy.type === 'Umbrella Liability',
+  ) ?? {}) as UmbrellaLiability;
+  const umbrella = Number.parseInt(String(ul.each_occurrence) || '0', 10);
 
   const wc = policies.find(
     (policy) =>
@@ -1037,9 +1043,11 @@ async function constructCOIAssessment(
   );
   const worker = Boolean(wc);
 
-  const element = (_.find(policies, ['type', `Employers' Liability`]) ??
-    {}) as EmployersLiability;
-  const employer = Number.parseInt(String(element.el_each_accident) || '0');
+  const element = (policies.find(
+    (policy) =>
+      typeof policy === 'object' && policy.type === `Employers' Liability`,
+  ) ?? {}) as EmployersLiability;
+  const employer = Number.parseInt(String(element.el_each_accident) || '0', 10);
 
   const assess = await spawnAssessment(bid, bname, {
     general,
