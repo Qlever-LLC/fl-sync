@@ -16,10 +16,11 @@
  */
 
 // TODO: Remove lodash entirely
+import '@oada/pino-debug';
 import { get, has, set } from 'lodash-es';
 import debug from 'debug';
 
-import type { FlObject } from './mirrorWatch.js';
+import type { FlObject } from './types.js';
 
 const info = debug('fl-sync:mirror-watch:info');
 
@@ -41,7 +42,7 @@ export async function flToTrellis(flDocument: FlObject) {
       shareSpecificAttributes[key as keyof typeof shareSpecificAttributes];
     const flPath = `shareSource.shareSpecificAttributes.${key}`;
     const flValue: unknown =
-      // @ts-expect-error TODO: fix types
+      // @ts-expect-error bleh
       flDocument?.shareSource?.shareSpecificAttributes?.[key];
     info(
       `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,
@@ -105,11 +106,6 @@ const conversions = {
     urlName: 'unidentified',
     type: 'application/vnd.trellisfw.unidentified',
   },
-  'ACH Form': {
-    name: 'ACH Form',
-    urlName: 'ach-forms',
-    type: 'application/vnd.trellisfw.ach-form.1+json',
-  },
   'Certificate of Insurance': {
     name: 'Certificate of Insurance',
     urlName: 'cois',
@@ -140,11 +136,6 @@ const conversions = {
     name: 'Specifications that indicate acceptable requirements',
     urlName: 'sars',
     type: 'application.vnd.trellisfw.sars.1+json',
-  },
-  'W-9': {
-    name: 'W-9',
-    urlName: 'w-9s',
-    type: 'application/vnd.trellisfw.w-9.1+json',
   },
   '100g Nutritional Information': {
     name: '100g Nutritional Information',
@@ -347,11 +338,6 @@ const conversions = {
     urlName: 'signed-vendor-acknowledgement-forms',
     type: 'application/vnd.trellisfw.signed-vendor-acknowledgement-form.1+json',
   },
-  'Small Business Administration (SBA) Form': {
-    name: 'Small Business Administration (SBA) Form',
-    urlName: 'sba-forms',
-    type: 'application/vnd.trellisfw.sba-form.1+json',
-  },
   'WIRE Form': {
     name: 'WIRE Form',
     urlName: 'wire-forms',
@@ -406,6 +392,8 @@ const defaultAttributes = {
   'auditAttributes.reAuditDate': 'reaudit_date',
   'auditAttributes.scheme': 'scheme',
   'expirationDate': 'expire_date',
+  'products': 'products',
+  'locations': 'locations',
 };
 
 export function fromName(name: keyof typeof conversions) {

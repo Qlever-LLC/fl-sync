@@ -20,6 +20,7 @@
 import 'dotenv/config';
 
 import convict from 'convict';
+//@ts-expect-error no types or something?
 import { duration } from 'convict-format-with-moment';
 import { url } from 'convict-format-with-validator';
 

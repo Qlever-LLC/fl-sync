@@ -21,7 +21,7 @@ import debug from 'debug';
 
 import type { JsonObject } from '@oada/client';
 
-import type { FlAssessment } from './mirrorWatch.js';
+import type { FlAssessment } from './types.js';
 
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const CO_NAME = config.get('foodlogiq.community.owner.name');

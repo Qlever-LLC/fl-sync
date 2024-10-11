@@ -19,6 +19,7 @@ import config from './config.js';
 
 import fs from 'node:fs/promises';
 
+import '@oada/pino-debug';
 // @ts-expect-error no types
 import csvjson from 'csvjson';
 import debug from 'debug';

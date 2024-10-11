@@ -23,7 +23,7 @@ import { doJob } from '@oada/client/jobs';
 import type { JsonObject, OADAClient } from '@oada/client';
 import type { Job, WorkerFunction } from '@oada/jobs';
 import tree from './tree.masterData.js';
-import type { FlBusiness } from './mirrorWatch.js';
+import type { FlBusiness } from './types.js';
 import { postUpdate } from '@oada/jobs';
 
 const SERVICE_NAME = config.get('service.name');

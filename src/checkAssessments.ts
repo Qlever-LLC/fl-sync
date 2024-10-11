@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+import '@oada/pino-debug';
 import debug from 'debug';
 
-import type { FlAssessment } from './mirrorWatch.js';
+import type { FlAssessment } from './types.js';
 
 const info = debug('fl-sync:mirror-watch:info');
 

@@ -14,22 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import '@oada/pino-debug';
+import type { 
+  FlBusiness,
+  OldTradingPartner,
+} from './types.js';
+import type { JsonObject, OADAClient } from '@oada/client';
 
 import config from './config.js';
-
 import fs from 'node:fs/promises';
-
-import type { JsonObject, OADAClient } from '@oada/client';
 import { connect } from '@oada/client';
 import { doJob } from '@oada/client/jobs';
-
 import Fuse from 'fuse.js';
 // @ts-expect-error no types
 import csvjson from 'csvjson';
 import debug from 'debug';
 
 import { type TradingPartner, mapTradingPartner } from './masterData.js';
-import type { FlBusiness } from './mirrorWatch.js';
 import { setTimeout } from 'node:timers/promises';
 import tree from './tree.masterData.js';
 
@@ -1049,33 +1050,7 @@ async function tradingPartnerFix07102023() {
   process.exit();
 }
 
-interface OldTradingPartner {
-  sapid?: string;
-  id?: string;
-  type?: string;
-  source?: string;
-  vendorid?: string;
-  partnerid?: string;
-  companycode?: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  coi_emails: string;
-  fsqa_emails: string;
-  email: string;
-  phone: string;
-  foodlogiq: {
-    _id: string;
-  };
-  bookmarks: {
-    _id: string;
-  };
-  shared: {
-    _id: string;
-  };
-  _id: string;
-}
+
 
 // Fix some old still-queued jobs that used the old masterid implementation
 async function fixJobs() {

@@ -1,6 +1,6 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "1.4.14",
+  "version": "1.5.0",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.ts",
   "scripts": {
@@ -8,6 +8,8 @@
     "watch": "tsc -b --watch",
     "watch:test": "tsc -b --watch test",
     "start": "node ${INSPECT:-} --enable-source-maps dist/index.js",
+    "startjq": "node ${INSPECT:-} --enable-source-maps dist/index.js | tee test.log | pino-pretty -clt",
+    "log": "tail -f test.log | jq --stream 'select(.lib != \"list-lib\")'",
     "test": "yarn build test && c8 ava",
     "test:debug": "ava -T 60m -svc 1 --no-worker-threads"
   },
@@ -47,11 +49,11 @@
     ]
   },
   "dependencies": {
-    "@oada/client": "^5.1.0",
-    "@oada/jobs": "^4.5.2",
-    "@oada/lib-prom": "^3.8.0",
-    "@oada/list-lib": "6.0.2",
-    "@oada/pino-debug": "^3.10.0",
+    "@oada/client": "^5.2.2",
+    "@oada/jobs": "^4.7.1",
+    "@oada/lib-prom": "^4.0.0",
+    "@oada/list-lib": "6.1.0",
+    "@oada/pino-debug": "^4.0.1",
     "@oada/poll": "^1.0.4",
     "@oada/types": "^3.5.3",
     "@overleaf/o-error": "^3.4.0",
@@ -97,7 +99,7 @@
     "@types/lodash-es": "^4.17.12",
     "@types/md5": "^2.3.5",
     "@types/mssql": "^9.1.5",
-    "@types/node": "^22.5.3",
+    "@types/node": "^22.7.5",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@yarnpkg/sdks": "^3.2.0",
@@ -136,7 +138,8 @@
     "typescript": "5.5.4"
   },
   "resolutions": {
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz",
+    "@oada/jobs": "portal:/home/sanoel/jobs"
   },
   "packageManager": "yarn@4.4.1",
   "volta": {

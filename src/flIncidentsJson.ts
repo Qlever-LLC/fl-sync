@@ -16,6 +16,7 @@
  */
 
 // Load config first so it can set up env
+import '@oada/pino-debug';
 import config from './config.js';
 
 import type { Moment } from 'moment';

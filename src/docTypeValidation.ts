@@ -19,7 +19,7 @@ import type { Moment } from 'moment';
 import debug from 'debug';
 import moment from 'moment';
 
-import type { FlObject } from './mirrorWatch.js';
+import type { FlObject } from './types.js';
 import { fromOadaType } from './conversions.js';
 
 const info = debug('fl-sync:mirror-watch:info');
