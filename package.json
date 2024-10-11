@@ -138,8 +138,7 @@
     "typescript": "5.5.4"
   },
   "resolutions": {
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz",
-    "@oada/jobs": "portal:/home/sanoel/jobs"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
   },
   "packageManager": "yarn@4.4.1",
   "volta": {
