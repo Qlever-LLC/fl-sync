@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v4.2.2
 
       - name: Parse Ref
         id: ref
@@ -90,7 +90,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v4.2.2
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.2.0
@@ -109,7 +109,7 @@ jobs:
 
       - name: Cache docker layers
         if: ${{ !env.ACT }} # Awaiting ACT version after 0.2.17 for this feature
-        uses: actions/cache@v4.1.1
+        uses: actions/cache@v4.1.2
         id: cache
         with:
           path: /tmp/.buildx-cache
@@ -235,7 +235,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v4.2.2
 
       - name: Find Docker tag for Snyk
         id: tag

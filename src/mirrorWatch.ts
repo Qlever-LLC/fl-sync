@@ -648,7 +648,9 @@ export async function postTpDocument({
     targetJobId,
   });
 
-  await targetJobRequest.postUpdate(
+  await postUpdate(
+    CONNECTION,
+    targetJobId,
     `Document posted to /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey} (${docId}).`,
     'in-progress',
   );
