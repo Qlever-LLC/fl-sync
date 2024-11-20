@@ -14,8 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import '@oada/pino-debug';
-import type { 
+
+import { pino } from '@oada/pino-debug';
+
+// Load config first so it can set up env
+import config from './config.js';
+
+import '@oada/lib-prom';
+
+import type {
   Change,
   JsonObject,
   OADAClient
@@ -30,8 +37,6 @@ import {
   handleDocumentJob,
   startJobCreator,
 } from './mirrorWatch.js';
-// Load config first so it can set up env
-import config from './config.js';
 
 // Import this _before_ pino and/or DEBUG
 
@@ -44,7 +49,6 @@ import equal from 'deep-equal';
 import esMain from 'es-main';
 import type { FlObject } from './types.js';
 import { handleFlBusiness } from './masterData.js';
-import { pino } from '@oada/pino-debug';
 import { poll } from '@oada/poll';
 import { Service } from '@oada/jobs';
 // Import { businessesReportConfig } from './businessesReportConfig.js';
@@ -320,7 +324,7 @@ export async function pollFl(lastPoll: Moment, end: Moment) {
         'products',
         'locations',
         'documents',
-        //'assessments',
+        // 'assessments',
       ] as const) {
         await CONNECTION.put({
           path: `${SERVICE_PATH}/businesses/${index.business._id}/${type}`,
