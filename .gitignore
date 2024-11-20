@@ -168,4 +168,4 @@ pdfs
 #kubectl deployment yaml
 fl-sync-deployment.yaml
 
-scripts
+./scripts

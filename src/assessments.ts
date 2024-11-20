@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import '@oada/pino-debug';
 import config from './config.js';
 
 import debug from 'debug';

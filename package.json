@@ -1,6 +1,6 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.ts",
   "scripts": {
@@ -49,8 +49,8 @@
     ]
   },
   "dependencies": {
-    "@oada/client": "^5.2.2",
-    "@oada/jobs": "^4.7.1",
+    "@oada/client": "^5.2.4",
+    "@oada/jobs": "^4.7.3",
     "@oada/lib-prom": "^4.0.0",
     "@oada/list-lib": "6.1.0",
     "@oada/pino-debug": "^4.0.1",
@@ -58,6 +58,7 @@
     "@oada/types": "^3.5.3",
     "@overleaf/o-error": "^3.4.0",
     "@types/json-pointer": "^1.0.34",
+    "axios": "^1.7.7",
     "bluebird": "^3.7.2",
     "convict": "^6.2.4",
     "convict-format-with-moment": "^6.2.0",
@@ -139,7 +140,8 @@
   },
   "resolutions": {
     "@oada/lib-prom": "^4.0.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz",
+    "@oada/list-lib": "portal:/home/sanoel/list-lib"
   },
   "packageManager": "yarn@4.5.0",
   "volta": {
