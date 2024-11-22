@@ -169,3 +169,7 @@ pdfs
 fl-sync-deployment.yaml
 
 ./scripts
+
+cois-report-*
+VendorsReport*
+Vendor Report*

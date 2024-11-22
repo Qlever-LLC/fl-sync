@@ -67,7 +67,7 @@ const COMMUNITY_ID = config.get('foodlogiq.community.id');
 const filename = `cois-report-${new Date().toISOString()}.xlsx`
 // Let fname = 'cois-08-09-2024.json';
 const fail = 'FFb96161';
-const pass = 'FF80a57d';
+const passFill = 'FF80a57d';
 const warnFill = 'FFffff93';
 const actionFill = 'FFffff00';
 
@@ -141,7 +141,7 @@ interface COI {
   attachments?: Record<string, TrellisCOI | ErrorObject>;
   combined?: TrellisCOI;
   jobs?: Record<string, string | ErrorObject | undefined>;
-  error?: ErrorObject;
+  err?: ErrorObject;
   thisCoiOnlyCombined?: TrellisCOI;
   part?: string;
 }
@@ -175,7 +175,7 @@ async function getFlCois(fname: string, coiResults?: COI[], pageIndex?: number) 
       coiResults.push({
         _id: flCoi._id,
         flCoi,
-        error: serializeError(cError),
+        err: serializeError(cError),
       });
     }
   }
@@ -360,24 +360,24 @@ function composePolicy(cois: TrellisCOI[], type: PolicyType): Policy {
     combined.expire_date = minimumDate(combined.expire_date, pol.expire_date);
     switch(type) {
       case 'Commercial General Liability': {
-        combined.each_occurrence = sum(combined, pol, 'each_occurrence') 
-        combined.general_aggregate = sum(combined, pol, 'general_aggregate'); 
-        combined["products_-_compop_agg"] = sum(combined, pol, "products_-_compop_agg");
+        (combined as GeneralLiability).each_occurrence = sum(combined as GeneralLiability, pol as GeneralLiability, 'each_occurrence');
+        (combined as GeneralLiability).general_aggregate = sum(combined as GeneralLiability, pol as GeneralLiability, 'general_aggregate'); 
+        (combined as GeneralLiability)["products_-_compop_agg"] = sum(combined as GeneralLiability, pol as GeneralLiability, "products_-_compop_agg");
         break;
       }
 
       case 'Automobile Liability': {
-        combined.combined_single_limit = sum(combined, pol, 'combined_single_limit');
+        (combined as AutoLiability).combined_single_limit = sum(combined as AutoLiability, pol as AutoLiability, 'combined_single_limit');
         break;
       }
 
       case 'Umbrella Liability': {
-        combined.each_occurrence = sum(combined, pol as UmbrellaLiability, 'each_occurrence');
+        (combined as UmbrellaLiability).each_occurrence = sum(combined as UmbrellaLiability, pol as UmbrellaLiability, 'each_occurrence');
         break;
       }
 
       case "Employers' Liability": {
-        combined.el_each_accident = sum(combined, pol as EmployersLiability, 'el_each_accident');
+        (combined as EmployersLiability).el_each_accident = sum(combined as EmployersLiability, pol as EmployersLiability, 'el_each_accident');
         break;
       }
 
@@ -390,14 +390,13 @@ function composePolicy(cois: TrellisCOI[], type: PolicyType): Policy {
   return combined;
 }
 
-
 function hasBadDates(allExpirations: string[]): boolean {
   return allExpirations.some(date => new Date(date).getFullYear() === 1900);
 }
 
-async function generateCoiReport(path: string) {
+export async function generateCoiReport(path: string) {
   const json = readFileSync(path, 'utf8');
-  const data = JSON.parse(json);
+  const data = JSON.parse(json) as COI[];
   const results : Array<Record<string, ExcelRow>> = [];
   for await (const item of data) {
     results.push(await assessCoi(item));
@@ -412,19 +411,13 @@ async function assessCoi({
   flCoi,
   combined,
   thisCoiOnlyCombined,
-  error,
-  attachments,
+  // err,
+  // attachments,
   part,
-}: COI /*{
-  _id: string,
-  coi: FlDocument, 
-  combined: TrellisCOI,
-  thisCoiOnlyCombined: TrellisCOI,
-  attachments: any,
-  error: any,
-  part: string,
-}*/): Promise<Record<string, ExcelRow>> {
-  trace(error, attachments);
+} : 
+  COI 
+): Promise<Record<string, ExcelRow>> {
+//  trace(error, attachments);
 
   if (!flCoi) {
     const { data } = await getFlDoc(_id);
@@ -436,15 +429,22 @@ async function assessCoi({
   const umbrella = Number.parseInt(String(combined?.policies?.ul?.each_occurrence ?? '0'), 10);
   const limitResults = Object.fromEntries(
     Object.entries(limits).map(([path, limit]) => {
-      const value = (jp.query(combined ?? {}, path))[0] ?? '';
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      const value = ((jp.query(combined ?? {}, path))[0] as string) ?? '';
       // Compute the "effective" coverage with umbrella liability included
-      const effValue = Number.parseInt(value ?? '0') + umbrella;
+      const effValue = Number.parseInt(value ?? '0', 10) + umbrella;
 
-      const expireDate = combined?.policies?.[limit.type as 'el' | 'al' | 'cgl']?.expire_date;
-      const expired = new Date(expireDate) < new Date();
-      const dateParseWarning = hasBadDates([expireDate]);
+      const expireDate = combined?.policies?.[limit.type as 'el' | 'al' | 'cgl'].expire_date;
 
-      if (expired && !dateParseWarning) reasons.push(`${limit.name} policy expired ${expireDate.split('T')[0]}`)
+
+      const expired = expireDate ? new Date(expireDate) < new Date() : true;
+      const dateParseWarning = expireDate ? hasBadDates([expireDate]) : false;
+
+      if (expireDate === undefined) {
+        reasons.push(`${limit.name} policy has no expiration date`)
+      } else if (expired && !dateParseWarning) {
+        reasons.push(`${limit.name} policy expired ${expireDate.split('T')[0]}`)
+      }
 
       const pass = !dateParseWarning && effValue >= limit.limit;
       if (!pass && !Number.isNaN(effValue)) {
@@ -456,6 +456,7 @@ async function assessCoi({
       }
 
 
+      // Compose the entry
       return [
         limit.title, 
         {
@@ -464,7 +465,7 @@ async function assessCoi({
           value: expired 
             ? dateParseWarning
               ? `${value} (Confirm Effective Dates)`
-              : `Expired ${expireDate.split('T')[0]}`
+              : `Expired ${expireDate ? expireDate.split('T')[0] : '(unknown)'}`
             : value,
           dateParseWarning,
         }
@@ -472,12 +473,8 @@ async function assessCoi({
     })
   );
 
-  //const allExpirations = Object.values(attachments || {}).flatMap((obj: any) =>
-  //  Object.values(obj.policies || {}).map((policy) => (policy as Policy).expire_date)
-  //)
-  
-  let allExpirations = Object.values(combined.policies || {})
-    .filter(p => p)
+  let allExpirations = Object.values(combined?.policies ?? {})
+    .filter(Boolean)
     .filter((policy) => typeof policy !== 'string' && 'expire_date' in (policy as Policy))
     .map((policy) => (policy as Policy).expire_date);
 
@@ -565,7 +562,7 @@ async function assessCoi({
       value: assessment.passed 
         ? ''
         : assessment.reasons || '',
-      //...(assessment.passed ? {fill: pass}: parsingError ? {fill: warnFill } : {}), // {fill: fail}),
+      // ...(assessment.passed ? {fill: passFill}: parsingError ? {fill: warnFill } : {}), // {fill: fail}),
     },
 
     'Minimum Policy\nExpiration Date': {
@@ -615,7 +612,7 @@ async function assessCoi({
 }
 
 function gatherComments(coi: FlDocument) {
-  const comments = Object.values(coi.comments || {})
+  const comments = Object.values(coi.comments ?? {})
     .map((comsArray: FlDocComment[]) => comsArray
       .map(com => `${com.createdBy.firstName} ${com.createdBy.lastName}: ${com.comment}`).join('\n')
     )
@@ -703,16 +700,16 @@ export async function recombineGenerateCoisReport(path: string) {
     (item) => item.flCoi?.shareSource?.sourceBusiness?.name
   )
 
-  for await (const tp of Object.values(grouped)) {
-    const attachments = tp.flatMap(item => Object.values(item.attachments || {}));
+  for await (const cois of Object.values(grouped)) {
+    const attachments = cois.flatMap(item => Object.values(item.attachments ?? {}));
     const combined = combineCois(attachments as TrellisCOI[]);
-    for await (const [i, item] of tp.entries()) {
+    for await (const [i, item] of cois.entries()) {
       results.push(await assessCoi({
         ...item,
-        attachments,
+        // attachments,
         combined,
-        thisCoiOnlyCombined: combineCois(Object.values(item.attachments || {})),
-        part: tp.length <= 1 ? '' : (i+1).toLocaleString(),
+        thisCoiOnlyCombined: combineCois(Object.values(item.attachments ?? {})),
+        part: cois.length <= 1 ? '' : (i+1).toLocaleString(),
       }));
     }
   }

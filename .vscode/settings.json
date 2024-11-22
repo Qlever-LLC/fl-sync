@@ -94,5 +94,6 @@
     "**/$KNOWN_TOOLS$/**",
     "!**/yarn-*",
     "!**/ava-*/**/cli.mjs"
-  ]
+  ],
+  "CodeGPT.apiKey": "OpenAI"
 }

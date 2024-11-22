@@ -856,9 +856,9 @@ async function finishDocument(
     // Get the result key and _id to write links into approved docs list
     let key;
     let _id;
-    if (result?.[type] && Object.keys(result[type]).length > 0) {
-      key = Object.keys(result[type])[0]!;
-      _id = result[type][key]._id;
+    if (result?.[type] && Object.keys(result[type]!).length > 0) {
+      key = Object.keys(result[type]!)[0]!;
+      _id = result[type]![key]!._id;
     }
 
     // Target didn't give us a result; just use the FL info
