@@ -63,7 +63,6 @@ export interface WorkersCompensation {
   expire_date: string;
 }
 
-
 export interface FlAssessment {
   _id: string;
   state: string;
@@ -259,6 +258,10 @@ export interface FlDocHistoryItem {
   visibleForSupplier: boolean;
 }
 
+export type FlDocument = FlObject & {
+  comments?: Record<string, FlDocComment[]>;
+}
+
 export interface Link {
   _id: string;
   _rev?: number | string;
@@ -277,7 +280,7 @@ export interface TargetJob {
   _id: string;
   status: string;
   config: Record<string, any>;
-  result: Record<string, Record<string, { _id: string }>> | any;
+  result: Record<string, Record<string, { _id: string }>>;
   updates: Record<string, any>;
 }
 
@@ -317,3 +320,57 @@ export interface OldTradingPartner {
   };
   _id: string;
 }
+
+export interface FlDocComment {
+  createdBy: {
+    firstName: string,
+    lastName: string
+  },
+  comment: string
+}
+
+export interface Limit {
+  title: string;
+  limit: number;
+  path: string;
+  name: string;
+  type: string;
+  value?: number;
+  outString?: string;
+  result?: string 
+}
+
+export interface AssessmentResult {
+  result: boolean;
+  reasons: string;
+}
+
+export interface FlQuery {
+  pageItems: FlObject[];
+  pageItemCount: number;
+  totalItemCount: number;
+  hasNextPage: boolean;
+  nextPageIndex: number;
+}
+
+export interface ExcelRow {
+  value: any
+  fill?: any,
+  hyperlink?: string,
+  dropdown?: { formulae: string },
+}
+
+export type PolicyType = 
+  'Commercial General Liability' |
+  'Automobile Liability' |
+  `Employers' Liability` |
+  'Umbrella Liability' |
+  `Worker's Compensation`;
+
+export type Policy =
+  GeneralLiability | 
+  AutoLiability | 
+  EmployersLiability | 
+  UmbrellaLiability |
+  WorkersCompensation;
+
