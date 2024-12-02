@@ -95,5 +95,5 @@
     "!**/yarn-*",
     "!**/ava-*/**/cli.mjs"
   ],
-  "CodeGPT.apiKey": "OpenAI"
+  "CodeGPT.apiKey": "LM Studio"
 }

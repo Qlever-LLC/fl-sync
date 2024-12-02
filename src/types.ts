@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { ErrorObject } from "serialize-error";
+
 export interface TrellisCOI {
   _id: string;
   policies: {
@@ -354,8 +356,8 @@ export interface FlQuery {
 }
 
 export interface ExcelRow {
-  value: any
-  fill?: any,
+  value: string | number | undefined,
+  fill?: string,
   hyperlink?: string,
   dropdown?: { formulae: string },
 }
@@ -373,3 +375,34 @@ export type Policy =
   EmployersLiability | 
   UmbrellaLiability |
   WorkersCompensation;
+
+export interface ErrObj {
+  serialized?: ErrorObject;
+  msg?: string;
+}
+
+export interface FlDocumentError {
+  _id: string,
+  business?: string,
+  error: ErrObj,  
+}
+
+// { [coi id]: { [attachment id]: [trellis target job id] } } 
+// the target job captures the trellis binary resource, and trellis COI result id
+export type AttachmentResources = ErrObj | Record<string, ExtractPdfResult | ErrObj>;
+
+export interface ReportDataSave {
+  flCois: Record<string, FlDocument>;
+  attachments: Record<string, AttachmentResources>; 
+  trellisCois: Record<string, TrellisCOI>; // { [attachment id]: trellis COI }
+}
+
+export type GroupedReportData = Record<string, {
+  flCoi: FlDocument;
+  combined: TrellisCOI;
+}>
+
+export interface ExtractPdfResult {
+  job?: TargetJob,
+  results: ErrObj | Record<string, TrellisCOI>
+}

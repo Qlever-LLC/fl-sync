@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { recombineGenerateCoisReport } from "../assessments/coi.js";
+import { generateCoisReport } from "../assessments/coi.js";
 
 const filename = 'cois-8-13-2024.json';
 
-await recombineGenerateCoisReport(filename);
+await generateCoisReport(filename);

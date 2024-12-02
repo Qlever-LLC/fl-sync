@@ -16,17 +16,21 @@
  */
 import '@oada/pino-debug';
 import type {
+  AttachmentResources,
   AutoLiability,
   EmployersLiability,
+  ErrObj,
   ExcelRow,
+  ExtractPdfResult,
   FlDocComment,
   FlDocument,
-  FlObject,
+  FlDocumentError,
   FlQuery,
   GeneralLiability,
   Limit,
   Policy,
   PolicyType,
+  ReportDataSave,
   TargetJob,
   TrellisCOI,
   UmbrellaLiability,
@@ -38,25 +42,25 @@ import {
 } from 'axios';
 import {
   type ErrorObject,
-  serializeError
+  serializeError,
+  isErrorLike
 } from 'serialize-error'
 import {
   groupBy,
   minimumDate,
   sum
 } from '../utils.js';
-import { readFileSync, writeFileSync } from 'node:fs';
 import { default as axios } from 'axios';
 import config from '../config.js';
 import { connect } from '@oada/client';
 import debug from 'debug';
 import { doJob } from '@oada/client/jobs';
-import Excel from 'exceljs';
 // @ts-expect-error jsonpath lacks types
 import jp from 'jsonpath';
-import JsZip from 'jszip';
+import { writeFileSync } from 'node:fs';
 
-import type { Job } from '@oada/jobs';
+import Excel from 'exceljs';
+import JsZip from 'jszip';
 import type { OADAClient } from '@oada/client';
 const { domain, token } = config.get('trellis');
 const FL_TOKEN = config.get('foodlogiq.token');
@@ -120,7 +124,6 @@ const coiReportColumns = {
 }
 
 const info = debug('fl-sync:info');
-const trace = debug('fl-sync:trace');
 const error = debug('fl-sync:error');
 const warn = debug('fl-sync:warn');
 let oada: OADAClient;
@@ -130,27 +133,18 @@ try {
   error(error_);
 }
 
-export async function gatherCoiRecords(fname: string) {
-  const cois = await getFlCois(fname, []); 
-  writeFileSync(fname, JSON.stringify(cois));
-}
-
-interface COI {
-  _id: string;
-  flCoi: FlDocument;
-  attachments?: Record<string, TrellisCOI | ErrorObject>;
-  combined?: TrellisCOI;
-  jobs?: Record<string, string | ErrorObject | undefined>;
-  err?: ErrorObject;
-  thisCoiOnlyCombined?: TrellisCOI;
-  part?: string;
-}
-
-async function getFlCois(fname: string, coiResults?: COI[], pageIndex?: number) {
-  coiResults ||= [];
+/*
+ *  Fetch some Food Logiq COIs
+*/ 
+async function getFlCois(
+  queryString: string,
+  coiResults?: Record<string, FlDocument>,
+  pageIndex?: number
+): Promise<Record<string, FlDocument>> {
+  coiResults ||= {};
   const request : AxiosRequestConfig = {
     method: 'get',
-    url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents?sourceCommunities=5fff03e0458562000f4586e9&approvalStatus=awaiting-review&shareSourceTypeId=60653e5e18706f0011074ec8`,
+    url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents${queryString}`,
     headers: { Authorization: `${FL_TOKEN}` },
   };
 
@@ -160,82 +154,86 @@ async function getFlCois(fname: string, coiResults?: COI[], pageIndex?: number) 
 
   const { data }  = await axios<FlQuery>(request)
 
-  // Manually check for changes; Only update the resource if it has changed!
-  let index = 0;
   for await (const flCoi of data.pageItems) {
-    try {
-      index++;
-      info(`processing coi ${(((pageIndex ?? 0))*50) + index} / ${data.totalItemCount} (${(((((pageIndex ?? 0))*50) + index)/(data.totalItemCount) * 100).toFixed(2)} %)`);
-      const pdfs = await fetchAttachments(flCoi);
-      coiResults.push({
-        _id: flCoi._id,
-        ...await processCoi(flCoi, pdfs)
-      });
-    } catch (cError: unknown) {
-      coiResults.push({
-        _id: flCoi._id,
-        flCoi,
-        err: serializeError(cError),
-      });
-    }
+    coiResults[flCoi._id] = flCoi;
   }
 
-  writeFileSync(fname, JSON.stringify(coiResults));
   // Repeat for additional pages of FL results
   if (data.hasNextPage) {
-    await getFlCois(fname, coiResults, data.nextPageIndex);
+    await getFlCois(queryString, coiResults, data.nextPageIndex);
   }
 
   return coiResults;
 }
 
-async function fetchAttachments(item: FlObject): Promise<string[]> {
+/*
+ * Fetch the attachments associated with a particular Food Logiq document.
+ * For each attachment, return the OADA resource ID where the binary was stored.
+*/ 
+async function fetchAndExtractAttachments(item: FlDocument | FlDocumentError): Promise<AttachmentResources> {
+  const attachments: AttachmentResources = {};
+
+  let zipFile: Uint8Array;
   try {
-    const { data: zipFile } = await axios<Uint8Array>({
+    const { data } = await axios<Uint8Array>({
       method: 'get',
       url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
       headers: { Authorization: FL_TOKEN },
       responseEncoding: 'binary',
     })
-
-    const zip = await new JsZip().loadAsync(zipFile);
-    const files = Object.keys(zip.files);
-
-    const resources: string[] = [];
-
-    for await (const fKey of files) {
-
-      if (!fKey) {
-        info(`Could not get file key for item ${item._id}`);
-        continue
-      }
-
-      // Prepare the pdf resource
-      const ab = await zip.file(fKey)!.async('uint8array');
-      const zdata = Buffer.alloc(ab.byteLength).map((_, index) => ab[index]!);
-
-      try {
-        const { headers } = await oada.post({
-          path: `/resources`,
-          data: zdata,
-          contentType: 'application/pdf',
-        });
-        const _id = headers['content-location']!.replace(/^\//, '');
-        resources.push(_id);
-      } catch (cError) {
-        throw Buffer.byteLength(zdata) === 0
-          ? new Error(`Attachment Buffer data 'zdata' was empty.`)
-          : (cError);
-      }
-    }
-
-    return resources;
+    zipFile = data;
   } catch (error_: unknown) {
     if (isAxiosError(error_) && error_.response?.status === 404) {
-      info(`Bad attachments on item ${item._id}. Throwing Error`);
-      throw new Error('FL Attachments no longer exist');
-    } else throw error_;
+      info(`Bad attachments on item ${item._id}. Returning with no attachments`);
+      return {
+        msg: `Bad attachments on item ${item._id}.`,
+        serialized: serializeError(error_),
+      };
+    } 
+
+    info(`Errored on item ${item._id}. Returning with no attachments`);
+    return {
+      serialized: serializeError(error_),
+    }
   }
+
+  const zip = await new JsZip().loadAsync(zipFile);
+  const files = Object.keys(zip.files);
+
+  for await (const fKey of files) {
+
+    if (!fKey) {
+      info(`Could not get file key for item ${item._id}`);
+      (attachments as Record<string, ExtractPdfResult | ErrObj>)[fKey] = { msg: `Could not get file key for item ${item._id}` };
+      continue;
+    }
+
+    // Prepare the pdf resource
+    const ab = await zip.file(fKey)!.async('uint8array');
+    const zdata = Buffer.alloc(ab.byteLength).map((_, index) => ab[index]!);
+
+    try {
+      const { headers } = await oada.post({
+        path: `/resources`,
+        data: zdata,
+        contentType: 'application/pdf',
+      });
+      const _id = headers['content-location']!.replace(/^\//, '');
+
+      info(`Extracting binary data for FL Doc ${item._id}. Attachment ${fKey}`);
+      (attachments as Record<string, ExtractPdfResult | ErrObj>)[fKey] = await extractPdfData(_id);
+    } catch (cError) {
+      (attachments as Record<string, ExtractPdfResult | ErrObj>)[fKey] = Buffer.byteLength(zdata) === 0
+        ? { 
+          msg: `Attachment data was corrupt or empty.`,
+          serialized: serializeError(cError),
+        }
+        : { serialized: serializeError(cError) }
+      continue;
+    }
+  }
+
+  return attachments;
 }
 
 async function getFlDoc(_id: string) {
@@ -246,56 +244,45 @@ async function getFlDoc(_id: string) {
   })
 }
 
-async function processCoi(flCoi: FlDocument, pdfs: string[]) {
-  // 2. Post the pdfs
-
-  const attachments: COI['attachments'] = {};
-  const jobs : Record<string, string | ErrorObject | undefined> = {};
-
-  for await (const _id of pdfs) {
-    try {
-      const { _id: jobId, result } = (await doJob(oada, {
-        "service": "target",
-        "type": "transcription-only",
-        "config": {
-          "type": "pdf",
-          "pdf": {
-            _id
-          },
-          "document-type": "application/vnd.trellisfw.coi.accord.1+json",
-          "oada-doc-type": "cois"
-        }
-      })) as unknown as TargetJob;
-      jobs[_id] = jobId;
-
-      // Accumulate the attachments
-      // Target result is like { cois: { abcx123: {_id: "resources/abc123"}}}
-      if (result.cois) {
-        for await (const [key, value] of Object.entries(result.cois)) {
-          const { data: doc } = (await oada.get({
-            path: `/${value._id}`,
-          })) as unknown as { data: TrellisCOI };
-
-          attachments[key] = doc;
-        }
-      } else {
-        jobs[_id] = serializeError(result);
+async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
+  try {
+    const job = (await doJob(oada, {
+      "service": "target",
+      "type": "transcription-only",
+      "config": {
+        "type": "pdf",
+        "pdf": { _id },
+        "document-type": "application/vnd.trellisfw.coi.accord.1+json",
+        "oada-doc-type": "cois"
       }
-    } catch (error_) {
-      jobs[_id] = serializeError(error_);
-      attachments[_id] = serializeError(error_);
-      error(error_);
+    })) as unknown as TargetJob;
+
+    // Accumulate the attachments
+    // Target result is like { cois: { abcx123: {_id: "resources/abc123"}}}
+    const results : ExtractPdfResult["results"] = {};
+    if (job.result.cois) {
+      for await (const [key, value] of Object.entries(job.result.cois)) {
+        const { data: doc } = (await oada.get({
+          path: `/${value._id}`,
+        })) as unknown as { data: TrellisCOI };
+
+        (results as Record<string, TrellisCOI>)[key] = doc;
+      }
+
+      return { job, results };
     }
-  }
 
-  // Now go fetch all of the links
-
-
-  return { 
-    flCoi,
-    attachments, 
-    combined: combineCois(Object.values(attachments)),
-    jobs,
+    return {
+      job,
+      results: { 
+        serialized: serializeError(job.result)
+      },
+    }
+  } catch (error_) {
+    error(error_);
+    return {
+      results: { serialized: serializeError(error_) }
+    }
   }
 }
 
@@ -310,15 +297,9 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
   return {
     _id: cois.map(coi => coi._id).join(';'),
     policies: {
-      expire_date: cois
-        .flatMap(coi => Object.values(coi.policies || {}))
-        .filter(p => typeof p !== 'string')
-        .filter(p => new Date(p.expire_date) > new Date())
-        .map((policy: Policy) => policy.expire_date)
-        .filter((date: string) => {
-          const wierdDate = new Date(date).getFullYear() === 1900;
-          return !wierdDate;
-        })
+      expire_date: policiesToExpirations(
+        cois.flatMap(coi => Object.values(coi?.policies) as Policy[])
+      )
         .sort((a: string, b: string) => 
           new Date(a).getTime() - new Date(b).getTime()
         )[0]!,
@@ -329,6 +310,17 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
       wc: composePolicy(cois, `Worker's Compensation`) as WorkersCompensation,
     },
   };
+}
+
+// Take a bunch of COIs and find the minimum expiration date
+function policiesToExpirations(policies: Policy[]) {
+  return policies
+    .filter(Boolean)
+    .filter(p => typeof p !== 'string')
+    .filter(p => typeof p !== 'string' && 'expire_date' in p)
+    .filter(p => new Date(p.expire_date) > new Date())
+    .map((policy: Policy) => policy.expire_date)
+    .filter(d => (new Date(d).getFullYear() !== 1900))
 }
 
 // Compose a single policy of a particular type from an array of COIs (each with 
@@ -394,138 +386,58 @@ function hasBadDates(allExpirations: string[]): boolean {
   return allExpirations.some(date => new Date(date).getFullYear() === 1900);
 }
 
-export async function generateCoiReport(path: string) {
-  const json = readFileSync(path, 'utf8');
-  const data = JSON.parse(json) as COI[];
-  const results : Array<Record<string, ExcelRow>> = [];
-  for await (const item of data) {
-    results.push(await assessCoi(item));
-  }
-
-  await writeExcelFile(results, coiReportColumns, filename);
-}
-
 // eslint-disable-next-line complexity
 async function assessCoi({
-  _id,
   flCoi,
   combined,
-  thisCoiOnlyCombined,
-  // err,
-  // attachments,
-  part,
-} : 
-  COI 
-): Promise<Record<string, ExcelRow>> {
-//  trace(error, attachments);
+  part
+} : {
+  flCoi: FlDocument,
+  combined: TrellisCOI,
+  part: string | number
+}): Promise<Record<string, ExcelRow>> {
+//  Trace(error, attachments);
+  const { _id } = flCoi;
 
   if (!flCoi) {
     const { data } = await getFlDoc(_id);
     flCoi = data
   }
 
-  const reasons = [];
+  let reasons: string[] = [];
+
   // Check if the coverages are satisfactory
   const umbrella = Number.parseInt(String(combined?.policies?.ul?.each_occurrence ?? '0'), 10);
-  const limitResults = Object.fromEntries(
-    Object.entries(limits).map(([path, limit]) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      const value = ((jp.query(combined ?? {}, path))[0] as string) ?? '';
-      // Compute the "effective" coverage with umbrella liability included
-      const effValue = Number.parseInt(value ?? '0', 10) + umbrella;
 
-      const expireDate = combined?.policies?.[limit.type as 'el' | 'al' | 'cgl'].expire_date;
+  // Check policies against limits
+  const limitCheck = checkPolicyLimits(combined, reasons, umbrella);
+  const { limitResults } = limitCheck;
+  reasons = limitCheck.reasons;
+  const limitsPassed = Object.values(limitResults).every(({ pass }) => pass)
 
-
-      const expired = expireDate ? new Date(expireDate) < new Date() : true;
-      const dateParseWarning = expireDate ? hasBadDates([expireDate]) : false;
-
-      if (expireDate === undefined) {
-        reasons.push(`${limit.name} policy has no expiration date`)
-      } else if (expired && !dateParseWarning) {
-        reasons.push(`${limit.name} policy expired ${expireDate.split('T')[0]}`)
-      }
-
-      const pass = !dateParseWarning && effValue >= limit.limit;
-      if (!pass && !Number.isNaN(effValue)) {
-        reasons.push(
-          `Insufficient ${limit.name} coverage (${limit.limit} required). Coverage${
-            umbrella > 0 ? ' including Umbrella policy' : ''
-          } is only ${effValue}`
-        )
-      }
-
-
-      // Compose the entry
-      return [
-        limit.title, 
-        {
-          ...limit,
-          pass,
-          value: expired 
-            ? dateParseWarning
-              ? `${value} (Confirm Effective Dates)`
-              : `Expired ${expireDate ? expireDate.split('T')[0] : '(unknown)'}`
-            : value,
-          dateParseWarning,
-        }
-      ]
-    })
-  );
-
-  let allExpirations = Object.values(combined?.policies ?? {})
-    .filter(Boolean)
-    .filter((policy) => typeof policy !== 'string' && 'expire_date' in (policy as Policy))
-    .map((policy) => (policy as Policy).expire_date);
-
-  const warnBadDate = hasBadDates(allExpirations);
-  allExpirations = allExpirations.filter(d => (new Date(d).getFullYear() !== 1900))
-
-  const parsingError = allExpirations.length === 0;
+  // Gather expiration dates
+  const {
+    parsingError, 
+    minExpiration,
+    expiryPassed,
+    expiryMismatch,
+    flExpString
+   } = checkExpirations(combined, flCoi);
 
   if (parsingError) {
     reasons.push('PDF Parsing error')
   }
 
-  const minExpiration = allExpirations
-    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
+  // Check Worker's Comp
+  const workersCheck = checkWorkersComp(combined, parsingError, reasons);
+  const { workersPassed } = workersCheck;
+  reasons = workersCheck.reasons;
 
-  const limitsPassed = Object.values(limitResults).every(({ pass }) => pass)
-
-  // Verify Expiration Dates
-  const expiryPassed = minExpiration// Combined?.policies?.expire_date
-    && new Date(minExpiration) > new Date();
-    // && new Date(combined.policies.expire_date) > new Date();
- 
-  const flExp = new Date(flCoi.expirationDate)
-  const flExpString = flExp.toISOString().split('T')[0];
-  flExp.setHours(0);
-  
-  const expiryMismatch = thisCoiOnlyCombined ? new Date(thisCoiOnlyCombined.policies.expire_date) < flExp : undefined;
-  
-  if (expiryMismatch) {
-    warn(`The policy expiration date does not match the FL expiration date.`)
-  }
-
-  // Verify Worker's Compensation coverage
-  const workersExists = combined?.policies?.wc?.expire_date
-  if (!workersExists && !parsingError) reasons.push(`Worker's Comp policy required.`);
-  let workersExpired;
-  if (workersExists) {
-    const workersExpireDate = combined.policies.wc.expire_date;
-    const workersExpireDateBad = hasBadDates([workersExpireDate]);
-    workersExpired = new Date(combined.policies.wc.expire_date) < new Date();
-    if (workersExpired && !workersExpireDateBad)
-      reasons.push(`Worker's Comp policy is expired ${workersExpireDate.split('T')[0]}`);
-  }
-
-  const workersPassed = workersExists && !workersExpired;
-
+  // Make overall assessment
   const assessment = {
     passed: Boolean(limitsPassed && expiryPassed && workersPassed),
     reasons: reasons.length > 0 ? reasons.join('; ') : '',
   }
-
 
   return {
     'Trading Partner': {
@@ -567,6 +479,7 @@ async function assessCoi({
 
     'Minimum Policy\nExpiration Date': {
       value: minExpiration ? minExpiration.split('T')[0] : '',
+
       ...(expiryPassed === undefined ? {} 
         : expiryPassed ? {}
           : parsingError ? {}
@@ -611,6 +524,104 @@ async function assessCoi({
   } 
 }
 
+function checkExpirations(coi: TrellisCOI | undefined, flCoi: FlDocument) {
+  const allExpirations = policiesToExpirations(Object.values(coi?.policies ?? {}) as Policy[])
+
+  const parsingError = allExpirations.length === 0;
+
+  const minExpiration = allExpirations
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
+  const minExpirationDate = minExpiration && new Date(minExpiration)
+
+  // Verify Expiration Dates
+  const expiryPassed = minExpirationDate && minExpirationDate > new Date()
+ 
+  const flExp = new Date(flCoi.expirationDate)
+  const flExpString = flExp.toISOString().split('T')[0];
+  flExp.setHours(0);
+  
+  // Check if the FL Document expiration date does not match the minimum of the COI doc
+  // False and undefined are treated the same
+  const expiryMismatch = minExpirationDate && minExpirationDate < flExp;
+  if (expiryMismatch) {
+    warn(`The policy expiration date does not match the FL expiration date.`);
+  }
+
+  return { parsingError, flExpString, expiryPassed, minExpiration, expiryMismatch };
+}
+
+function checkPolicyLimits(coi: TrellisCOI | undefined, reasons: string[], umbrella: number) {
+  const limitResults = Object.fromEntries(
+    Object.entries(limits).map(([path, limit]) => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      const value = ((jp.query(coi?? {}, path))[0] as string) ?? '';
+      // Compute the "effective" coverage with umbrella liability included
+      const effValue = Number.parseInt(value ?? '0', 10) + umbrella;
+
+      const expireDate = coi?.policies?.[limit.type as 'el' | 'al' | 'cgl'].expire_date;
+
+
+      const expired = expireDate ? new Date(expireDate) < new Date() : true;
+      const dateParseWarning = expireDate ? hasBadDates([expireDate]) : false;
+
+      if (expireDate === undefined) {
+        reasons.push(`${limit.name} policy has no expiration date`)
+      } else if (expired && !dateParseWarning) {
+        reasons.push(`${limit.name} policy expired ${expireDate.split('T')[0]}`)
+      }
+
+      const pass = !dateParseWarning && effValue >= limit.limit;
+      if (!pass && !Number.isNaN(effValue)) {
+        reasons.push(
+          `Insufficient ${limit.name} coverage (${limit.limit} required). Coverage${
+            umbrella > 0 ? ' including Umbrella policy' : ''
+          } is only ${effValue}`
+        )
+      }
+
+
+      // Compose the entry
+      return [
+        limit.title, 
+        {
+          ...limit,
+          pass,
+          value: expired 
+            ? dateParseWarning
+              ? `${value} (Confirm Effective Dates)`
+              : `Expired ${expireDate ? expireDate.split('T')[0] : '(unknown)'}`
+            : value,
+          dateParseWarning,
+        }
+      ]
+    })
+  )
+
+  return {
+    limitResults,
+    reasons
+  }
+}
+
+function checkWorkersComp(coi: TrellisCOI | undefined, parsingError: boolean, reasons: string[]) {
+  // Verify Worker's Compensation coverage
+  const workersExists = coi?.policies?.wc?.expire_date
+  if (!workersExists && !parsingError) reasons.push(`Worker's Comp policy required.`);
+  let workersExpired;
+  if (workersExists) {
+    const workersExpireDate = coi.policies.wc.expire_date;
+    const workersExpireDateBad = hasBadDates([workersExpireDate]);
+    workersExpired = new Date(coi.policies.wc.expire_date) < new Date();
+    if (workersExpired && !workersExpireDateBad)
+      reasons.push(`Worker's Comp policy is expired ${workersExpireDate.split('T')[0]}`);
+  }
+
+  return { 
+    workersPassed: workersExists && !workersExpired,
+    reasons
+  };
+}
+
 function gatherComments(coi: FlDocument) {
   const comments = Object.values(coi.comments ?? {})
     .map((comsArray: FlDocComment[]) => comsArray
@@ -644,14 +655,10 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>, columns: Re
         startRow + rowIndex,
         startCol + colIndex,
       );
-      if (hyperlink) {
-        cell.value = {
-          text: value,
+      cell.value = hyperlink ? {
+          text: value as string,
           hyperlink,
-        }
-      } else {
-        cell.value = value;
-      }
+        } : value;
 
       if (fill) {
         cell.fill = {
@@ -690,29 +697,83 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>, columns: Re
  * The original setup in generateCoisReport used the attachments on a single FL doc; Instead, let's combine documents
  * across the trading partner to handle multiple FL docs.
  */
-export async function recombineGenerateCoisReport(path: string) {
-  const json = readFileSync(path, 'utf8');
-  const data = JSON.parse(json) as COI[];
-  const results : Array<Record<string, ExcelRow>> = [];
+export async function generateCoisReport(fname: string) {
+  // 1. Grab all FL COIs currently awaiting-review
+  const flBaseQuery = 
+    '?sourceCommunities=5fff03e0458562000f4586e9' + 
+    '&approvalStatuses=awaiting-review' +
+    '&shareSourceTypeId=60653e5e18706f0011074ec8';
+  let flCois = await getFlCois(flBaseQuery); 
+  writeFileSync(fname, JSON.stringify(flCois));
 
-  const grouped : Record<string, COI[]> = groupBy(
-    data,
-    (item) => item.flCoi?.shareSource?.sourceBusiness?.name
+  // Load the saved JSON data 
+  // const json = readFileSync(fname, 'utf8');
+  // const data = JSON.parse(json) as COI[];
+
+  // 2. Group COIs by supplier
+  const grouped : Record<string, Array<FlDocument | FlDocumentError>> = groupBy(
+    Object.values(flCois),
+    (flCoi) => flCoi?.shareSource?.sourceBusiness?._id
   )
 
-  for await (const cois of Object.values(grouped)) {
-    const attachments = cois.flatMap(item => Object.values(item.attachments ?? {}));
-    const combined = combineCois(attachments as TrellisCOI[]);
-    for await (const [i, item] of cois.entries()) {
-      results.push(await assessCoi({
-        ...item,
-        // attachments,
-        combined,
-        thisCoiOnlyCombined: combineCois(Object.values(item.attachments ?? {})),
-        part: cois.length <= 1 ? '' : (i+1).toLocaleString(),
+  const attachments : ReportDataSave["attachments"] = {};
+  const queryDate = new Date().setMonth(new Date().getMonth() - 18);
+  const excelData: Array<Record<string, ExcelRow>> = [];
+  for await (const [busId, cois] of Object.entries(grouped)) {
+
+    // 3. Grab additional COIs of other statuses from that supplier 
+    //    that may contribute to the assessment.
+    const flTradingPartnerQuery = 
+      '?sourceCommunities=5fff03e0458562000f4586e9' +
+      '&approvalStatuses=approved' +
+      `&sourceBusinesses=${busId}` +
+      '&shareSourceTypeId=60653e5e18706f0011074ec8' +
+      '&shareSourceTypeId=60653e5e18706f0011074ec8' +
+      `&expirationDate=${queryDate}..`;
+    const moreFlCois = await getFlCois(flTradingPartnerQuery);
+
+    flCois = {
+      ...flCois,
+      ...moreFlCois,
+    }
+
+    cois.push(...Object.values(moreFlCois));
+
+    /*
+
+    for await (const coi of Object.values(cois)) {
+      const att = await fetchAndExtractAttachments(coi);
+      attachments[coi._id] = att;
+    }
+
+    // Filter the actual TrellisCOI attachments
+
+    const combined = combineCois(att);
+    for await (const [index, coi] of cois.entries()) {
+      excelData.push(await assessCoi({
+        _id: coi._id,
+        flCoi: coi.flCoi,
+        combined: coi.combined,
+        part: cois.length <= 1 ? '' : (index+1).toLocaleString(),
       }));
     }
   }
-
-  await writeExcelFile(results, coiReportColumns, filename);
+  
+  await writeExcelFile({
+    flCois,
+    attachments,
+    trellisCois
+  }, coiReportColumns, filename);
+  */
+  }
 }
+
+interface COI {
+  _id: string;
+  flCoi: FlDocument;
+  combined?: TrellisCOI;
+  jobs?: Record<string, string | ErrorObject | undefined>;
+  err?: ErrorObject;
+}
+
+

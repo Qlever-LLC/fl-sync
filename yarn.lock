@@ -556,9 +556,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/jobs@npm:^4.7.3":
-  version: 4.7.3
-  resolution: "@oada/jobs@npm:4.7.3"
+"@oada/jobs@npm:^4.7.4":
+  version: 4.7.4
+  resolution: "@oada/jobs@npm:4.7.4"
   dependencies:
     "@ava/typescript": "npm:^5.0.0"
     "@oada/lib-prom": "npm:^3.8.0"
@@ -594,7 +594,7 @@ __metadata:
       optional: true
   bin:
     oada-jobs: ./dist/cli.mjs
-  checksum: 10/3d14380a028f5d0f173f9b3076a13362279b7b7074d69b308d2bd5ad2cea32d1f6dfc648c3a45565feca597ee45ffc183db577073504359144b9e1160e9f1ce6
+  checksum: 10/ec60a30a4810d1abbf0bc25fd247ea63a3d802a4a170324b2ad2c445eab5f1cace63035a89495df250e4d11b79d69fbb093ebd570e658019d61e39938eff45b0
   languageName: node
   linkType: hard
 
@@ -805,7 +805,7 @@ __metadata:
   dependencies:
     "@ava/typescript": "npm:^5.0.0"
     "@oada/client": "npm:^5.2.6"
-    "@oada/jobs": "npm:^4.7.3"
+    "@oada/jobs": "npm:^4.7.4"
     "@oada/lib-prom": "npm:^4.0.1"
     "@oada/list-lib": "npm:6.0.2"
     "@oada/pino-debug": "npm:^4.0.1"
