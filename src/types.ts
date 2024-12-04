@@ -384,18 +384,13 @@ export interface ErrObj {
 export interface FlDocumentError {
   _id: string,
   business?: string,
-  error: ErrObj,  
+  error: ErrObj,
 }
 
 // { [coi id]: { [attachment id]: [trellis target job id] } } 
-// the target job captures the trellis binary resource, and trellis COI result id
+// the target job captures the trellis binary resource, and the 
+// trellis COI result id(s)
 export type AttachmentResources = ErrObj | Record<string, ExtractPdfResult | ErrObj>;
-
-export interface ReportDataSave {
-  flCois: Record<string, FlDocument>;
-  attachments: Record<string, AttachmentResources>; 
-  trellisCois: Record<string, TrellisCOI>; // { [attachment id]: trellis COI }
-}
 
 export type GroupedReportData = Record<string, {
   flCoi: FlDocument;
@@ -406,3 +401,33 @@ export interface ExtractPdfResult {
   job?: TargetJob,
   results: ErrObj | Record<string, TrellisCOI>
 }
+
+export interface ReportDataSave {
+  flCois: Record<string, FlDocument>;
+  attachments: Record<string, AttachmentResources>; 
+}
+
+/* Example ReportDataSave
+{
+  flCois: { 
+    [<FL Doc _id>]: FL Doc,
+    ...
+  },
+
+  attachments: {
+    [<FL Doc _id>]: {
+      [<Attachment id>]: {
+        [<Target Result id 1> ]: {
+          job: TargetJob,
+          results: TrellisCOI,
+        },
+        ...
+      },
+      ...
+    },
+    ...
+  }
+    
+}
+*/
+

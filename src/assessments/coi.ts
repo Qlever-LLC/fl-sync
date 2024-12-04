@@ -170,7 +170,9 @@ async function getFlCois(
  * Fetch the attachments associated with a particular Food Logiq document.
  * For each attachment, return the OADA resource ID where the binary was stored.
 */ 
-async function fetchAndExtractAttachments(item: FlDocument | FlDocumentError): Promise<AttachmentResources> {
+async function fetchAndExtractAttachments(
+  item: FlDocument | FlDocumentError
+): Promise<AttachmentResources> {
   const attachments: AttachmentResources = {};
 
   let zipFile: Uint8Array;
@@ -392,7 +394,7 @@ async function assessCoi({
   combined,
   part
 } : {
-  flCoi: FlDocument,
+  flCoi: FlDocument | FlDocumentError,
   combined: TrellisCOI,
   part: string | number
 }): Promise<Record<string, ExcelRow>> {
@@ -422,7 +424,7 @@ async function assessCoi({
     expiryPassed,
     expiryMismatch,
     flExpString
-   } = checkExpirations(combined, flCoi);
+   } = checkExpirations(combined, flCoi as FlDocument);
 
   if (parsingError) {
     reasons.push('PDF Parsing error')
@@ -441,11 +443,12 @@ async function assessCoi({
 
   return {
     'Trading Partner': {
-      value: flCoi?.shareSource?.sourceBusiness?.name,
+      // @ts-ignore
+      value: flCoi?.shareSource?.sourceBusiness?.name ?? 'Unknown (error retrieving FL Doc)',
     },
 
     'FoodLogiq Document Links': {
-      value: flCoi?.name,
+      value: 'name' in flCoi ? flCoi.name : flCoi._id,
       hyperlink: 
         `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${_id}/${COMMUNITY_ID}`,
     },
@@ -520,7 +523,7 @@ async function assessCoi({
       ...(workersPassed ? {} : parsingError ? {} : { fill: fail }),
     },
 
-    'Comments': gatherComments(flCoi),
+    'Comments': gatherComments(flCoi as FlDocument),
   } 
 }
 
@@ -711,7 +714,7 @@ export async function generateCoisReport(fname: string) {
   // const data = JSON.parse(json) as COI[];
 
   // 2. Group COIs by supplier
-  const grouped : Record<string, Array<FlDocument | FlDocumentError>> = groupBy(
+  const coisBySupplier: Record<string, Array<FlDocument | FlDocumentError>> = groupBy(
     Object.values(flCois),
     (flCoi) => flCoi?.shareSource?.sourceBusiness?._id
   )
@@ -719,7 +722,7 @@ export async function generateCoisReport(fname: string) {
   const attachments : ReportDataSave["attachments"] = {};
   const queryDate = new Date().setMonth(new Date().getMonth() - 18);
   const excelData: Array<Record<string, ExcelRow>> = [];
-  for await (const [busId, cois] of Object.entries(grouped)) {
+  for await (const [busId, supplierCois] of Object.entries(coisBySupplier)) {
 
     // 3. Grab additional COIs of other statuses from that supplier 
     //    that may contribute to the assessment.
@@ -737,35 +740,41 @@ export async function generateCoisReport(fname: string) {
       ...moreFlCois,
     }
 
-    cois.push(...Object.values(moreFlCois));
+    // The collection of grouped flCois
+    supplierCois.push(...Object.values(moreFlCois));
 
-    /*
-
-    for await (const coi of Object.values(cois)) {
-      const att = await fetchAndExtractAttachments(coi);
-      attachments[coi._id] = att;
+    // Fetch the attchments and save the job result(s) which are TrellisCOIs
+    for await (const coi of Object.values(supplierCois)) {
+      attachments[coi._id] = await fetchAndExtractAttachments(coi);
     }
 
     // Filter the actual TrellisCOI attachments
+    const coisToCombine = supplierCois.flatMap(
+      ({_id}) => Object.values((attachments[_id] ?? {}))
+        // Filter errors at the coi level (failed to retrieve all attachments)
+        .filter((attachmentResources: AttachmentResources) => 
+          !attachmentResources.serialized
+        )
+        // Filter ErrObjs at the individual attachment level
+        .map((attachmentResources: Record<string, ExtractPdfResult | ErrObj>) => 
+          Object.values(attachmentResources)
+          .filter(value => ('results' in value))
+          .map(({results}: ExtractPdfResult) => Object.values(results) as TrellisCOI[])
+        )
+    ) as unknown as TrellisCOI[];
 
-    const combined = combineCois(att);
-    for await (const [index, coi] of cois.entries()) {
-      excelData.push(await assessCoi({
-        _id: coi._id,
-        flCoi: coi.flCoi,
-        combined: coi.combined,
+    const combined = combineCois(coisToCombine);
+    for await (const [index, flCoi] of supplierCois.entries()) {
+/*      excelData.push(await assessCoi({
+        flCoi,
+        combined,
         part: cois.length <= 1 ? '' : (index+1).toLocaleString(),
       }));
+      */
     }
   }
   
-  await writeExcelFile({
-    flCois,
-    attachments,
-    trellisCois
-  }, coiReportColumns, filename);
-  */
-  }
+  await writeExcelFile(excelData, coiReportColumns, filename);
 }
 
 interface COI {

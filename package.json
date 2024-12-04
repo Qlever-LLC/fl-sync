@@ -1,6 +1,6 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.ts",
   "scripts": {
@@ -139,6 +139,7 @@
     "typescript": "5.6.3"
   },
   "resolutions": {
+    "@oada/lib-prom": "^4.0.1",
     "cross-spawn": "^7.0.5",
     "jsonpath-plus": "^10.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
