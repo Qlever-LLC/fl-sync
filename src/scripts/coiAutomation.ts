@@ -15,8 +15,14 @@
  * limitations under the License.
  */
 
-import { generateCoisReport } from "../assessments/coi.js";
+import { gatherCoisReportData, generateCoisReport } from "../assessments/coi.js";
 
-const filename = 'cois-8-13-2024.json';
-
-await generateCoisReport(filename);
+//const filename = 'cois-12-04-2024.json';
+const filename = 'CoiReportData.json';
+const xlsxFilename = `cois-report-${new Date().toISOString()}.xlsx`
+try {
+  const reportDataSave = await gatherCoisReportData(filename);
+  await generateCoisReport(reportDataSave, xlsxFilename);
+} catch(err) {
+  throw err;
+}

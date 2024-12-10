@@ -18,6 +18,7 @@ import '@oada/pino-debug';
 import type {
   AttachmentResources,
   AutoLiability,
+  CoiAssessment,
   EmployersLiability,
   ErrObj,
   ExcelRow,
@@ -28,6 +29,7 @@ import type {
   FlQuery,
   GeneralLiability,
   Limit,
+  LimitResult,
   Policy,
   PolicyType,
   ReportDataSave,
@@ -43,8 +45,12 @@ import {
 import {
   type ErrorObject,
   serializeError,
-  isErrorLike
 } from 'serialize-error'
+import { 
+  existsSync,
+  readFileSync,
+  writeFileSync
+} from 'node:fs';
 import {
   groupBy,
   minimumDate,
@@ -57,7 +63,6 @@ import debug from 'debug';
 import { doJob } from '@oada/client/jobs';
 // @ts-expect-error jsonpath lacks types
 import jp from 'jsonpath';
-import { writeFileSync } from 'node:fs';
 
 import Excel from 'exceljs';
 import JsZip from 'jszip';
@@ -68,12 +73,10 @@ const FL_DOMAIN = config.get('foodlogiq.domain');
 const CO_ID = config.get('foodlogiq.community.owner.id');
 const COMMUNITY_ID = config.get('foodlogiq.community.id');
 
-const filename = `cois-report-${new Date().toISOString()}.xlsx`
-// Let fname = 'cois-08-09-2024.json';
 const fail = 'FFb96161';
 const passFill = 'FF80a57d';
 const warnFill = 'FFffff93';
-const actionFill = 'FFffff00';
+const actionFill = 'FFffffa6';
 
 const limits : Record<string, Limit> = {
   '$.policies.cgl.each_occurrence': {
@@ -108,7 +111,7 @@ const limits : Record<string, Limit> = {
 
 const coiReportColumns = {
   'Trading Partner': 40,
-  'FoodLogiq Document Links': 35,
+  'FoodLogiq Document Link': 35,
   'Grouped FoodLogiq\nDocuments': 18,
   'Recommended Action': 18,
   'ACTION SELECTION': 18,
@@ -120,7 +123,10 @@ const coiReportColumns = {
   ),
   'Umbrella Liability': 15,
   'Workers Compensation\n(per Statutory Requirements)\n(Is equal to Yes)': 20,
-  'Comments': 30
+  'FoodLogiq Comments': 30,
+  'Attachment Parsing Details': 30,
+  'Additional FoodLogiq \nDocs Considered': 20,
+  'Warnings': 20,
 }
 
 const info = debug('fl-sync:info');
@@ -238,14 +244,6 @@ async function fetchAndExtractAttachments(
   return attachments;
 }
 
-async function getFlDoc(_id: string) {
-  return axios<FlDocument>({
-    method: 'get',
-    url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${_id}`,
-    headers: { Authorization: FL_TOKEN },
-  })
-}
-
 async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
   try {
     const job = (await doJob(oada, {
@@ -300,7 +298,7 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
     _id: cois.map(coi => coi._id).join(';'),
     policies: {
       expire_date: policiesToExpirations(
-        cois.flatMap(coi => Object.values(coi?.policies) as Policy[])
+        cois.flatMap(coi => Object.values(coi?.policies || {}) as Policy[])
       )
         .sort((a: string, b: string) => 
           new Date(a).getTime() - new Date(b).getTime()
@@ -314,13 +312,11 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
   };
 }
 
-// Take a bunch of COIs and find the minimum expiration date
 function policiesToExpirations(policies: Policy[]) {
   return policies
     .filter(Boolean)
-    .filter(p => typeof p !== 'string')
     .filter(p => typeof p !== 'string' && 'expire_date' in p)
-    .filter(p => new Date(p.expire_date) > new Date())
+    //.filter(p => new Date(p.expire_date) > new Date())
     .map((policy: Policy) => policy.expire_date)
     .filter(d => (new Date(d).getFullYear() !== 1900))
 }
@@ -330,7 +326,7 @@ function policiesToExpirations(policies: Policy[]) {
 // -filters out already-expired policies
 // -gives last expiration date if there were only expired policies
 // -should it handle uploading the same PDF twice?? i.e., idempotent merge on policy ID or something?
-function composePolicy(cois: TrellisCOI[], type: PolicyType): Policy {
+function composePolicy(cois: TrellisCOI[], type: PolicyType): Policy | undefined {
   let policies : Policy[] = cois
     .flatMap(coi => Object.values(coi.policies || {}))
     .filter(p => typeof p !== 'string') as Policy[];
@@ -338,6 +334,10 @@ function composePolicy(cois: TrellisCOI[], type: PolicyType): Policy {
   policies = policies.filter((p)=> p.type === type)
  
   const activePolicies = policies.filter((p) => new Date(p.expire_date) > new Date() || hasBadDates([p.expire_date]));
+
+  if (activePolicies.length === 0) {
+    return undefined;
+}
 
   const combined: Policy = activePolicies[0]!;
 
@@ -388,58 +388,88 @@ function hasBadDates(allExpirations: string[]): boolean {
   return allExpirations.some(date => new Date(date).getFullYear() === 1900);
 }
 
-// eslint-disable-next-line complexity
-async function assessCoi({
+function assessCoi({
   flCoi,
-  combined,
-  part
+  attachments,
+  combinedTrellisCoi,
 } : {
   flCoi: FlDocument | FlDocumentError,
-  combined: TrellisCOI,
-  part: string | number
-}): Promise<Record<string, ExcelRow>> {
-//  Trace(error, attachments);
-  const { _id } = flCoi;
-
-  if (!flCoi) {
-    const { data } = await getFlDoc(_id);
-    flCoi = data
-  }
-
+  attachments: TrellisCOI[],
+  combinedTrellisCoi: TrellisCOI,
+}): CoiAssessment {
   let reasons: string[] = [];
 
+  // First check for expirations using only this FL COI's attachments
+  const {
+    minExpiration,
+    expiryPassed,
+    expiryMismatch,
+    flExpiration,
+   } = checkExpirations(flCoi as FlDocument, attachments);
+
   // Check if the coverages are satisfactory
-  const umbrella = Number.parseInt(String(combined?.policies?.ul?.each_occurrence ?? '0'), 10);
+  const umbrella = Number.parseInt(String(combinedTrellisCoi?.policies?.ul?.each_occurrence ?? '0'), 10);
 
   // Check policies against limits
-  const limitCheck = checkPolicyLimits(combined, reasons, umbrella);
+  const limitCheck = checkPolicyLimits(combinedTrellisCoi, reasons, umbrella);
   const { limitResults } = limitCheck;
   reasons = limitCheck.reasons;
   const limitsPassed = Object.values(limitResults).every(({ pass }) => pass)
 
-  // Gather expiration dates
-  const {
-    parsingError, 
-    minExpiration,
-    expiryPassed,
-    expiryMismatch,
-    flExpString
-   } = checkExpirations(combined, flCoi as FlDocument);
+  const parsingError = false;
 
   if (parsingError) {
     reasons.push('PDF Parsing error')
   }
 
   // Check Worker's Comp
-  const workersCheck = checkWorkersComp(combined, parsingError, reasons);
+  const workersCheck = checkWorkersComp(combinedTrellisCoi, parsingError, reasons);
   const { workersPassed } = workersCheck;
   reasons = workersCheck.reasons;
 
   // Make overall assessment
   const assessment = {
     passed: Boolean(limitsPassed && expiryPassed && workersPassed),
-    reasons: reasons.length > 0 ? reasons.join('; ') : '',
+    reasons: reasons.length > 0 ? reasons.join('\n') : '',
   }
+
+  return {
+    assessment,
+    minExpiration,
+    expiryPassed,
+    expiryMismatch,
+    flExpiration,
+    parsingError,
+    limitResults,
+    workersPassed,
+  }
+}
+
+export function generateAssessmentRow({
+  flCoi,
+  combinedTrellisCoi,
+  assessment,
+  part,
+  additionalCoisConsidered,
+  attachmentStatuses,
+  minExpiration,
+  expiryPassed,
+  expiryMismatch,
+  flExpiration,
+  parsingError,
+  invalidHolder,
+  limitResults,
+  workersPassed,
+} :
+  CoiAssessment 
+  & {
+    flCoi: FlDocument | FlDocumentError,
+    combinedTrellisCoi: TrellisCOI,
+    part: string,
+    additionalCoisConsidered: string,
+    attachmentStatuses: Record<string, string>,
+  }
+): Record<string, ExcelRow> {
 
   return {
     'Trading Partner': {
@@ -447,10 +477,9 @@ async function assessCoi({
       value: flCoi?.shareSource?.sourceBusiness?.name ?? 'Unknown (error retrieving FL Doc)',
     },
 
-    'FoodLogiq Document Links': {
+    'FoodLogiq Document Link': {
       value: 'name' in flCoi ? flCoi.name : flCoi._id,
-      hyperlink: 
-        `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${_id}/${COMMUNITY_ID}`,
+      hyperlink: flIdToLink(flCoi._id),
     },
 
     'Grouped FoodLogiq\nDocuments': {
@@ -475,8 +504,10 @@ async function assessCoi({
     
     'Rejection Reasons': {
       value: assessment.passed 
-        ? ''
-        : assessment.reasons || '',
+        ? ' '
+        : parsingError
+          ? `One or more errors occured while parsing attachments. ${invalidHolder ? 'Invalid Holder info detected.': ''}`
+          : assessment.reasons || '',
       // ...(assessment.passed ? {fill: passFill}: parsingError ? {fill: warnFill } : {}), // {fill: fail}),
     },
 
@@ -491,11 +522,11 @@ async function assessCoi({
     },
 
     'Different FoodLogiq\nExpiration Date': {
-      value: expiryMismatch ? flExpString : '',
+      value: expiryMismatch ? flExpiration: '',
       ...(expiryMismatch ? {fill: fail} : {}),
     },
 
-    ...Object.fromEntries(Object.entries(limitResults)
+    ...Object.fromEntries(Object.entries(limitResults ?? {})
       .map(([, object]) => (
         [
           object?.title, 
@@ -505,7 +536,8 @@ async function assessCoi({
               ? {}
               : object.dateParseWarning
                 ? {fill: warnFill}
-                : parsingError
+                // Do not highlight when there is a parsing error or no value (no unexpired policies)
+                : parsingError || !object?.value
                   ? {}
                   : {fill: fail}
             ),
@@ -515,7 +547,7 @@ async function assessCoi({
     ),
 
     'Umbrella Liability (Per Accident) (Greater than or equal\nto 1000000)': {
-      value: combined?.policies?.ul?.each_occurrence,
+      value: combinedTrellisCoi?.policies?.ul?.each_occurrence,
     },
 
     'Workers Compensation (per Statutory Requirements) (Is equal to Yes)': {
@@ -524,13 +556,24 @@ async function assessCoi({
     },
 
     'Comments': gatherComments(flCoi as FlDocument),
+
+    'Attachment Details': { 
+      value: Object.entries(attachmentStatuses)
+        .map(([id, status]) => `${id}: ${status}`)
+        .join('\n'),
+    },
+
+    'Additional FoodLogiq Docs Considered': { value: additionalCoisConsidered },
+
+    'Warnings': { value: ' ' },
   } 
 }
 
-function checkExpirations(coi: TrellisCOI | undefined, flCoi: FlDocument) {
-  const allExpirations = policiesToExpirations(Object.values(coi?.policies ?? {}) as Policy[])
-
-  const parsingError = allExpirations.length === 0;
+function checkExpirations(flCoi: FlDocument, attachments?: TrellisCOI[]) {
+  const allExpirations = (attachments ?? [])
+    .flatMap(c => 
+      policiesToExpirations(Object.values(c?.policies ?? {}) as Policy[])
+    );
 
   const minExpiration = allExpirations
     .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
@@ -540,7 +583,7 @@ function checkExpirations(coi: TrellisCOI | undefined, flCoi: FlDocument) {
   const expiryPassed = minExpirationDate && minExpirationDate > new Date()
  
   const flExp = new Date(flCoi.expirationDate)
-  const flExpString = flExp.toISOString().split('T')[0];
+  const flExpiration = flExp.toISOString().split('T')[0];
   flExp.setHours(0);
   
   // Check if the FL Document expiration date does not match the minimum of the COI doc
@@ -550,19 +593,40 @@ function checkExpirations(coi: TrellisCOI | undefined, flCoi: FlDocument) {
     warn(`The policy expiration date does not match the FL expiration date.`);
   }
 
-  return { parsingError, flExpString, expiryPassed, minExpiration, expiryMismatch };
+  return { flExpiration, expiryPassed, minExpiration, expiryMismatch };
 }
 
-function checkPolicyLimits(coi: TrellisCOI | undefined, reasons: string[], umbrella: number) {
+function checkPolicyLimits(
+  coi: TrellisCOI | undefined,
+  reasons: string[],
+  umbrella: number
+): {
+  limitResults: Record<string, LimitResult>,
+  reasons: string[], 
+} {
   const limitResults = Object.fromEntries(
-    Object.entries(limits).map(([path, limit]) => {
+    Object.entries(limits)
+    .map(([path, limit]) => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      const value = ((jp.query(coi?? {}, path))[0] as string) ?? '';
+      const value = ((jp.query(coi ?? {}, path))[0] as string) ?? '';
+
+      if (value === '') {
+        reasons.push(`No unexpired ${limit.name} policies found`);
+        return [
+        limit.title, 
+        {
+          ...limit,
+          pass: false,
+          value: '', 
+          dateParseWarning: false
+        }
+      ]
+      }
+
       // Compute the "effective" coverage with umbrella liability included
       const effValue = Number.parseInt(value ?? '0', 10) + umbrella;
 
-      const expireDate = coi?.policies?.[limit.type as 'el' | 'al' | 'cgl'].expire_date;
-
+      const expireDate = coi?.policies?.[limit.type as 'el' | 'al' | 'cgl']?.expire_date;
 
       const expired = expireDate ? new Date(expireDate) < new Date() : true;
       const dateParseWarning = expireDate ? hasBadDates([expireDate]) : false;
@@ -636,7 +700,11 @@ function gatherComments(coi: FlDocument) {
   }
 }
 
-async function writeExcelFile(rows: Array<Record<string, ExcelRow>>, columns: Record<string, number>, fname: string) {
+async function writeExcelFile(
+  rows: Array<Record<string, ExcelRow>>,
+  columns: Record<string, number>,
+  fname: string
+) {
   const workbook = new Excel.Workbook();
   const worksheet = workbook.addWorksheet("Report", {
     views:[{
@@ -687,8 +755,19 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>, columns: Re
   worksheet.getColumn(5).fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: actionFill }
+    fgColor: { argb: actionFill },
   }
+
+  createOuterBorder(
+    worksheet,
+    {
+      row: 2,
+      col: 5,
+    }, {
+      row: rows.length + 1,
+      col: 5,
+    }
+  )
 
   worksheet.getRow(1).height = 40;
 
@@ -696,22 +775,76 @@ async function writeExcelFile(rows: Array<Record<string, ExcelRow>>, columns: Re
   await workbook.xlsx.writeFile(fname);
 }
 
+const defaultPosition = { row: 1, col: 1 };
+const defaultBorderWidth = 'thick';
+function createOuterBorder(
+  worksheet: Excel.Worksheet,
+  start: {
+    row: number,
+    col: number
+  } = defaultPosition,
+  end: { row: number, col: number } = defaultPosition,
+  borderWidth: 'thick' = defaultBorderWidth,
+) {
+
+  const borderStyle = {
+      style: borderWidth
+  };
+  for (let i = start.row; i <= end.row; i++) {
+      const leftBorderCell = worksheet.getCell(i, start.col);
+      const rightBorderCell = worksheet.getCell(i, end.col);
+      leftBorderCell.border = {
+          ...leftBorderCell.border,
+          left: borderStyle
+      };
+      rightBorderCell.border = {
+          ...rightBorderCell.border,
+          right: borderStyle
+      };
+  }
+
+  for (let i = start.col; i <= end.col; i++) {
+      const topBorderCell = worksheet.getCell(start.row, i);
+      const bottomBorderCell = worksheet.getCell(end.row, i);
+      topBorderCell.border = {
+          ...topBorderCell.border,
+          top: borderStyle
+      };
+      bottomBorderCell.border = {
+          ...bottomBorderCell.border,
+          bottom: borderStyle
+      };
+  }
+}
+
+function flIdToLink(_id: string) {
+  return `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${_id}/${COMMUNITY_ID}`;
+}
+
 /* 
  * The original setup in generateCoisReport used the attachments on a single FL doc; Instead, let's combine documents
  * across the trading partner to handle multiple FL docs.
  */
-export async function generateCoisReport(fname: string) {
-  // 1. Grab all FL COIs currently awaiting-review
-  const flBaseQuery = 
-    '?sourceCommunities=5fff03e0458562000f4586e9' + 
-    '&approvalStatuses=awaiting-review' +
-    '&shareSourceTypeId=60653e5e18706f0011074ec8';
-  let flCois = await getFlCois(flBaseQuery); 
-  writeFileSync(fname, JSON.stringify(flCois));
+export async function gatherCoisReportData(fname: string) {
+  let flCois: ReportDataSave["flCois"] = {};
+  let attachments: ReportDataSave["attachments"] = {};
 
-  // Load the saved JSON data 
-  // const json = readFileSync(fname, 'utf8');
-  // const data = JSON.parse(json) as COI[];
+
+  // Try to load what we can
+  if (existsSync(fname)) {
+    // Load the saved JSON data 
+    const json = readFileSync(fname, 'utf8');
+    const obj = JSON.parse(json) as ReportDataSave;
+    flCois = obj.flCois;
+    attachments = obj.attachments;
+  } else {
+    // 1. Grab all FL COIs currently awaiting-review
+    const flBaseQuery = 
+      '?sourceCommunities=5fff03e0458562000f4586e9' + 
+      '&approvalStatus=awaiting-review' +
+      '&shareSourceTypeId=60653e5e18706f0011074ec8';
+    flCois = await getFlCois(flBaseQuery); 
+  }
 
   // 2. Group COIs by supplier
   const coisBySupplier: Record<string, Array<FlDocument | FlDocumentError>> = groupBy(
@@ -719,20 +852,24 @@ export async function generateCoisReport(fname: string) {
     (flCoi) => flCoi?.shareSource?.sourceBusiness?._id
   )
 
-  const attachments : ReportDataSave["attachments"] = {};
-  const queryDate = new Date().setMonth(new Date().getMonth() - 18);
-  const excelData: Array<Record<string, ExcelRow>> = [];
+  const queryDate = new Date()
+  queryDate.setMonth(new Date().getMonth() - 18);
+  let i = 0;
   for await (const [busId, supplierCois] of Object.entries(coisBySupplier)) {
+    info(`Processing Business ${busId} (${i++}/${Object.values(coisBySupplier).length})`);
+    if (attachments[supplierCois[0]!._id]) {
+      info(`Business ${busId} already processed.`);
+      continue;
+    }
 
     // 3. Grab additional COIs of other statuses from that supplier 
     //    that may contribute to the assessment.
     const flTradingPartnerQuery = 
       '?sourceCommunities=5fff03e0458562000f4586e9' +
-      '&approvalStatuses=approved' +
+      '&approvalStatus=approved' +
       `&sourceBusinesses=${busId}` +
       '&shareSourceTypeId=60653e5e18706f0011074ec8' +
-      '&shareSourceTypeId=60653e5e18706f0011074ec8' +
-      `&expirationDate=${queryDate}..`;
+      `&expirationDate=${queryDate.toISOString()}..`;
     const moreFlCois = await getFlCois(flTradingPartnerQuery);
 
     flCois = {
@@ -743,46 +880,118 @@ export async function generateCoisReport(fname: string) {
     // The collection of grouped flCois
     supplierCois.push(...Object.values(moreFlCois));
 
-    // Fetch the attchments and save the job result(s) which are TrellisCOIs
+    // Fetch the attachments and save the job result(s) which are TrellisCOIs
     for await (const coi of Object.values(supplierCois)) {
       attachments[coi._id] = await fetchAndExtractAttachments(coi);
     }
 
-    // Filter the actual TrellisCOI attachments
-    const coisToCombine = supplierCois.flatMap(
-      ({_id}) => Object.values((attachments[_id] ?? {}))
-        // Filter errors at the coi level (failed to retrieve all attachments)
-        .filter((attachmentResources: AttachmentResources) => 
-          !attachmentResources.serialized
-        )
-        // Filter ErrObjs at the individual attachment level
-        .map((attachmentResources: Record<string, ExtractPdfResult | ErrObj>) => 
-          Object.values(attachmentResources)
-          .filter(value => ('results' in value))
-          .map(({results}: ExtractPdfResult) => Object.values(results) as TrellisCOI[])
-        )
-    ) as unknown as TrellisCOI[];
+    writeFileSync(fname, JSON.stringify({attachments, flCois}));
+  }
+  
+  writeFileSync(fname, JSON.stringify({flCois, attachments}));
+  return { flCois, attachments };
+}
 
-    const combined = combineCois(coisToCombine);
-    for await (const [index, flCoi] of supplierCois.entries()) {
-/*      excelData.push(await assessCoi({
+export async function generateCoisReport(reportDataSave: ReportDataSave, filename: string) {
+  const { flCois, attachments } = reportDataSave;
+
+  // 2. Group COIs by supplier
+  const coisBySupplier: Record<string, Array<FlDocument | FlDocumentError>> = groupBy(
+    Object.values(flCois),
+    (flCoi) => flCoi?.shareSource?.sourceBusiness?._id
+  )
+
+  const excelData: Array<Record<string, ExcelRow>> = [];
+  let i = 0;
+  for (const [busId, supplierCois] of Object.entries(coisBySupplier)) {
+    info(`Processing Business ${busId} (${i++}/${Object.values(coisBySupplier).length})`);
+
+    // Filter the actual TrellisCOI attachments
+    const coisToCombine = supplierCois
+      // Filter errors at the coi level (failed to retrieve all attachments)
+      .filter(({_id}) => !attachments[_id]!.serialized)
+      .flatMap(({_id}) => Object.values((attachments[_id] ?? {}))
+        // Filter ErrObjs at the individual attachment level
+        .filter(value => ('results' in value))
+        .flatMap(({results}: ExtractPdfResult) => Object.values(results) as TrellisCOI[])
+      )
+
+    const coisToReport = supplierCois
+      // Filter errors at the coi level (failed to retrieve all attachments)
+      .filter((flCoi) => 
+        !('error' in flCoi) 
+        && flCoi?.shareSource?.approvalInfo?.status === 'Awaiting Approval'
+      )
+
+    const additionalCoisConsidered = supplierCois
+      .map(({_id}) => flIdToLink(_id))
+      .join('\n')
+
+    const combinedTrellisCoi = combineCois(coisToCombine);
+    for (const [index, flCoi] of coisToReport.entries()) {
+      const attachmentStatuses = Object.fromEntries(supplierCois
+        // Filter errors at the coi level (failed to retrieve all attachments)
+        .filter(({_id}) => !attachments[_id]!.serialized)
+        .flatMap(({_id}) => 
+          Object.entries(attachments[_id] ?? {})
+            // Filter ErrObjs at the individual attachment level
+            .map(([key, trellisCoiOrError]) => 
+              ([
+                key, 
+                'serialized' in trellisCoiOrError || trellisCoiOrError.results.serialized 
+                  ? `Parsing Error: ${(trellisCoiOrError?.results?.serialized?.cause?.cause?.information ?? '')
+                      .replaceAll('!','')
+                      .replaceAll(';', '; ')
+                    }`
+                  : 'Success'
+              ])
+            )
+        )
+      ) as unknown as Record<string, string>;
+      const attachmentExtractionErrors = Object.fromEntries(supplierCois
+        // Filter errors at the coi level (failed to retrieve all attachments)
+        .filter(({_id}) => !attachments[_id]!.serialized)
+        .flatMap(({_id}) => 
+          Object.entries(attachments[_id] ?? {})
+            // Filter ErrObjs at the individual attachment level
+            .filter(([_, trellisCoiOrError]) => 
+                'serialized' in trellisCoiOrError || trellisCoiOrError.results.serialized
+            )
+            .map(([key, trellisCoiOrError]) => 
+              ([key, trellisCoiOrError?.results?.serialized?.cause?.cause?.information])
+            )
+        )
+      ) as unknown as Record<string, string>;
+
+      const invalidHolder = Object.values(attachmentExtractionErrors || {})
+        .some(value => (value || '').includes('Holder'))
+
+      const thisCoiAttachments = Object.values(attachments[flCoi._id] ?? {})
+        // Filter ErrObjs at the individual attachment level
+        .filter(value => ('results' in value))
+        .flatMap(({results}: ExtractPdfResult) => Object.values(results) as TrellisCOI[])
+
+      const coiAssessment = assessCoi({
         flCoi,
-        combined,
-        part: cois.length <= 1 ? '' : (index+1).toLocaleString(),
+        attachments: thisCoiAttachments,
+        combinedTrellisCoi,
+      });
+
+      const parsingError = Object.values(attachmentStatuses)
+        .some(status => status.includes('Parsing Error'));
+
+      excelData.push(generateAssessmentRow({
+        flCoi,
+        ...coiAssessment,
+        combinedTrellisCoi,
+        parsingError,
+        invalidHolder,
+        part: coisToCombine.length <= 1 ? '' : (index+1).toLocaleString(),
+        additionalCoisConsidered,
+        attachmentStatuses,
       }));
-      */
     }
   }
   
   await writeExcelFile(excelData, coiReportColumns, filename);
 }
-
-interface COI {
-  _id: string;
-  flCoi: FlDocument;
-  combined?: TrellisCOI;
-  jobs?: Record<string, string | ErrorObject | undefined>;
-  err?: ErrorObject;
-}
-
-

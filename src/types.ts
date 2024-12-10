@@ -342,6 +342,19 @@ export interface Limit {
   result?: string 
 }
 
+export interface LimitResult {
+  title: string;
+  limit: number;
+  path: string;
+  name: string;
+  type: string;
+  value?: string;
+  outString?: string;
+  result?: string;
+  pass: boolean;
+  dateParseWarning: boolean;
+}
+
 export interface AssessmentResult {
   result: boolean;
   reasons: string;
@@ -417,11 +430,11 @@ export interface ReportDataSave {
   attachments: {
     [<FL Doc _id>]: {
       [<Attachment id>]: {
-        [<Target Result id 1> ]: {
-          job: TargetJob,
-          results: TrellisCOI,
+        job: TargetJob,
+        results: {
+          [<Target Result id 1> ]: TrellisCOI,
+          ...
         },
-        ...
       },
       ...
     },
@@ -431,3 +444,17 @@ export interface ReportDataSave {
 }
 */
 
+export interface CoiAssessment {
+  assessment: {
+    passed: boolean,
+    reasons: string,
+  },
+  expiryPassed?: boolean | "",
+  minExpiration?: string | "",
+  expiryMismatch?: boolean | "",
+  flExpiration?: string | "",
+  parsingError: boolean,
+  invalidHolder?: boolean;
+  limitResults?: Record<string, LimitResult>,
+  workersPassed?: boolean | "",
+}
