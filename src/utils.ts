@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 export function groupBy<T>(items: T[], itemFunction: (it: T) => string) {
-  const grouped : Record<string, T[]> = {};
+  const grouped: Record<string, T[]> = {};
   for (const item of items) {
     const key = itemFunction(item);
     grouped[key] ||= [];
@@ -25,25 +25,28 @@ export function groupBy<T>(items: T[], itemFunction: (it: T) => string) {
   return grouped;
 }
 
-export function minimumDate(a: string | undefined, b: string | undefined): string {
-  if (a === undefined && b === undefined) throw new Error('Both dates undefined; no minimum')
+export function minimumDate(
+  a: string | undefined,
+  b: string | undefined,
+): string {
+  if (a === undefined && b === undefined)
+    throw new Error('Both dates undefined; no minimum');
   if (a === undefined && b !== undefined) return b;
   if (b === undefined && a !== undefined) return a;
   const aDate = new Date(a!);
   const bDate = new Date(b!);
 
-  return aDate < bDate ? a! : b!
+  return aDate < bDate ? a! : b!;
 }
 
-export function sum<
-  T extends Record<K, string | number>,
-  K extends string
->(
+export function sum<T extends Record<K, string | number>, K extends string>(
   a: T,
   b: T,
-  key: K
+  key: K,
 ): number {
-  const aValue = typeof a[key] === 'number' ? a[key] : Number.parseInt(String(a[key]), 10);
-  const bValue = typeof b[key] === 'number' ? b[key] : Number.parseInt(String(b[key]), 10);
+  const aValue =
+    typeof a[key] === 'number' ? a[key] : Number.parseInt(String(a[key]), 10);
+  const bValue =
+    typeof b[key] === 'number' ? b[key] : Number.parseInt(String(b[key]), 10);
   return (aValue || 0) + (bValue || 0);
 }
