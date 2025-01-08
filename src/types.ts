@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ErrorObject } from "serialize-error";
+import type { ErrorObject } from 'serialize-error';
 
 export interface TrellisCOI {
   _id: string;
@@ -263,7 +263,7 @@ export interface FlDocHistoryItem {
 
 export type FlDocument = FlObject & {
   comments?: Record<string, FlDocComment[]>;
-}
+};
 
 export interface Link {
   _id: string;
@@ -326,10 +326,10 @@ export interface OldTradingPartner {
 
 export interface FlDocComment {
   createdBy: {
-    firstName: string,
-    lastName: string
-  },
-  comment: string
+    firstName: string;
+    lastName: string;
+  };
+  comment: string;
 }
 
 export interface Limit {
@@ -341,7 +341,7 @@ export interface Limit {
   type: string;
   value?: number;
   outString?: string;
-  result?: string 
+  result?: string;
 }
 
 export interface LimitResult {
@@ -371,25 +371,25 @@ export interface FlQuery {
 }
 
 export interface ExcelRow {
-  value: string | number | undefined,
-  fill?: string,
-  hyperlink?: string,
-  dropdown?: { formulae: string },
+  value: string | number | undefined;
+  fill?: string;
+  hyperlink?: string;
+  dropdown?: { formulae: string };
 }
 
-export type PolicyType = 
-  'Commercial General Liability' |
-  'Automobile Liability' |
-  `Employers' Liability` |
-  'Umbrella Liability' |
-  `Worker's Compensation`;
+export type PolicyType =
+  | 'Commercial General Liability'
+  | 'Automobile Liability'
+  | `Employers' Liability`
+  | 'Umbrella Liability'
+  | `Worker's Compensation`;
 
 export type Policy =
-  GeneralLiability | 
-  AutoLiability | 
-  EmployersLiability | 
-  UmbrellaLiability |
-  WorkersCompensation;
+  | GeneralLiability
+  | AutoLiability
+  | EmployersLiability
+  | UmbrellaLiability
+  | WorkersCompensation;
 
 export interface ErrObj {
   serialized?: ErrorObject;
@@ -397,29 +397,34 @@ export interface ErrObj {
 }
 
 export interface FlDocumentError {
-  _id: string,
-  business?: string,
-  error: ErrObj,
+  _id: string;
+  business?: string;
+  error: ErrObj;
 }
 
-// { [coi id]: { [attachment id]: [trellis target job id] } } 
-// the target job captures the trellis binary resource, and the 
+// { [coi id]: { [attachment id]: [trellis target job id] } }
+// the target job captures the trellis binary resource, and the
 // trellis COI result id(s)
-export type AttachmentResources = ErrObj | Record<string, ExtractPdfResult | ErrObj>;
+export type AttachmentResources =
+  | ErrObj
+  | Record<string, ExtractPdfResult | ErrObj>;
 
-export type GroupedReportData = Record<string, {
-  flCoi: FlDocument;
-  combined: TrellisCOI;
-}>
+export type GroupedReportData = Record<
+  string,
+  {
+    flCoi: FlDocument;
+    combined: TrellisCOI;
+  }
+>;
 
 export interface ExtractPdfResult {
-  job?: TargetJob,
-  results: ErrObj | Record<string, TrellisCOI>
+  job?: TargetJob;
+  results: ErrObj | Record<string, TrellisCOI>;
 }
 
 export interface ReportDataSave {
   flCois: Record<string, FlDocument>;
-  attachments: Record<string, AttachmentResources>; 
+  attachments: Record<string, AttachmentResources>;
 }
 
 /* Example ReportDataSave
@@ -458,6 +463,6 @@ export interface CoiAssessment {
   flExpiration?: string | "",
   parsingError: boolean,
   invalidHolder?: boolean;
-  limitResults?: Record<string, LimitResult>,
-  workersPassed?: boolean | "",
+  limitResults?: Record<string, LimitResult>;
+  workersPassed?: boolean | '';
 }

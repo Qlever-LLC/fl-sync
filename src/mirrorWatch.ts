@@ -20,12 +20,12 @@ import type {
   AutoLiability,
   EmployersLiability,
   FlAssessment,
-  FlObject, 
+  FlObject,
   FlSyncJob,
   GeneralLiability,
   JobConfig,
   TargetJob,
-  TrellisCOI, 
+  TrellisCOI,
   UmbrellaLiability,
 } from './types.js';
 import {
@@ -117,7 +117,7 @@ const noMultiFile = new Set();
 
 const fTypes = {
   '100g Nutritional Information': { assessments: false },
-//  'ACH Form': { assessments: false },
+  //  'ACH Form': { assessments: false },
   'APHIS Statement': { assessments: false },
   'Allergen Statement': { assessments: false },
   'Animal Welfare Audit': { assessments: false },
@@ -158,7 +158,7 @@ const fTypes = {
   },
   'Rate Sheet': { assessments: false },
   'Safety Data Sheet (SDS)': { assessments: false },
-//  'Small Business Administration (SBA) Form': { assessments: false },
+  //  'Small Business Administration (SBA) Form': { assessments: false },
   'Specified Risk Materials (SRM) Audit': { assessments: false },
   'Specified Risk Materials (SRM) Audit Corrective Actions': {
     assessments: false,
@@ -169,8 +169,8 @@ const fTypes = {
     assessments: false,
   },
   'Third Party Food Safety GMP Certificate': { assessments: false },
-//  'W-8': { assessments: false },
-//  'W-9': { assessments: false },
+  //  'W-8': { assessments: false },
+  //  'W-9': { assessments: false },
 };
 const flTypes = new Map(Object.entries(fTypes));
 
@@ -179,7 +179,11 @@ const rejectable = {
   //  'cois': 'cois',
 };
 
-async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob, log: Logger) {
+async function handleTargetStatus(
+  targetJob: TargetJob,
+  docJob: FlSyncJob,
+  log: Logger,
+) {
   const { status } = targetJob;
   const docJobId = docJob.oadaId;
   const { masterid, key } = docJob.config;
@@ -258,12 +262,19 @@ async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob, log: 
 
         // @ts-expect-error
         if (reject && rejectable[indexConfig.type])
-          await rejectFlDocument(docJob.config.key, docJobId, log, errorMessage);
-        if (jobError) endJob(docJobId, log, new JobError(errorMessage, jobError));
+          await rejectFlDocument(
+            docJob.config.key,
+            docJobId,
+            log,
+            errorMessage,
+          );
+        if (jobError)
+          endJob(docJobId, log, new JobError(errorMessage, jobError));
       }
     }
 
-    if (!jobError) endJob(docJobId, log, new JobError(errorMessage, 'target-other'));
+    if (!jobError)
+      endJob(docJobId, log, new JobError(errorMessage, 'target-other'));
   }
 }
 
@@ -271,7 +282,11 @@ async function handleTargetStatus(targetJob: TargetJob, docJob: FlSyncJob, log: 
  * Approves fl document associated with an assessment
  * @param {*} docId
  */
-async function approveFlDocument(documentId: string, jobId: string, log: Logger) {
+async function approveFlDocument(
+  documentId: string,
+  jobId: string,
+  log: Logger,
+) {
   log.info(`[job ${jobId}] Approving associated FL Doc ${documentId}`);
   try {
     await fetch(
@@ -342,7 +357,9 @@ export const handleAssessmentJob: WorkerFunction = async (
     });
 
     const aaa = getAutoApprove();
-    log.info(`[job ${docJobId}] Autoapprove Assessments Configuration: [${aaa}]`);
+    log.info(
+      `[job ${docJobId}] Autoapprove Assessments Configuration: [${aaa}]`,
+    );
     if (aaa) {
       const { failed, reasons }: { failed: boolean; reasons: string[] } =
         checkAssessment(item);
@@ -353,7 +370,9 @@ export const handleAssessmentJob: WorkerFunction = async (
           approval: !failed,
         },
       });
-      log.info(`[job ${docJobId}] Assessment Auto-${item.state}. [${item._id}]`);
+      log.info(
+        `[job ${docJobId}] Assessment Auto-${item.state}. [${item._id}]`,
+      );
       await fetch(
         `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${
           item._id
@@ -419,7 +438,7 @@ export async function postTpDocument({
   jobId,
   jobKey,
   docJob,
-  log
+  log,
 }: {
   bid: string;
   item: FlObject;
@@ -460,7 +479,9 @@ export async function postTpDocument({
   }
 
   const { document, docType, urlName } = await flToTrellis(item);
-  log.trace(`Generated translated partial JSON for mirror with docType ${docType}`);
+  log.trace(
+    `Generated translated partial JSON for mirror with docType ${docType}`,
+  );
 
   const hashKey = md5(JSON.stringify(item)); // Unique to every version of that fl document
   let docId: string | undefined;
@@ -502,7 +523,9 @@ export async function postTpDocument({
     },
     contentType: docType,
   });
-  log.trace(`Reset pdf vdoc reference in mirror metadata of FL _id: ${item._id}`);
+  log.trace(
+    `Reset pdf vdoc reference in mirror metadata of FL _id: ${item._id}`,
+  );
   // 2. Fetch mirror and pdf resource id
   const { data: mirrorId } = (await oada.get({
     path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_id`,
@@ -633,7 +656,7 @@ export async function postTpDocument({
     await handleTargetStatus(
       index as unknown as TargetJob,
       docJob as unknown as FlSyncJob,
-      log
+      log,
     );
   });
   //  TargetJobRequest.on(JobEventType.Update, handleTargetUpdates)
@@ -743,10 +766,13 @@ export const handleDocumentJob: WorkerFunction = async (
           jobKey,
           jobId,
           docJob: job,
-          log
+          log,
         });
       } catch (cError: unknown) {
-        log.error({ error: cError }, 'postTpDocument Promise threw. Rejecting...');
+        log.error(
+          { error: cError },
+          'postTpDocument Promise threw. Rejecting...',
+        );
         const { message, JobError } = cError as Error & {
           JobError?: string;
         };
@@ -948,7 +974,11 @@ async function finishDocument(
  * @param {*} msg - the
  * @return
  */
-function endJob(jobId: string, log: Logger, message?: string | Error | JobError) {
+function endJob(
+  jobId: string,
+  log: Logger,
+  message?: string | Error | JobError,
+) {
   log.info(`[job ${jobId}] Removing job from flSyncJobs Map`);
   // Trace(flSyncJobs, 'All flSyncJobs');
   const prom = flSyncJobs.get(jobId);
@@ -1400,7 +1430,11 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
   }
 } // StartJobCreator
 
-async function queueAssessmentJob(change: JsonObject, path: string, log: Logger) {
+async function queueAssessmentJob(
+  change: JsonObject,
+  path: string,
+  log: Logger,
+) {
   try {
     // 1. Gather fl indexing, mirror data, fl document lookup, etc.
     log.info(`queueAssessmentJob processing mirror change`);
@@ -1561,7 +1595,13 @@ async function queueAssessmentJob(change: JsonObject, path: string, log: Logger)
           );
           await approveFlDocument(flDocumentId, docJobId, log);
           // TODO: remove this when/if FL is able to retrieve changes after approval updates
-          await finishDocument(docJobId, flDocumentId, masterid, 'Approved', log);
+          await finishDocument(
+            docJobId,
+            flDocumentId,
+            masterid,
+            'Approved',
+            log,
+          );
         } else {
           if (reasons) {
             await rejectFlDocument(flDocumentId, docJobId, log, message);
@@ -1653,7 +1693,11 @@ async function cancelDocJobs(itemId: string, log: Logger, newJobKey?: string) {
   }
 }
 
-async function queueDocumentJob(fullData: JsonObject, path: string, log: Logger) {
+async function queueDocumentJob(
+  fullData: JsonObject,
+  path: string,
+  log: Logger,
+) {
   try {
     // 1. Gather fl indexing, mirror data, and trellis master id
     log.trace(`queueDocumentJob processing mirror change`);
@@ -1689,13 +1733,17 @@ async function queueDocumentJob(fullData: JsonObject, path: string, log: Logger)
 
     // TODO: Determine how to report this skipping due to no trading-partner.
     if (!masterid) return;
-    log.info(`Found trading partner masterid [${masterid}] for FL business ${bid}`);
+    log.info(
+      `Found trading partner masterid [${masterid}] for FL business ${bid}`,
+    );
 
     const documentType = pointer.has(item, `/shareSource/type/name`)
       ? pointer.get(item, `/shareSource/type/name`)
       : undefined;
     if (!documentType || !flTypes.has(documentType)) {
-      log.info(`Document [${item._id}] was of type [${documentType}]. Ignoring.`);
+      log.info(
+        `Document [${item._id}] was of type [${documentType}]. Ignoring.`,
+      );
       return;
     }
 
@@ -1753,7 +1801,9 @@ async function queueDocumentJob(fullData: JsonObject, path: string, log: Logger)
       approvalUser === FL_TRELLIS_USER ||
       approvalUser === APPROVAL_TRELLIS_USER
     ) {
-      log.info(`Document ${item._id} approvalUser was Trellis. Calling finishDoc`);
+      log.info(
+        `Document ${item._id} approvalUser was Trellis. Calling finishDoc`,
+      );
       // B. Approved or rejected by us. Finish up the automation
       // TODO There really shouldn't be multiple jobs here for a given item._id,
       // but in such an event, finish all of them.
@@ -1802,8 +1852,8 @@ async function syncToLf(oada: OADAClient, tradingPartner: string, doc: string) {
     config: {
       tradingPartner,
       doc: {
-        _id: doc
-      }
-    }
-  })
+        _id: doc,
+      },
+    },
+  });
 }

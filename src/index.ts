@@ -22,11 +22,7 @@ import config from './config.js';
 
 import '@oada/lib-prom';
 
-import type {
-  Change,
-  JsonObject,
-  OADAClient
-} from '@oada/client';
+import type { Change, JsonObject, OADAClient } from '@oada/client';
 import {
   docReportConfig,
   tpReportConfig,
@@ -154,7 +150,9 @@ export async function handleItem(
         : item?.shareSource?.sourceBusiness?._id;
 
     if (!bid) {
-      log.error(`FL BID undefined for this [${type}] item with _id [${item._id}].`);
+      log.error(
+        `FL BID undefined for this [${type}] item with _id [${item._id}].`,
+      );
       return true;
     }
 
