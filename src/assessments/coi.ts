@@ -83,13 +83,15 @@ const limits : Record<string, Limit> = {
     limit: 2_000_000,
     title: 'General Liability\n(Per Occurrence)\n(Greater than or equal\nto 2000000)',
     name: 'General Liability',
+    longname: 'General Liability (Per Occurrence)',
     path: '$.policies.cgl.each_occurrence',
     type: 'cgl',
   },
   '$.policies.cgl.general_aggregate': {
     limit: 5_000_000,
-    title: 'General Liability\n(General Aggregate)\n(Greater than or equal\nto 5000000)',
+    title: 'General Liability\n(Aggregate)\n(Greater than or equal\nto 5000000)',
     name: 'General Liability',
+    longname: 'General Liability (Aggregate)',
     path: '$.policies.cgl.general_aggregate',
     type: 'cgl',
   },
@@ -116,6 +118,7 @@ const coiReportColumns = {
   'Recommended Action': 18,
   'ACTION SELECTION': 18,
   'Rejection Reasons': 30,
+  'Custom Message': 30,
   'Minimum Policy\nExpiration Date': 15,
   'Different FoodLogiq\nExpiration Date': 20,
   ...Object.fromEntries(
@@ -126,7 +129,6 @@ const coiReportColumns = {
   'FoodLogiq Comments': 30,
   'Attachment Parsing Details': 30,
   'Additional FoodLogiq \nDocs Considered': 20,
-  'Warnings': 20,
 }
 
 const info = debug('fl-sync:info');
@@ -299,10 +301,10 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
     policies: {
       expire_date: policiesToExpirations(
         cois.flatMap(coi => Object.values(coi?.policies || {}) as Policy[])
-      )
-        .sort((a: string, b: string) => 
-          new Date(a).getTime() - new Date(b).getTime()
-        )[0]!,
+      ).sort((a: string, b: string) => 
+        new Date(a).getTime() - new Date(b).getTime()
+      )[0]!,
+
       cgl: composePolicy(cois, 'Commercial General Liability') as GeneralLiability,
       al: composePolicy(cois, 'Automobile Liability') as AutoLiability,
       el: composePolicy(cois, `Employers' Liability`) as EmployersLiability,
@@ -332,22 +334,38 @@ function composePolicy(cois: TrellisCOI[], type: PolicyType): Policy | undefined
     .filter(p => typeof p !== 'string') as Policy[];
 
   policies = policies.filter((p)=> p.type === type)
- 
-  const activePolicies = policies.filter((p) => new Date(p.expire_date) > new Date() || hasBadDates([p.expire_date]));
 
-  if (activePolicies.length === 0) {
+  const uniques = new Set<string>();
+  const activePolicies = policies
+    .filter((p) => new Date(p.expire_date) > new Date() || hasBadDates([p.expire_date]))
+    .filter((p) => {
+      if ('number' in p) {
+        if (uniques.has(p.number as string)) {
+          return false
+        }
+
+        uniques.add(p.number as string)
+      }
+     
+      return true;
+    })
+
+
+  if (Object.values(activePolicies).length === 0) {
     return undefined;
-}
+  }
 
-  const combined: Policy = activePolicies[0]!;
+  const combined: Policy = {} as unknown as Policy; //Object.values(activePolicies)[0]!;
 
-  if (activePolicies.length === 0 && policies.length > 0) {
+  if (Object.values(activePolicies).length === 0 && policies.length > 0) {
     for (const pol of policies) {
       combined.expire_date = minimumDate(combined.expire_date, pol.expire_date);
     }
 
     return combined;
   }
+
+
 
   for (const pol of activePolicies) {
     combined.effective_date = minimumDate(combined.effective_date, pol.effective_date);
@@ -430,6 +448,7 @@ function assessCoi({
   // Make overall assessment
   const assessment = {
     passed: Boolean(limitsPassed && expiryPassed && workersPassed),
+    dateParseWarning: Object.values(limitResults).some(({dateParseWarning}) => dateParseWarning),
     reasons: reasons.length > 0 ? reasons.join('\n') : '',
   }
 
@@ -489,14 +508,13 @@ export function generateAssessmentRow({
     'Recommended Action': {
       value: assessment.passed ?
         'Approve'
-        : parsingError ? 'Ignore' : 'Reject',
+        : parsingError || assessment.dateParseWarning ? 'Ignore' : 'Reject',
     },
-
 
     'ACTION SELECTION': {
       value: assessment.passed ?
         'Approve'
-        : parsingError ? 'Ignore' : 'Reject',
+        : '',
       dropdown: {
         formulae: '"Ignore,Approve,Reject"'
       },
@@ -506,10 +524,12 @@ export function generateAssessmentRow({
       value: assessment.passed 
         ? ' '
         : parsingError
-          ? `One or more errors occured while parsing attachments. ${invalidHolder ? 'Invalid Holder info detected.': ''}`
+          ? `PDF extraction errors occurred. ${invalidHolder ? 'Invalid Holder info detected. ': ''}`
           : assessment.reasons || '',
       // ...(assessment.passed ? {fill: passFill}: parsingError ? {fill: warnFill } : {}), // {fill: fail}),
     },
+
+    'Custom Message': { value: '' },
 
     'Minimum Policy\nExpiration Date': {
       value: minExpiration ? minExpiration.split('T')[0] : '',
@@ -564,8 +584,6 @@ export function generateAssessmentRow({
     },
 
     'Additional FoodLogiq Docs Considered': { value: additionalCoisConsidered },
-
-    'Warnings': { value: ' ' },
   } 
 }
 
@@ -638,9 +656,11 @@ function checkPolicyLimits(
       }
 
       const pass = !dateParseWarning && effValue >= limit.limit;
-      if (!pass && !Number.isNaN(effValue)) {
+      if (dateParseWarning) {
+        reasons.push(`Confirm Effective Dates for ${limit.name} policy.`)
+      } else if (!pass && !Number.isNaN(effValue)) {
         reasons.push(
-          `Insufficient ${limit.name} coverage (${limit.limit} required). Coverage${
+          `Insufficient ${limit.longname ?? limit.name} coverage (${limit.limit} required). Coverage${
             umbrella > 0 ? ' including Umbrella policy' : ''
           } is only ${effValue}`
         )
@@ -821,6 +841,50 @@ function flIdToLink(_id: string) {
   return `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${_id}/${COMMUNITY_ID}`;
 }
 
+/**
+ * Find documents with drafts and apply an "Awaiting Approval" status. 
+ * Because FL seems to lack the appropriate query parameters, a 2-year
+ * limit is placed on versionUpdated (apart from the COI doc type). 
+ * Then, we filter the returned results by presence of draftVersionId.
+ *  
+ * @returns voice
+ */
+export async function draftsToAwaitingApproval() {
+  const queryDate = new Date()
+  queryDate.setMonth(new Date().getMonth() - 24);
+  const flBaseQuery = 
+    '?sourceCommunities=5fff03e0458562000f4586e9' + 
+    '&shareSourceTypeId=60653e5e18706f0011074ec8' +
+    `&versionUpdated=${queryDate.toISOString()}..`;
+  let flCois = await getFlCois(flBaseQuery); 
+  
+  // Find docs with drafts
+  flCois = Object.fromEntries(
+    Object.entries(flCois).filter(([_, flCoi]) => flCoi.shareSource.draftVersionId)
+  );
+
+  for await (const [_, coi] of Object.entries(flCois)) {
+    const _id = coi.shareSource.draftVersionId;
+    const request : AxiosRequestConfig = {
+      method: 'put',
+      url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${_id}/approvalStatus`,
+      data: {
+        comment: "",
+        status: "Awaiting Approval",
+        visibleForSupplier: false,
+      },
+      headers: { 
+        Authorization: `${FL_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    };
+    await axios<FlQuery>(request)
+  }
+
+  return flCois;
+}
+
+
 /* 
  * The original setup in generateCoisReport used the attachments on a single FL doc; Instead, let's combine documents
  * across the trading partner to handle multiple FL docs.
@@ -839,10 +903,14 @@ export async function gatherCoisReportData(fname: string) {
     attachments = obj.attachments;
   } else {
     // 1. Grab all FL COIs currently awaiting-review
+    const queryDate = new Date();
+    queryDate.setMonth(new Date().getMonth());
     const flBaseQuery = 
       '?sourceCommunities=5fff03e0458562000f4586e9' + 
-      '&approvalStatus=awaiting-review' +
-      '&shareSourceTypeId=60653e5e18706f0011074ec8';
+      '&approvalStatuses=Awaiting Approval' +
+      '&shareSourceTypeId=60653e5e18706f0011074ec8' +
+      '&archived=false' +
+      `&expirationDate=${queryDate.toISOString()}..`;
     flCois = await getFlCois(flBaseQuery); 
   }
 
@@ -852,21 +920,23 @@ export async function gatherCoisReportData(fname: string) {
     (flCoi) => flCoi?.shareSource?.sourceBusiness?._id
   )
 
-  const queryDate = new Date()
-  queryDate.setMonth(new Date().getMonth() - 18);
+  const queryDate = new Date();
+  queryDate.setMonth(new Date().getMonth());
   let i = 0;
   for await (const [busId, supplierCois] of Object.entries(coisBySupplier)) {
-    info(`Processing Business ${busId} (${i++}/${Object.values(coisBySupplier).length})`);
+    info(
+      `Processing Business ${busId} (${i++}/${Object.values(coisBySupplier).length})`,
+    );
     if (attachments[supplierCois[0]!._id]) {
       info(`Business ${busId} already processed.`);
       continue;
     }
 
-    // 3. Grab additional COIs of other statuses from that supplier 
+    // 3. Grab additional COIs of other statuses from that supplier
     //    that may contribute to the assessment.
-    const flTradingPartnerQuery = 
+    const flTradingPartnerQuery =
       '?sourceCommunities=5fff03e0458562000f4586e9' +
-      '&approvalStatus=approved' +
+      '&approvalStatuses=Approved' +
       `&sourceBusinesses=${busId}` +
       '&shareSourceTypeId=60653e5e18706f0011074ec8' +
       `&expirationDate=${queryDate.toISOString()}..`;
@@ -875,7 +945,7 @@ export async function gatherCoisReportData(fname: string) {
     flCois = {
       ...flCois,
       ...moreFlCois,
-    }
+    };
 
     // The collection of grouped flCois
     supplierCois.push(...Object.values(moreFlCois));
@@ -921,6 +991,7 @@ export async function generateCoisReport(reportDataSave: ReportDataSave, filenam
       .filter((flCoi) => 
         !('error' in flCoi) 
         && flCoi?.shareSource?.approvalInfo?.status === 'Awaiting Approval'
+        && flCoi?.isArchived !== true
       )
 
     const additionalCoisConsidered = supplierCois
@@ -939,7 +1010,7 @@ export async function generateCoisReport(reportDataSave: ReportDataSave, filenam
               ([
                 key, 
                 'serialized' in trellisCoiOrError || trellisCoiOrError.results.serialized 
-                  ? `Parsing Error: ${(trellisCoiOrError?.results?.serialized?.cause?.cause?.information ?? '')
+                  ? `Parsing Error: ${(trellisCoiOrError?.results?.serialized?.cause?.cause?.information ?? trellisCoiOrError?.msg ?? '')
                       .replaceAll('!','')
                       .replaceAll(';', '; ')
                     }`
@@ -986,7 +1057,7 @@ export async function generateCoisReport(reportDataSave: ReportDataSave, filenam
         combinedTrellisCoi,
         parsingError,
         invalidHolder,
-        part: coisToCombine.length <= 1 ? '' : (index+1).toLocaleString(),
+        part: coisToReport.length <= 1 ? '' : (index+1).toLocaleString(),
         additionalCoisConsidered,
         attachmentStatuses,
       }));

@@ -171,6 +171,7 @@ export interface FlObject {
     isCurrentVersion: boolean;
   };
   history: Record<string, FlDocHistoryItem[]>;
+  isArchived?: boolean;
 }
 
 export interface FlBusiness {
@@ -336,6 +337,7 @@ export interface Limit {
   limit: number;
   path: string;
   name: string;
+  longname?: string;
   type: string;
   value?: number;
   outString?: string;
@@ -448,6 +450,7 @@ export interface CoiAssessment {
   assessment: {
     passed: boolean,
     reasons: string,
+    dateParseWarning: boolean,
   },
   expiryPassed?: boolean | "",
   minExpiration?: string | "",
