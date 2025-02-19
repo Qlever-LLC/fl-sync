@@ -453,15 +453,15 @@ export interface ReportDataSave {
 
 export interface CoiAssessment {
   assessment: {
-    passed: boolean,
-    reasons: string,
-    dateParseWarning: boolean,
-  },
-  expiryPassed?: boolean | "",
-  minExpiration?: string | "",
-  expiryMismatch?: boolean | "",
-  flExpiration?: string | "",
-  parsingError: boolean,
+    passed: boolean;
+    reasons: string;
+    dateParseWarning: boolean;
+  };
+  expiryPassed?: boolean | '';
+  minExpiration?: string | '';
+  expiryMismatch?: boolean | '';
+  flExpiration?: string | '';
+  parsingError: boolean;
   invalidHolder?: boolean;
   limitResults?: Record<string, LimitResult>;
   workersPassed?: boolean | '';

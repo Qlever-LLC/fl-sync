@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import '@oada/pino-debug';
 import type {
   AttachmentResources,
@@ -53,6 +54,7 @@ import jp from 'jsonpath';
 import Excel from 'exceljs';
 import JsZip from 'jszip';
 import type { OADAClient } from '@oada/client';
+
 const { domain, token } = config.get('trellis');
 const FL_TOKEN = config.get('foodlogiq.token');
 const FL_DOMAIN = config.get('foodlogiq.domain');
@@ -76,7 +78,8 @@ const limits: Record<string, Limit> = {
   },
   '$.policies.cgl.general_aggregate': {
     limit: 5_000_000,
-    title: 'General Liability\n(Aggregate)\n(Greater than or equal\nto 5000000)',
+    title:
+      'General Liability\n(Aggregate)\n(Greater than or equal\nto 5000000)',
     name: 'General Liability',
     longname: 'General Liability (Aggregate)',
     path: '$.policies.cgl.general_aggregate',
@@ -114,7 +117,7 @@ const coiReportColumns = {
   'FoodLogiq Comments': 30,
   'Attachment Parsing Details': 30,
   'Additional FoodLogiq \nDocs Considered': 20,
-}
+};
 
 const info = debug('fl-sync:info');
 const error = debug('fl-sync:error');
@@ -190,7 +193,7 @@ async function fetchAndExtractAttachments(
 
     info(`Errored on item ${item._id}. Returning with no attachments`);
     return {
-      serialized: serializeError(error_),
+      serialized: serializeError(error_ as Error),
     };
   }
 
@@ -226,9 +229,9 @@ async function fetchAndExtractAttachments(
         Buffer.byteLength(zdata) === 0
           ? {
               msg: `Attachment data was corrupt or empty.`,
-              serialized: serializeError(cError),
+              serialized: serializeError(cError as Error),
             }
-          : { serialized: serializeError(cError) };
+          : { serialized: serializeError(cError as Error) };
       continue;
     }
   }
@@ -273,7 +276,7 @@ async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
   } catch (error_) {
     error(error_);
     return {
-      results: { serialized: serializeError(error_) },
+      results: { serialized: serializeError(error_ as Error) },
     };
   }
 }
@@ -292,12 +295,15 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
     _id: cois.map((coi) => coi._id).join(';'),
     policies: {
       expire_date: policiesToExpirations(
-        cois.flatMap(coi => Object.values(coi?.policies || {}) as Policy[])
-      ).sort((a: string, b: string) => 
-        new Date(a).getTime() - new Date(b).getTime()
+        cois.flatMap((coi) => Object.values(coi?.policies || {}) as Policy[]),
+      ).sort(
+        (a: string, b: string) => new Date(a).getTime() - new Date(b).getTime(),
       )[0]!,
 
-      cgl: composePolicy(cois, 'Commercial General Liability') as GeneralLiability,
+      cgl: composePolicy(
+        cois,
+        'Commercial General Liability',
+      ) as GeneralLiability,
       al: composePolicy(cois, 'Automobile Liability') as AutoLiability,
       el: composePolicy(cois, `Employers' Liability`) as EmployersLiability,
       ul: composePolicy(cois, 'Umbrella Liability') as UmbrellaLiability,
@@ -307,13 +313,11 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
 }
 
 function policiesToExpirations(policies: Policy[]) {
-  return (
-    policies
-      .filter(Boolean)
-      .filter((p) => typeof p !== 'string' && 'expire_date' in p)
-      .map((policy: Policy) => policy.expire_date)
-      .filter((d) => new Date(d).getFullYear() !== 1900)
-  );
+  return policies
+    .filter(Boolean)
+    .filter((p) => typeof p !== 'string' && 'expire_date' in p)
+    .map((policy: Policy) => policy.expire_date)
+    .filter((d) => new Date(d).getFullYear() !== 1900);
 }
 
 // Compose a single policy of a particular type from an array of COIs (each with
@@ -329,23 +333,25 @@ function composePolicy(
     .flatMap((coi) => Object.values(coi.policies || {}))
     .filter((p) => typeof p !== 'string') as Policy[];
 
-  policies = policies.filter((p)=> p.type === type)
+  policies = policies.filter((p) => p.type === type);
 
   const uniques = new Set<string>();
   const activePolicies = policies
-    .filter((p) => new Date(p.expire_date) > new Date() || hasBadDates([p.expire_date]))
+    .filter(
+      (p) =>
+        new Date(p.expire_date) > new Date() || hasBadDates([p.expire_date]),
+    )
     .filter((p) => {
       if ('number' in p) {
         if (uniques.has(p.number as string)) {
-          return false
+          return false;
         }
 
-        uniques.add(p.number as string)
+        uniques.add(p.number as string);
       }
-     
-      return true;
-    })
 
+      return true;
+    });
 
   if (Object.values(activePolicies).length === 0) {
     return undefined;
@@ -360,8 +366,6 @@ function composePolicy(
 
     return combined;
   }
-
-
 
   for (const pol of activePolicies) {
     combined.effective_date = minimumDate(
@@ -474,7 +478,9 @@ function assessCoi({
   // Make overall assessment
   const assessment = {
     passed: Boolean(limitsPassed && expiryPassed && workersPassed),
-    dateParseWarning: Object.values(limitResults).some(({dateParseWarning}) => dateParseWarning),
+    dateParseWarning: Object.values(limitResults).some(
+      ({ dateParseWarning }) => dateParseWarning,
+    ),
     reasons: reasons.length > 0 ? reasons.join('\n') : '',
   };
 
@@ -530,15 +536,15 @@ export function generateAssessmentRow({
     },
 
     'Recommended Action': {
-      value: assessment.passed ?
-        'Approve'
-        : parsingError || assessment.dateParseWarning ? 'Ignore' : 'Reject',
+      value: assessment.passed
+        ? 'Approve'
+        : parsingError || assessment.dateParseWarning
+          ? 'Ignore'
+          : 'Reject',
     },
 
     'ACTION SELECTION': {
-      value: assessment.passed ?
-        'Approve'
-        : '',
+      value: assessment.passed ? 'Approve' : '',
       dropdown: {
         formulae: '"Ignore,Approve,Reject"',
       },
@@ -548,7 +554,7 @@ export function generateAssessmentRow({
       value: assessment.passed
         ? ' '
         : parsingError
-          ? `PDF extraction errors occurred. ${invalidHolder ? 'Invalid Holder info detected. ': ''}`
+          ? `PDF extraction errors occurred. ${invalidHolder ? 'Invalid Holder info detected. ' : ''}`
           : assessment.reasons || '',
       // ...(assessment.passed ? {fill: passFill}: parsingError ? {fill: warnFill } : {}), // {fill: fail}),
     },
@@ -607,7 +613,7 @@ export function generateAssessmentRow({
     },
 
     'Additional FoodLogiq Docs Considered': { value: additionalCoisConsidered },
-  } 
+  };
 }
 
 function checkExpirations(flCoi: FlDocument, attachments?: TrellisCOI[]) {
@@ -682,7 +688,7 @@ function checkPolicyLimits(
 
       const pass = !dateParseWarning && effValue >= limit.limit;
       if (dateParseWarning) {
-        reasons.push(`Confirm Effective Dates for ${limit.name} policy.`)
+        reasons.push(`Confirm Effective Dates for ${limit.name} policy.`);
       } else if (!pass && !Number.isNaN(effValue)) {
         reasons.push(
           `Insufficient ${limit.longname ?? limit.name} coverage (${limit.limit} required). Coverage${
@@ -883,50 +889,51 @@ function flIdToLink(_id: string) {
 }
 
 /**
- * Find documents with drafts and apply an "Awaiting Approval" status. 
+ * Find documents with drafts and apply an "Awaiting Approval" status.
  * Because FL seems to lack the appropriate query parameters, a 2-year
- * limit is placed on versionUpdated (apart from the COI doc type). 
+ * limit is placed on versionUpdated (apart from the COI doc type).
  * Then, we filter the returned results by presence of draftVersionId.
- *  
+ *
  * @returns voice
  */
 export async function draftsToAwaitingApproval() {
-  const queryDate = new Date()
+  const queryDate = new Date();
   queryDate.setMonth(new Date().getMonth() - 24);
-  const flBaseQuery = 
-    '?sourceCommunities=5fff03e0458562000f4586e9' + 
+  const flBaseQuery =
+    '?sourceCommunities=5fff03e0458562000f4586e9' +
     '&shareSourceTypeId=60653e5e18706f0011074ec8' +
     `&versionUpdated=${queryDate.toISOString()}..`;
-  let flCois = await getFlCois(flBaseQuery); 
-  
+  let flCois = await getFlCois(flBaseQuery);
+
   // Find docs with drafts
   flCois = Object.fromEntries(
-    Object.entries(flCois).filter(([_, flCoi]) => flCoi.shareSource.draftVersionId)
+    Object.entries(flCois).filter(
+      ([_, flCoi]) => flCoi.shareSource.draftVersionId,
+    ),
   );
 
   for await (const [_, coi] of Object.entries(flCois)) {
     const _id = coi.shareSource.draftVersionId;
-    const request : AxiosRequestConfig = {
+    const request: AxiosRequestConfig = {
       method: 'put',
       url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${_id}/approvalStatus`,
       data: {
-        comment: "",
-        status: "Awaiting Approval",
+        comment: '',
+        status: 'Awaiting Approval',
         visibleForSupplier: false,
       },
-      headers: { 
-        Authorization: `${FL_TOKEN}`,
-        "Content-Type": "application/json",
+      headers: {
+        'Authorization': `${FL_TOKEN}`,
+        'Content-Type': 'application/json',
       },
     };
-    await axios<FlQuery>(request)
+    await axios<FlQuery>(request);
   }
 
   return flCois;
 }
 
-
-/* 
+/*
  * The original setup in generateCoisReport used the attachments on a single FL doc; Instead, let's combine documents
  * across the trading partner to handle multiple FL docs.
  */
@@ -945,13 +952,13 @@ export async function gatherCoisReportData(fname: string) {
     // 1. Grab all FL COIs currently awaiting-review
     const queryDate = new Date();
     queryDate.setMonth(new Date().getMonth());
-    const flBaseQuery = 
-      '?sourceCommunities=5fff03e0458562000f4586e9' + 
+    const flBaseQuery =
+      '?sourceCommunities=5fff03e0458562000f4586e9' +
       '&approvalStatuses=Awaiting Approval' +
       '&shareSourceTypeId=60653e5e18706f0011074ec8' +
       '&archived=false' +
       `&expirationDate=${queryDate.toISOString()}..`;
-    flCois = await getFlCois(flBaseQuery); 
+    flCois = await getFlCois(flBaseQuery);
   }
 
   // 2. Group COIs by supplier
@@ -1043,11 +1050,12 @@ export async function generateCoisReport(
 
     const coisToReport = supplierCois
       // Filter errors at the coi level (failed to retrieve all attachments)
-      .filter((flCoi) => 
-        !('error' in flCoi) 
-        && flCoi?.shareSource?.approvalInfo?.status === 'Awaiting Approval'
-        && flCoi?.isArchived !== true
-      )
+      .filter(
+        (flCoi) =>
+          !('error' in flCoi) &&
+          flCoi?.shareSource?.approvalInfo?.status === 'Awaiting Approval' &&
+          flCoi?.isArchived !== true,
+      );
 
     const additionalCoisConsidered = supplierCois
       .map(({ _id }) => flIdToLink(_id))
@@ -1055,24 +1063,28 @@ export async function generateCoisReport(
 
     const combinedTrellisCoi = combineCois(coisToCombine);
     for (const [index, flCoi] of coisToReport.entries()) {
-      const attachmentStatuses = Object.fromEntries(supplierCois
-        // Filter errors at the coi level (failed to retrieve all attachments)
-        .filter(({_id}) => !attachments[_id]!.serialized)
-        .flatMap(({_id}) => 
-          Object.entries(attachments[_id] ?? {})
-            // Filter ErrObjs at the individual attachment level
-            .map(([key, trellisCoiOrError]) => 
-              ([
-                key, 
-                'serialized' in trellisCoiOrError || trellisCoiOrError.results.serialized 
-                  ? `Parsing Error: ${(trellisCoiOrError?.results?.serialized?.cause?.cause?.information ?? trellisCoiOrError?.msg ?? '')
-                      .replaceAll('!','')
-                      .replaceAll(';', '; ')
-                    }`
-                  : 'Success'
-              ])
-            )
-        )
+      const attachmentStatuses = Object.fromEntries(
+        supplierCois
+          // Filter errors at the coi level (failed to retrieve all attachments)
+          .filter(({ _id }) => !attachments[_id]!.serialized)
+          .flatMap(({ _id }) =>
+            Object.entries(attachments[_id] ?? {})
+              // Filter ErrObjs at the individual attachment level
+              .map(([key, trellisCoiOrError]) => [
+                key,
+                'serialized' in trellisCoiOrError ||
+                trellisCoiOrError.results.serialized
+                  ? `Parsing Error: ${(
+                      trellisCoiOrError?.results?.serialized?.cause?.cause
+                        ?.information ??
+                      trellisCoiOrError?.msg ??
+                      ''
+                    )
+                      .replaceAll('!', '')
+                      .replaceAll(';', '; ')}`
+                  : 'Success',
+              ]),
+          ),
       ) as unknown as Record<string, string>;
       const attachmentExtractionErrors = Object.fromEntries(
         supplierCois
@@ -1116,16 +1128,18 @@ export async function generateCoisReport(
         status.includes('Parsing Error'),
       );
 
-      excelData.push(generateAssessmentRow({
-        flCoi,
-        ...coiAssessment,
-        combinedTrellisCoi,
-        parsingError,
-        invalidHolder,
-        part: coisToReport.length <= 1 ? '' : (index+1).toLocaleString(),
-        additionalCoisConsidered,
-        attachmentStatuses,
-      }));
+      excelData.push(
+        generateAssessmentRow({
+          flCoi,
+          ...coiAssessment,
+          combinedTrellisCoi,
+          parsingError,
+          invalidHolder,
+          part: coisToReport.length <= 1 ? '' : (index + 1).toLocaleString(),
+          additionalCoisConsidered,
+          attachmentStatuses,
+        }),
+      );
     }
   }
 

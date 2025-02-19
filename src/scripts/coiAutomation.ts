@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { 
+import {
   //draftsToAwaitingApproval,
   gatherCoisReportData,
   generateCoisReport,
-} from "../assessments/coi.js";
+} from '../assessments/coi.js';
 
 //const filename = 'cois-12-04-2024.json';
 const filename = 'CoiReportData.json';
