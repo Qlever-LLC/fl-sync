@@ -30,7 +30,7 @@ export function minimumDate(
   b: string | undefined,
 ): string {
   if (a === undefined && b === undefined)
-    throw new Error('Both dates undefined; no minimum');
+    throw new Error("Both dates undefined; no minimum");
   if (a === undefined && b !== undefined) return b;
   if (b === undefined && a !== undefined) return a;
   const aDate = new Date(a!);
@@ -45,8 +45,8 @@ export function sum<T extends Record<K, string | number>, K extends string>(
   key: K,
 ): number {
   const aValue =
-    typeof a[key] === 'number' ? a[key] : Number.parseInt(String(a[key]), 10);
+    typeof a[key] === "number" ? a[key] : Number.parseInt(String(a[key]), 10);
   const bValue =
-    typeof b[key] === 'number' ? b[key] : Number.parseInt(String(b[key]), 10);
+    typeof b[key] === "number" ? b[key] : Number.parseInt(String(b[key]), 10);
   return (aValue || 0) + (bValue || 0);
 }

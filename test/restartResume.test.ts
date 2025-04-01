@@ -17,33 +17,33 @@
 
 /* eslint-disable unicorn/prevent-abbreviations */
 
-import config from '../dist/config.js';
+import config from "../dist/config.js";
 
-import test from 'ava';
+import test from "ava";
 
-import { setTimeout } from 'node:timers/promises';
+import { setTimeout } from "node:timers/promises";
 
-import type { Job, Logger } from '@oada/jobs';
-import type { JsonObject, OADAClient } from '@oada/client';
-import { ListWatch } from '@oada/list-lib';
-import type { TreeKey } from '@oada/types/oada/tree/v1.js';
-import { connect } from '@oada/client';
+import type { JsonObject, OADAClient } from "@oada/client";
+import { connect } from "@oada/client";
+import type { Job, Logger } from "@oada/jobs";
+import { ListWatch } from "@oada/list-lib";
+import type { TreeKey } from "@oada/types/oada/tree/v1.js";
 
-import { handleDocumentJob, isObj, postJob } from '../dist/mirrorWatch.js';
-import type { JobConfig } from '../dist/mirrorWatch.js';
-import { mostRecentKsuid } from '../dist/report.js';
-import { initialize as service } from '../dist/index.js';
-import { tree } from '../dist/tree.js';
+import { initialize as service } from "../dist/index.js";
+import { handleDocumentJob, isObj, postJob } from "../dist/mirrorWatch.js";
+import type { JobConfig } from "../dist/types.js";
+import { mostRecentKsuid } from "../dist/report.js";
+import { tree } from "../dist/tree.js";
 
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'
-const TOKEN = process.env.TOKEN ?? ''; // || config.get('trellis.token') || '';
-const DOMAIN = config.get('trellis.domain') || '';
-const SERVICE_NAME = config.get('service.name') as unknown as TreeKey;
+const TOKEN = process.env.TOKEN ?? ""; // || config.get('trellis.token') || '';
+const DOMAIN = config.get("trellis.domain") || "";
+const SERVICE_NAME = config.get("service.name") as unknown as TreeKey;
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
-const CO_ID = config.get('foodlogiq.community.owner.id');
+const CO_ID = config.get("foodlogiq.community.owner.id");
 
-if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
-  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+if (SERVICE_NAME && tree?.bookmarks?.services?.["fl-sync"]) {
+  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services["fl-sync"];
 }
 
 // Const pending = `${SERVICE_PATH}/jobs/pending`
@@ -53,7 +53,7 @@ test.before(async (t) => {
   t.timeout(60_000);
   oada = await connect({ domain: DOMAIN, token: TOKEN });
   await oada.delete({
-    path: `/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois/7061be84577255dca0c348f605cadf5e`,
+    path: "/bookmarks/trellisfw/trading-partners/masterid-index/d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e/shared/trellisfw/documents/cois/7061be84577255dca0c348f605cadf5e",
   });
   return oada;
   /*
@@ -106,7 +106,7 @@ test.before(async (t) => {
     */
 });
 
-test('A job that is started should be resumed on restart of the service', async (t) => {
+test("A job that is started should be resumed on restart of the service", async (t) => {
   t.timeout(200_000);
   // 1. Create a job and call the job handler manually. This should allow the
   // doc to be written to trading-partner docs.
@@ -115,22 +115,22 @@ test('A job that is started should be resumed on restart of the service', async 
 
   await watchTargetJobs();
   const jobConf: JobConfig = {
-    'status': 'awaiting-review',
-    'fl-sync-type': 'document',
-    'type': 'Certificate of Insurance',
-    'key': '634dc117bf1d87000fc4b7ef',
-    'date': '10-14-2022',
-    'bid': '61f95cd2df6175000f371494',
-    '_rev': 1,
-    'masterid':
-      'd4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e',
-    'mirrorid': 'resources/2GHq2HdwHPLDZ8cdsMynfALpGes',
-    'bname': 'TrellisTestSupplier',
-    'name': 'test coi',
-    'link': `https://sandbox.foodlogiq.com/businesses/${CO_ID}/documents/detail/634dc117bf1d87000fc4b7ef`,
+    status: "awaiting-review",
+    "fl-sync-type": "document",
+    type: "Certificate of Insurance",
+    key: "634dc117bf1d87000fc4b7ef",
+    date: "10-14-2022",
+    bid: "61f95cd2df6175000f371494",
+    _rev: 1,
+    masterid:
+      "d4f7b367c7f6aa30841132811bbfe95d3c3a807513ac43d7c8fea41a6688606e",
+    mirrorid: "resources/2GHq2HdwHPLDZ8cdsMynfALpGes",
+    bname: "TrellisTestSupplier",
+    name: "test coi",
+    link: `https://sandbox.foodlogiq.com/businesses/${CO_ID}/documents/detail/634dc117bf1d87000fc4b7ef`,
   };
-  const jobId = await postJob(oada, jobConf, 'awaiting-review');
-  const jobKey = jobId.replace(/^resources\//, '');
+  const jobId = await postJob(oada, jobConf, "awaiting-review");
+  const jobKey = jobId.replace(/^resources\//, "");
 
   const path = `/${jobId}`;
   await oada.put({
@@ -155,10 +155,10 @@ test('A job that is started should be resumed on restart of the service', async 
   }));
 
   // @ts-expect-error Job bleh
-  if (!isObj(job) || !isObj(job.config['target-jobs']))
-    throw new Error('Not object');
+  if (!isObj(job) || !isObj(job.config["target-jobs"]))
+    throw new Error("Not object");
   // @ts-expect-error something
-  const targetJobBefore = Object.keys(job.config['target-jobs'])[0];
+  const targetJobBefore = Object.keys(job.config["target-jobs"])[0];
 
   // Now start up the services
   await service({
@@ -176,31 +176,31 @@ test('A job that is started should be resumed on restart of the service', async 
   }));
 
   // @ts-expect-error something
-  if (!isObj(job) || !isObj(job.config['target-jobs']))
-    throw new Error('Not object');
+  if (!isObj(job) || !isObj(job.config["target-jobs"]))
+    throw new Error("Not object");
   // @ts-expect-error something
-  const targetJobAfter = Object.keys(job.config['target-jobs'])[0];
+  const targetJobAfter = Object.keys(job.config["target-jobs"])[0];
 
   t.is(targetJobBefore, targetJobAfter);
 });
 
 async function watchTargetJobs() {
   const watch = new ListWatch({
-    path: `/bookmarks/services/target/jobs/pending`,
-    name: `target-jobs-fl-sync`,
+    path: "/bookmarks/services/target/jobs/pending",
+    name: "target-jobs-fl-sync",
     conn: oada,
     resume: true,
     onAddItem: targetWatchOnAdd,
   });
-  process.on('beforeExit', async () => {
+  process.on("beforeExit", async () => {
     await watch.stop();
   });
 }
 
-export async function targetWatchOnAdd(item: any, key: string) {
+async function targetWatchOnAdd(item: any, key: string) {
   try {
     const { _id } = item;
-    key = key.replace(/^\//, '');
+    key = key.replace(/^\//, "");
     if (!item.config?.pdf?._id) return;
     const pdfId = item.config.pdf._id;
     if (!pdfId) return;
@@ -211,7 +211,7 @@ export async function targetWatchOnAdd(item: any, key: string) {
     });
 
     if (Buffer.isBuffer(data)) {
-      data = JSON.parse((data ?? '').toString());
+      data = JSON.parse((data ?? "").toString());
     }
 
     if (!isObj(data)) {
@@ -219,13 +219,13 @@ export async function targetWatchOnAdd(item: any, key: string) {
     }
 
     // @ts-expect-error
-    const flJobKeys = Object.keys(data?.services?.['fl-sync']?.jobs || {});
+    const flJobKeys = Object.keys(data?.services?.["fl-sync"]?.jobs || {});
 
     const jobKey = mostRecentKsuid(flJobKeys);
     if (!jobKey) return;
 
     // @ts-expect-error
-    const jobId = data?.services?.['fl-sync']?.jobs?.[jobKey]!._id;
+    const jobId = data?.services?.["fl-sync"]?.jobs?.[jobKey]?._id;
 
     const {
       data: { bid, key: documentKey },

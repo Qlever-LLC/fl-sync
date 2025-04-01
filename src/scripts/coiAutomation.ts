@@ -19,10 +19,10 @@ import {
   //draftsToAwaitingApproval,
   gatherCoisReportData,
   generateCoisReport,
-} from '../assessments/coi.js';
+} from "../assessments/coi.js";
 
 //const filename = 'cois-12-04-2024.json';
-const filename = 'CoiReportData.json';
+const filename = "CoiReportData.json";
 const xlsxFilename = `cois-report-${new Date().toISOString()}.xlsx`;
 try {
   //await draftsToAwaitingApproval();

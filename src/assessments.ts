@@ -15,29 +15,29 @@
  * limitations under the License.
  */
 
-import '@oada/pino-debug';
-import config from './config.js';
+import "@oada/pino-debug";
+import config from "./config.js";
 
-import debug from 'debug';
+import debug from "debug";
 
-import type { JsonObject } from '@oada/client';
+import type { JsonObject } from "@oada/client";
 
-import type { FlAssessment } from './types.js';
+import type { FlAssessment } from "./types.js";
 
-const CO_ID = config.get('foodlogiq.community.owner.id');
-const CO_NAME = config.get('foodlogiq.community.owner.name');
-const ASSESSMENT_TEMPLATE_ID = config.get('foodlogiq.assessment-template.id');
+const CO_ID = config.get("foodlogiq.community.owner.id");
+const CO_NAME = config.get("foodlogiq.community.owner.name");
+const ASSESSMENT_TEMPLATE_ID = config.get("foodlogiq.assessment-template.id");
 const ASSESSMENT_TEMPLATE_NAME = config.get(
-  'foodlogiq.assessment-template.name',
+  "foodlogiq.assessment-template.name",
 );
-const COMMUNITY_ID = config.get('foodlogiq.community.id');
-const COMMUNITY_NAME = config.get('foodlogiq.community.name');
-const FL_DOMAIN = config.get('foodlogiq.domain');
-const FL_TOKEN = config.get('foodlogiq.token');
+const COMMUNITY_ID = config.get("foodlogiq.community.id");
+const COMMUNITY_NAME = config.get("foodlogiq.community.name");
+const FL_DOMAIN = config.get("foodlogiq.domain");
+const FL_TOKEN = config.get("foodlogiq.token");
 
-const info = debug('fl-sync:info');
-const trace = debug('fl-sync:trace');
-const error = debug('fl-sync:error');
+const info = debug("fl-sync:info");
+const trace = debug("fl-sync:trace");
+const error = debug("fl-sync:error");
 
 interface AssessmentType {
   SupplierAudit: string;
@@ -47,9 +47,9 @@ interface AssessmentType {
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare, @typescript-eslint/naming-convention
 const AssessmentType: AssessmentType = Object.freeze({
-  SupplierAudit: 'supplier_audit',
-  SupplierQuestionnaire: 'supplier_questionnaire',
-  InternalAudit: 'internal_audit',
+  SupplierAudit: "supplier_audit",
+  SupplierQuestionnaire: "supplier_questionnaire",
+  InternalAudit: "internal_audit",
 });
 
 // TODO: need to polish this code
@@ -74,11 +74,11 @@ const ASSESSMENT_TEMPLATE = {
     name: CO_NAME,
   },
   performedOnBusiness: {
-    _id: '605249563a720a000e4154ad',
-    name: 'Centricity Test',
+    _id: "605249563a720a000e4154ad",
+    name: "Centricity Test",
   },
 
-  name: 'Insurance Requirements',
+  name: "Insurance Requirements",
   type: AssessmentType.SupplierAudit,
 };
 
@@ -100,7 +100,7 @@ interface AssessmentContent {
   umbrella: number;
   employer: number;
   worker: boolean;
-  updateFlId?: string | void;
+  updateFlId?: string;
 }
 
 interface AnswerContent {
@@ -145,12 +145,12 @@ export async function spawnAssessment(
       ? `${PATH_SPAWN_ASSESSMENT}/${updateFlId}`
       : PATH_SPAWN_ASSESSMENT,
     {
-      method: updateFlId ? 'get' : 'post',
+      method: updateFlId ? "get" : "post",
       headers: { Authorization: FL_TOKEN },
       body: JSON.stringify(assessmentTemplate),
     },
   ).catch((cError: unknown) => {
-    error(cError, '--> Error when spawning an assessment.');
+    error(cError, "--> Error when spawning an assessment.");
     throw cError as Error;
   });
   const data = (await result.json()) as any;
@@ -163,10 +163,10 @@ export async function spawnAssessment(
   // Populating answers in the COI assessment
   // TODO: Do all of these others need to be null??
   const answerContent: AnswerContent = {
-    _id: '6091a3bed4e9d21beb000001',
+    _id: "6091a3bed4e9d21beb000001",
     answers: [
       {
-        column: '606cc7eff8014707de000012',
+        column: "606cc7eff8014707de000012",
         // eslint-disable-next-line unicorn/no-null
         answerText: null,
         // eslint-disable-next-line unicorn/no-null
@@ -174,7 +174,7 @@ export async function spawnAssessment(
         answerNumeric: general,
       },
       {
-        column: '606cc83bf8014788eb000013',
+        column: "606cc83bf8014788eb000013",
         // eslint-disable-next-line unicorn/no-null
         answerText: null,
         // eslint-disable-next-line unicorn/no-null
@@ -182,7 +182,7 @@ export async function spawnAssessment(
         answerNumeric: aggregate,
       },
       {
-        column: '606cc860f801475f03000014',
+        column: "606cc860f801475f03000014",
         // eslint-disable-next-line unicorn/no-null
         answerText: null,
         // eslint-disable-next-line unicorn/no-null
@@ -190,7 +190,7 @@ export async function spawnAssessment(
         answerNumeric: auto,
       },
       {
-        column: '6091a7361b70862ee2000001',
+        column: "6091a7361b70862ee2000001",
         // eslint-disable-next-line unicorn/no-null
         answerText: null,
         // eslint-disable-next-line unicorn/no-null
@@ -198,7 +198,7 @@ export async function spawnAssessment(
         answerNumeric: product,
       },
       {
-        column: '606cc887f80147f255000015',
+        column: "606cc887f80147f255000015",
         // eslint-disable-next-line unicorn/no-null
         answerText: null,
         // eslint-disable-next-line unicorn/no-null
@@ -206,7 +206,7 @@ export async function spawnAssessment(
         answerNumeric: umbrella,
       },
       {
-        column: '606f661d2914d0eaff000001',
+        column: "606f661d2914d0eaff000001",
         // eslint-disable-next-line unicorn/no-null
         answerText: null,
         // eslint-disable-next-line unicorn/no-null
@@ -214,7 +214,7 @@ export async function spawnAssessment(
         answerNumeric: employer,
       },
       {
-        column: '606f664b2914d09a5f000002',
+        column: "606f664b2914d09a5f000002",
         // eslint-disable-next-line unicorn/no-null
         answerText: null,
         // eslint-disable-next-line unicorn/no-null
@@ -230,13 +230,13 @@ export async function spawnAssessment(
   ASSESSMENT_BODY.sections[0].subsections[0].questions[0].productEvaluationOptions.answerRows =
     answersTemplate;
   // Updating percentage completed
-  ASSESSMENT_BODY.state = 'In Progress';
+  ASSESSMENT_BODY.state = "In Progress";
   ASSESSMENT_BODY.questionInteractionCounts.answered = 1;
   ASSESSMENT_BODY.questionInteractionCounts.percentageCompleted = 100;
   // Creating the path for a specific assessment (update/put)
   PATH_TO_UPDATE_ASSESSMENT += `/${SPAWNED_ASSESSMENT_ID}`;
   // Updating assessment
-  ASSESSMENT_BODY.state = 'Submitted';
+  ASSESSMENT_BODY.state = "Submitted";
   const response = await updateAssessment(
     PATH_TO_UPDATE_ASSESSMENT,
     ASSESSMENT_BODY,
@@ -261,14 +261,14 @@ export async function linkAssessmentToDocument(
   );
 
   return fetch(PATH_LINK_ASSESSMENT, {
-    method: 'post',
+    method: "post",
     headers: { Authorization: FL_TOKEN },
     body: JSON.stringify([
       {
         businessId: bid,
         from: assessment,
-        linkType: 'SOURCES',
-        linkTypeDisplay: 'Sources',
+        linkType: "SOURCES",
+        linkTypeDisplay: "Sources",
         to: document,
       },
     ]),
@@ -286,12 +286,12 @@ async function updateAssessment(path: string, body: FlAssessment) {
   trace(`Updating assessment [${body._id}] after creation`);
   try {
     const result = await fetch(path, {
-      method: 'put',
+      method: "put",
       headers: { Authorization: FL_TOKEN },
       body: JSON.stringify(body),
     });
     const data = (await result.json()) as any;
-    info('--> assessment created. %s', data._id);
+    info("--> assessment created. %s", data._id);
     return data;
   } catch (cError: unknown) {
     error(
@@ -302,7 +302,7 @@ async function updateAssessment(path: string, body: FlAssessment) {
           data: JSON.stringify(body),
         },
       },
-      '--> Error when updating the assessment.',
+      "--> Error when updating the assessment.",
     );
     throw cError as Error;
   }

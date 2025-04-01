@@ -14,6 +14,23 @@
 
 name: Build, test, and push service images
 
+permissions:
+  packages: write
+  security-events: write
+  id-token: write
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+  issues: read
+  models: read
+  discussions: read
+  pages: read
+  pull-requests: read
+  repository-projects: read
+  statuses: read
+  attestations: read
+
 on:
   push:
   pull_request:
@@ -31,8 +48,8 @@ jobs:
   docker:
     name: Docker CI
     # Wait for yarn tests to pass?
-    # needs:
-    #   - yarn
+    #needs:
+    #  - yarn
     uses: qlever-llc/workflows/.github/workflows/build-and-push-service.yml@master
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}

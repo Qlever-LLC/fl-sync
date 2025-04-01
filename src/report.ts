@@ -15,48 +15,48 @@
  * limitations under the License.
  */
 
-import config from './config.js';
+import config from "./config.js";
 
-import fs from 'node:fs/promises';
+import fs from "node:fs/promises";
 
-import '@oada/pino-debug';
+import "@oada/pino-debug";
 // @ts-expect-error no types
-import csvjson from 'csvjson';
-import debug from 'debug';
-import ksuid from 'ksuid';
-import moment from 'moment';
+import csvjson from "csvjson";
+import debug from "debug";
+import ksuid from "ksuid";
+import moment from "moment";
 
-import type { Job } from '@oada/jobs';
-import type Link from '@oada/types/oada/link/v1.js';
-import type { OADAClient } from '@oada/client';
-import { connect } from '@oada/client';
+import type { OADAClient } from "@oada/client";
+import { connect } from "@oada/client";
+import type { Job } from "@oada/jobs";
+import type Link from "@oada/types/oada/link/v1.js";
 
-const DOMAIN = config.get('trellis.domain');
-const TOKEN = config.get('trellis.token');
-const SERVICE_NAME = config.get('service.name');
+const DOMAIN = config.get("trellis.domain");
+const TOKEN = config.get("trellis.token");
+const SERVICE_NAME = config.get("service.name");
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
-const SUPPLIER = config.get('foodlogiq.testSupplier.id');
-const FL_TRELLIS_USER = config.get('foodlogiq.trellisUser');
-const CO_ID = config.get('foodlogiq.community.owner.id');
-const FL_DOMAIN = config.get('foodlogiq.domain');
-const FL_TOKEN = config.get('foodlogiq.token');
+const SUPPLIER = config.get("foodlogiq.testSupplier.id");
+const FL_TRELLIS_USER = config.get("foodlogiq.trellisUser");
+const CO_ID = config.get("foodlogiq.community.owner.id");
+const FL_DOMAIN = config.get("foodlogiq.domain");
+const FL_TOKEN = config.get("foodlogiq.token");
 
-const info = debug('fl-sync:info');
-const trace = debug('fl-sync:trace');
-const error = debug('fl-sync:error');
+const info = debug("fl-sync:info");
+const trace = debug("fl-sync:trace");
+const error = debug("fl-sync:error");
 
 const humanReadableJobError: Record<string, string> = {
-  'target-other': 'Other target errors',
-  'associated-assessment-rejected': 'Assessment failure',
-  'document-validation': 'Document data did not match Food LogiQ data',
-  'target-unrecognized': 'Format unrecognized during extration',
-  'multi-files-attached': 'Multiple files were attached within Food LogiQ',
-  'target-validation':
-    'Required data elements missing during Target extraction',
-  'target-multiple-docs-combined':
-    'The PDF contained multiple document extractable results, but this is current not supported.',
-  'bad-fl-attachments':
-    'Attachments corrupt or can no longer be retrieved from Amazon S3',
+  "target-other": "Other target errors",
+  "associated-assessment-rejected": "Assessment failure",
+  "document-validation": "Document data did not match Food LogiQ data",
+  "target-unrecognized": "Format unrecognized during extration",
+  "multi-files-attached": "Multiple files were attached within Food LogiQ",
+  "target-validation":
+    "Required data elements missing during Target extraction",
+  "target-multiple-docs-combined":
+    "The PDF contained multiple document extractable results, but this is current not supported.",
+  "bad-fl-attachments":
+    "Attachments corrupt or can no longer be retrieved from Amazon S3",
 };
 
 export async function makeFinalReport() {
@@ -70,10 +70,10 @@ export async function makeFinalReport() {
   };
 
   const finalReport: any = {
-    'total': 0,
-    'ignoreTestSupplier': 0,
-    'ignoreCommunityOwner': 0,
-    'flStatuses': {
+    total: 0,
+    ignoreTestSupplier: 0,
+    ignoreCommunityOwner: 0,
+    flStatuses: {
       approved: {
         total: 0,
         byUs: 0,
@@ -83,19 +83,19 @@ export async function makeFinalReport() {
         byUs: 0,
       },
     },
-    'otherErrors': 0,
-    'job-errors': {
+    otherErrors: 0,
+    "job-errors": {
       total: 0,
     },
-    'inLaserfiche': 0,
-    'notInLaserfiche': 0,
-    'flDeleted': 0,
+    inLaserfiche: 0,
+    notInLaserfiche: 0,
+    flDeleted: 0,
   };
 
   try {
     // 1. Iterate over the docs
     const mint = setInterval(() => {
-      info(`ping`);
+      info("ping");
     }, 3000);
     const oada = await connect({
       domain: `https://${DOMAIN}`,
@@ -105,7 +105,7 @@ export async function makeFinalReport() {
       path: `${SERVICE_PATH}/businesses`,
     });
     const busKeys: any = Object.keys(buses as Record<string, unknown>).filter(
-      (index) => !index.startsWith('_'),
+      (index) => !index.startsWith("_"),
     );
 
     for await (const bid of busKeys) {
@@ -119,7 +119,7 @@ export async function makeFinalReport() {
       }
 
       const documentKeys = Object.keys(docs).filter(
-        (index) => !index.startsWith('_'),
+        (index) => !index.startsWith("_"),
       );
 
       for await (const docId of documentKeys) {
@@ -138,8 +138,8 @@ export async function makeFinalReport() {
         }
 
         // eslint-disable-next-line sonarjs/no-duplicate-string
-        const type = `${document?.['food-logiq-mirror']?.shareSource?.type?.name}`;
-        if (type !== 'Certificate of Insurance') {
+        const type = `${document?.["food-logiq-mirror"]?.shareSource?.type?.name}`;
+        if (type !== "Certificate of Insurance") {
           return;
         }
 
@@ -155,13 +155,13 @@ export async function makeFinalReport() {
           return;
         }
 
-        const documentName = `${document?.['food-logiq-mirror']?.name} `;
-        const busName = `${document?.['food-logiq-mirror']?.shareSource?.sourceBusiness?.name}`;
+        const documentName = `${document?.["food-logiq-mirror"]?.name} `;
+        const busName = `${document?.["food-logiq-mirror"]?.shareSource?.sourceBusiness?.name}`;
         const status = `${
-          document?.['food-logiq-mirror']?.shareSource?.approvalInfo?.status
+          document?.["food-logiq-mirror"]?.shareSource?.approvalInfo?.status
         }`;
-        const user = `${document?.['food-logiq-mirror']?.shareSource?.approvalInfo?.setBy?._id}`;
-        const createDate = `${document?.['food-logiq-mirror']?.versionInfo?.createdAt}`;
+        const user = `${document?.["food-logiq-mirror"]?.shareSource?.approvalInfo?.setBy?._id}`;
+        const createDate = `${document?.["food-logiq-mirror"]?.versionInfo?.createdAt}`;
         if (status) {
           finalReport.flStatuses[status] ??= {};
           finalReport.flStatuses[status].total ??= 0;
@@ -177,7 +177,7 @@ export async function makeFinalReport() {
           await fetch(
             `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${docId}`,
             {
-              method: 'head',
+              method: "head",
               headers: {
                 Authorization: `${FL_TOKEN}`,
               },
@@ -186,7 +186,7 @@ export async function makeFinalReport() {
         } catch (cError: unknown) {
           // @ts-expect-error stupid errors
           if (cError.response.status === 404) {
-            error(`Document has been deleted in FL`, {
+            error("Document has been deleted in FL", {
               docid: docId,
               bid,
             });
@@ -205,7 +205,7 @@ export async function makeFinalReport() {
           return;
         }
 
-        const jobs = (meta?.services?.['fl-sync']?.jobs ??
+        const jobs = (meta?.services?.["fl-sync"]?.jobs ??
           {}) as unknown as Record<string, Link>;
         if (Object.keys(jobs).length <= 0) {
           finalReport.missingFlSyncJob ??= 0;
@@ -220,7 +220,7 @@ export async function makeFinalReport() {
             status,
             user,
           };
-          if (status === 'approved') {
+          if (status === "approved") {
             trace({ docid: docId, bid, status, user });
             otherReport.approvedButNoJob[docId] = {
               docid: docId,
@@ -248,55 +248,55 @@ export async function makeFinalReport() {
         // @ts-expect-error TODO: fix type for job
         const jobError: string | undefined = job?.result?.JobError;
         if (jobError) {
-          finalReport['job-errors'][jobError] =
-            finalReport['job-errors'][jobError] || 0;
-          finalReport['job-errors'][jobError]++;
-          finalReport['job-errors'].total++;
+          finalReport["job-errors"][jobError] =
+            finalReport["job-errors"][jobError] || 0;
+          finalReport["job-errors"][jobError]++;
+          finalReport["job-errors"].total++;
 
           spreadsheet.push({
-            'Document Name': documentName,
-            'Document Type': type,
-            'Date Created': createDate,
-            'Supplier': busName,
-            'FoodLogiQ Status': status,
-            'Trellis Result': humanReadableJobError[jobError],
-            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
-            'FoodLogiQ Document ID': docId,
-            'FoodLogiQ Supplier ID': bid,
+            "Document Name": documentName,
+            "Document Type": type,
+            "Date Created": createDate,
+            Supplier: busName,
+            "FoodLogiQ Status": status,
+            "Trellis Result": humanReadableJobError[jobError],
+            "FoodLogiQ Link": `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
+            "FoodLogiQ Document ID": docId,
+            "FoodLogiQ Supplier ID": bid,
           });
 
           return;
         }
 
-        if (job.status === 'success') {
+        if (job.status === "success") {
           finalReport.jobSuccess ??= 0;
           finalReport.jobSuccess++;
 
           spreadsheet.push({
-            'Document Name': documentName,
-            'Document Type': type,
-            'Date Created': createDate,
-            'Supplier': busName,
-            'FoodLogiQ Status': status,
-            'Trellis Result': 'Success',
-            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
-            'FoodLogiQ Document ID': docId,
-            'FoodLogiQ Supplier ID': bid,
+            "Document Name": documentName,
+            "Document Type": type,
+            "Date Created": createDate,
+            Supplier: busName,
+            "FoodLogiQ Status": status,
+            "Trellis Result": "Success",
+            "FoodLogiQ Link": `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
+            "FoodLogiQ Document ID": docId,
+            "FoodLogiQ Supplier ID": bid,
           });
           info({ docid: docId, jobid: jobId, status: job.status });
         } else {
           finalReport.otherErrors++;
           otherReport.otherErrors[docId] = { docid: docId, bid, jobid: jobId };
           spreadsheet.push({
-            'Document Name': documentName,
-            'Document Type': type,
-            'Date Created': createDate,
-            'Supplier': busName,
-            'FoodLogiQ Status': status,
-            'Trellis Result': 'Other Trellis Error',
-            'FoodLogiQ Link': `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
-            'FoodLogiQ Document ID': docId,
-            'FoodLogiQ Supplier ID': bid,
+            "Document Name": documentName,
+            "Document Type": type,
+            "Date Created": createDate,
+            Supplier: busName,
+            "FoodLogiQ Status": status,
+            "Trellis Result": "Other Trellis Error",
+            "FoodLogiQ Link": `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${docId}`,
+            "FoodLogiQ Document ID": docId,
+            "FoodLogiQ Supplier ID": bid,
           });
           return;
         }
@@ -310,7 +310,7 @@ export async function makeFinalReport() {
           })) as { data: any };
 
           const entryId: unknown =
-            coiMeta?.services?.['lf-sync']?.LaserficheEntryID;
+            coiMeta?.services?.["lf-sync"]?.LaserficheEntryID;
           if (entryId) {
             finalReport.inLaserfiche++;
           } else {
@@ -322,7 +322,7 @@ export async function makeFinalReport() {
               bid,
               jobid: jobId,
             };
-            if (status === 'approved') {
+            if (status === "approved") {
               otherReport.approvedNotInLaserfiche[docId] = {
                 docid: docId,
                 bid,
@@ -339,11 +339,11 @@ export async function makeFinalReport() {
 
     info(finalReport);
     await fs.writeFile(
-      './scripts/finalReportDocs-Prod.json',
+      "./scripts/finalReportDocs-Prod.json",
       JSON.stringify(otherReport),
     );
     await fs.writeFile(
-      './scripts/finalReport-Prod.json',
+      "./scripts/finalReport-Prod.json",
       JSON.stringify(finalReport),
     );
     finalReport.checks = {
@@ -351,31 +351,31 @@ export async function makeFinalReport() {
         total: finalReport.total,
         testSupplier: finalReport.ignoreTestSupplier,
         success: finalReport.jobSuccess,
-        jobErrors: finalReport['job-errors'].total,
+        jobErrors: finalReport["job-errors"].total,
         otherErrors: finalReport.otherErrors,
         missingFlSyncJob: finalReport.missingFlSyncJob,
         sum:
           finalReport.ignoreTestSupplier +
           finalReport.jobSuccess +
-          finalReport['job-errors'].total +
+          finalReport["job-errors"].total +
           finalReport.otherErrors +
           finalReport.missingFlSyncJob,
       },
       awaiting: {
-        'total': finalReport.flStatuses['Awaiting Approval'].total,
-        'target-unrecognized': finalReport['job-errors']['target-unrecognized'],
-        'target-validation': finalReport['job-errors']['target-validation'],
-        'target-other': finalReport['job-errors']['target-other'],
-        'missingFlSyncJob':
-          finalReport.flStatuses['Awaiting Approval'].missingFlSyncJob,
-        'bad-fl-attachments': finalReport['job-errors']['bad-fl-attachments'],
-        'otherErrors': finalReport.otherErrors,
-        'sum':
-          finalReport['job-errors']['target-validation'] +
-          finalReport['job-errors']['target-unrecognized'] +
-          finalReport['job-errors']['target-other'] +
-          finalReport.flStatuses['Awaiting Approval'].missingFlSyncJob +
-          finalReport['job-errors']['bad-fl-attachments'] +
+        total: finalReport.flStatuses["Awaiting Approval"].total,
+        "target-unrecognized": finalReport["job-errors"]["target-unrecognized"],
+        "target-validation": finalReport["job-errors"]["target-validation"],
+        "target-other": finalReport["job-errors"]["target-other"],
+        missingFlSyncJob:
+          finalReport.flStatuses["Awaiting Approval"].missingFlSyncJob,
+        "bad-fl-attachments": finalReport["job-errors"]["bad-fl-attachments"],
+        otherErrors: finalReport.otherErrors,
+        sum:
+          finalReport["job-errors"]["target-validation"] +
+          finalReport["job-errors"]["target-unrecognized"] +
+          finalReport["job-errors"]["target-other"] +
+          finalReport.flStatuses["Awaiting Approval"].missingFlSyncJob +
+          finalReport["job-errors"]["bad-fl-attachments"] +
           finalReport.otherErrors,
       },
       approved: {
@@ -384,10 +384,10 @@ export async function makeFinalReport() {
       },
     };
     info(finalReport);
-    let csv = csvjson.toCSV(spreadsheet, { delimiter: ',', wrap: false });
+    let csv = csvjson.toCSV(spreadsheet, { delimiter: ",", wrap: false });
     csv = fixHeaders(csv, Object.keys(spreadsheet[0]));
-    await fs.writeFile('./scripts/finalReport-Prod.csv', csv);
-    info('Done with CSV');
+    await fs.writeFile("./scripts/finalReport-Prod.csv", csv);
+    info("Done with CSV");
 
     clearInterval(mint);
     return csv;
@@ -435,7 +435,7 @@ export async function isItTime(oada: OADAClient) {
 
   if (
     lastTime.year() === now.year() &&
-    lastTime.clone().add(1, 'day').dayOfYear() === now.dayOfYear() &&
+    lastTime.clone().add(1, "day").dayOfYear() === now.dayOfYear() &&
     !currentlyReporting
   ) {
     currentlyReporting = true;
@@ -445,17 +445,17 @@ export async function isItTime(oada: OADAClient) {
 }
 
 async function postEmailJob(csv: string, oada: OADAClient) {
-  const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
+  const date = moment().subtract(1, "day").format("YYYY-MM-DD");
   const job = {
-    service: 'abalonemail',
-    type: 'email',
+    service: "abalonemail",
+    type: "email",
     config: {
       multiple: false,
-      from: 'dev_3pty@centricity.us',
+      from: "dev_3pty@centricity.us",
       to: {
-        name: 'Smithfield FSQA Suppliers',
+        name: "Smithfield FSQA Suppliers",
         //        "email": "fsqasupplier@smithfield.com"
-        email: 'sn@centricity.us',
+        email: "sn@centricity.us",
       },
       subject: `Trellis Automation Report - ${date}`,
       text: `Attached is the Trellis Automation Report for the Food Logiq documents processed for the 24 hour period of ${date}.`,
@@ -463,21 +463,21 @@ async function postEmailJob(csv: string, oada: OADAClient) {
         {
           content: csv,
           filename: `TrellisAutomationReport-${date}.csv`,
-          type: 'text/csv',
+          type: "text/csv",
         },
       ],
     },
   };
 
   const { headers } = await oada.post({
-    path: '/resources',
-    contentType: 'application/vnd.oada.job.1+json',
+    path: "/resources",
+    contentType: "application/vnd.oada.job.1+json",
     data: job,
   });
-  const jobkey = headers['content-location']!.replace(/^\/resources\//, '');
+  const jobkey = headers["content-location"]!.replace(/^\/resources\//, "");
 
   await oada.put({
-    path: `/bookmarks/services/abalonemail/jobs/pending`,
+    path: "/bookmarks/services/abalonemail/jobs/pending",
     data: {
       [jobkey]: { _id: `resources/${jobkey}`, _rev: 0 },
     },

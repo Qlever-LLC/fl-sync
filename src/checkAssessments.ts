@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import '@oada/pino-debug';
-import debug from 'debug';
+import "@oada/pino-debug";
+import debug from "debug";
 
-import type { FlAssessment } from './types.js';
+import type { FlAssessment } from "./types.js";
 
-const info = debug('fl-sync:mirror-watch:info');
+const info = debug("fl-sync:mirror-watch:info");
 
 const DEPTH = 5;
 
@@ -45,7 +45,7 @@ export function checkAssessment(assessment: FlAssessment) {
         subsection.questions.map((question) =>
           question.productEvaluationOptions.columns.map((column) => {
             // Handle columns that aren't scored
-            if (column.acceptanceType === 'none') return false;
+            if (column.acceptanceType === "none") return false;
             const res = column.statisticsCommon.percentWithinTolerance < 100;
             if (res) {
               const reason = `${column.name}(${column.statisticsNumeric.average}) did not meet the requirement (${column.acceptanceValueNumericPrimary})`;
@@ -71,7 +71,7 @@ const checkAssessments = new Map(
      * @returns
      */
     // eslint-disable-next-line @typescript-eslint/naming-convention
-    '606cc945c8f60c000e53947f'(assessment: FlAssessment) {
+    "606cc945c8f60c000e53947f"(assessment: FlAssessment) {
       const reasons: string[] = [];
       info(`Checking COI assessment ${assessment._id}`);
       const failed = assessment.sections.map((section) =>
@@ -79,7 +79,7 @@ const checkAssessments = new Map(
           subsection.questions.map((question) => {
             const umbrellaIndex =
               question.productEvaluationOptions.columns.findIndex(
-                (column) => column.name === 'Umbrella Coverage',
+                (column) => column.name === "Umbrella Coverage",
               );
             const { _id } =
               question.productEvaluationOptions.columns[umbrellaIndex]!;
@@ -92,12 +92,12 @@ const checkAssessments = new Map(
               let requirement;
               let umbCov;
               // Handle columns that aren't scored
-              if (column.acceptanceType === 'none') return false;
+              if (column.acceptanceType === "none") return false;
               // Check for policy coverage PLUS umbrella coverage
               if (
                 column.statisticsCommon.percentWithinTolerance < 100 &&
-                column.name !== 'Umbrella Coverage' &&
-                column.type === 'numeric'
+                column.name !== "Umbrella Coverage" &&
+                column.type === "numeric"
               ) {
                 const answerIndex =
                   question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
@@ -138,13 +138,13 @@ const checkAssessments = new Map(
 
               const res = column.statisticsCommon.percentWithinTolerance < 100;
               if (res) {
-                if (column.type === 'numeric') {
+                if (column.type === "numeric") {
                   const reason = `${column.name}(${value}; plus umbrella ${umbCov}) did not meet the requirement (${requirement})`;
                   info(
                     `Assessment violation for id [${assessment._id}: ${reason}`,
                   );
                   reasons.push(reason);
-                } else if (column.type === 'bool') {
+                } else if (column.type === "bool") {
                   const answerIndex =
                     question.productEvaluationOptions.answerRows[0]!.answers.findIndex(
                       (answer) => answer.column === column._id,

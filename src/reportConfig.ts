@@ -14,47 +14,47 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type { ReportConfig } from '@oada/jobs';
+import type { ReportConfig } from "@oada/jobs";
 
 export const docReportConfig = {
   jobMappings: {
-    'Document Name': '/config/name',
-    'Document Type': '/config/type',
-    'Creation Date': '/config/date',
-    'Supplier Name': '/config/bname',
-    'FoodLogiQ Status': '/foodlogiq-result-status',
-    'Trellis Result': 'errorMappings',
-    'Additional Information': '/result/message',
-    'FoodLogiQ Link': '/config/link',
-    'FoodLogiQ Business ID': '/config/bid',
-    'FoodLogiQ Document ID': '/config/key',
+    "Document Name": "/config/name",
+    "Document Type": "/config/type",
+    "Creation Date": "/config/date",
+    "Supplier Name": "/config/bname",
+    "FoodLogiQ Status": "/foodlogiq-result-status",
+    "Trellis Result": "errorMappings",
+    "Additional Information": "/result/message",
+    "FoodLogiQ Link": "/config/link",
+    "FoodLogiQ Business ID": "/config/bid",
+    "FoodLogiQ Document ID": "/config/key",
   },
   errorMappings: {
-    'associated-assessment-rejected': 'Assessment Failure',
-    'bad-fl-attachments': 'Attachments could not be retrieved or are corrupt.',
-    'document-validation':
-      'Document contents did not match FoodLogiQ data or were missing.',
-    'multi-files-attached':
-      'Multiple attachments is not currently allowed for this document type.',
-    'target-multiple-docs-combined':
-      'The PDF attachment contained multiple documents. This is currently unsupported.',
-    'target-other': 'Extraction Failure',
-    'target-unrecognized': 'Extraction Failure',
-    'target-validation': 'Extraction Failure',
-    'unknown': 'Other Errors',
-    'target-error-already-approved':
-      'Document already approved; Extraction Failure',
+    "associated-assessment-rejected": "Assessment Failure",
+    "bad-fl-attachments": "Attachments could not be retrieved or are corrupt.",
+    "document-validation":
+      "Document contents did not match FoodLogiQ data or were missing.",
+    "multi-files-attached":
+      "Multiple attachments is not currently allowed for this document type.",
+    "target-multiple-docs-combined":
+      "The PDF attachment contained multiple documents. This is currently unsupported.",
+    "target-other": "Extraction Failure",
+    "target-unrecognized": "Extraction Failure",
+    "target-validation": "Extraction Failure",
+    unknown: "Other Errors",
+    "target-error-already-approved":
+      "Document already approved; Extraction Failure",
   },
 } as const satisfies ReportConfig;
 
 export const tpReportConfig = {
   jobMappings: {
-    'FL Name': '/config/fl-business/business/name',
-    'FL Address': '/config/fl-business/business/address/addressLineOne',
-    'FL City': '/config/fl-business/business/address/city',
-    'FL State': '/config/fl-business/business/address/region',
-    'FL Link': '/config/link',
-    'Error Message': '/fl-business-incomplete-reason',
+    "FL Name": "/config/fl-business/business/name",
+    "FL Address": "/config/fl-business/business/address/addressLineOne",
+    "FL City": "/config/fl-business/business/address/city",
+    "FL State": "/config/fl-business/business/address/region",
+    "FL Link": "/config/link",
+    "Error Message": "/fl-business-incomplete-reason",
   },
   errorMappings: {},
 } as const satisfies ReportConfig;
@@ -62,7 +62,7 @@ export const tpReportConfig = {
 export const tpReportFilter = (job: any) =>
   Object.values(job.updates).some(
     (v: any) =>
-      typeof v.status === 'string' && v.status === 'fl-business-incomplete',
+      typeof v.status === "string" && v.status === "fl-business-incomplete",
   ) &&
-  job.config?.['fl-business']?.locationGroup?.name !== 'Internal' &&
-  job.config?.['fl-business']?.productGroup?.name !== 'Internal';
+  job.config?.["fl-business"]?.locationGroup?.name !== "Internal" &&
+  job.config?.["fl-business"]?.productGroup?.name !== "Internal";

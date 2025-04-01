@@ -15,64 +15,64 @@
  * limitations under the License.
  */
 
-import { pino } from '@oada/pino-debug';
+import { pino } from "@oada/pino-debug";
 
 // Load config first so it can set up env
-import config from './config.js';
+import config from "./config.js";
 
-import '@oada/lib-prom';
+import "@oada/lib-prom";
 
-import type { Change, JsonObject, OADAClient } from '@oada/client';
-import {
-  docReportConfig,
-  tpReportConfig,
-  tpReportFilter,
-} from './reportConfig.js';
+import type { Change, JsonObject, OADAClient } from "@oada/client";
 import {
   handleAssessmentJob,
   handleDocumentJob,
   startJobCreator,
-} from './mirrorWatch.js';
+} from "./mirrorWatch.js";
+import {
+  docReportConfig,
+  tpReportConfig,
+  tpReportFilter,
+} from "./reportConfig.js";
 
 // Import this _before_ pino and/or DEBUG
 
-import { setTimeout } from 'node:timers/promises';
+import { setTimeout } from "node:timers/promises";
 
-import moment, { type Moment } from 'moment';
-import Bluebird from 'bluebird';
-import { connect } from '@oada/client';
-import equal from 'deep-equal';
-import esMain from 'es-main';
-import type { FlObject } from './types.js';
-import { handleFlBusiness } from './masterData.js';
-import { poll } from '@oada/poll';
-import { Service } from '@oada/jobs';
+import { connect } from "@oada/client";
+import { Service } from "@oada/jobs";
+import { poll } from "@oada/poll";
+import Bluebird from "bluebird";
+import equal from "deep-equal";
+import esMain from "es-main";
+import moment, { type Moment } from "moment";
 // Import { businessesReportConfig } from './businessesReportConfig.js';
-import { startIncidents } from './flIncidentsCsv.js';
-import tree from './tree.js';
+import { startIncidents } from "./flIncidentsCsv.js";
+import { handleFlBusiness } from "./masterData.js";
+import tree from "./tree.js";
+import type { FlObject } from "./types.js";
 
-const DOMAIN = config.get('trellis.domain');
-const TRELLIS_TOKEN = config.get('trellis.token');
-const FL_DOMAIN = config.get('foodlogiq.domain');
-const FL_TOKEN = config.get('foodlogiq.token');
-const JUST_TPS = config.get('trellis.justTps');
-const CO_ID = config.get('foodlogiq.community.owner.id');
-const COMMUNITY_ID = config.get('foodlogiq.community.id');
-const CONCURRENCY = config.get('trellis.concurrency');
-const INTERVAL_MS = config.get('foodlogiq.interval') * 1000; // FL polling interval
-const SERVICE_NAME = config.get('service.name');
+const DOMAIN = config.get("trellis.domain");
+const TRELLIS_TOKEN = config.get("trellis.token");
+const FL_DOMAIN = config.get("foodlogiq.domain");
+const FL_TOKEN = config.get("foodlogiq.token");
+const JUST_TPS = config.get("trellis.justTps");
+const CO_ID = config.get("foodlogiq.community.owner.id");
+const COMMUNITY_ID = config.get("foodlogiq.community.id");
+const CONCURRENCY = config.get("trellis.concurrency");
+const INTERVAL_MS = config.get("foodlogiq.interval") * 1000; // FL polling interval
+const SERVICE_NAME = config.get("service.name");
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
-const FL_FORCE_WRITE = config.get('foodlogiq.force_write');
-const DOC_FREQUENCY = config.get('trellis.reports.docFrequency');
-const VENDOR_FREQUENCY = config.get('trellis.reports.vendorFrequency');
-const REPORT_EMAIL = config.get('trellis.reports.email');
-const REPORT_CC_EMAIL = config.get('trellis.reports.ccEmail');
-const REPORT_REPLYTO_EMAIL = config.get('trellis.reports.replyToEmail');
-const services = config.get('services');
-const skipQueueOnStartup = config.get('skipQueueOnStartup');
+const FL_FORCE_WRITE = config.get("foodlogiq.force_write");
+const DOC_FREQUENCY = config.get("trellis.reports.docFrequency");
+const VENDOR_FREQUENCY = config.get("trellis.reports.vendorFrequency");
+const REPORT_EMAIL = config.get("trellis.reports.email");
+const REPORT_CC_EMAIL = config.get("trellis.reports.ccEmail");
+const REPORT_REPLYTO_EMAIL = config.get("trellis.reports.replyToEmail");
+const services = config.get("services");
+const skipQueueOnStartup = config.get("skipQueueOnStartup");
 
-if (SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
-  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services['fl-sync'];
+if (SERVICE_NAME && tree?.bookmarks?.services?.["fl-sync"]) {
+  tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services["fl-sync"];
 }
 
 let AUTO_APPROVE_ASSESSMENTS: boolean;
@@ -84,11 +84,11 @@ const log = pino({ base: { service: SERVICE_NAME } });
 async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
   for await (const change of changes) {
     try {
-      if (change.body && 'autoapprove-assessments' in change.body) {
-        setAutoApprove(Boolean(change.body['autoapprove-assessments']));
+      if (change.body && "autoapprove-assessments" in change.body) {
+        setAutoApprove(Boolean(change.body["autoapprove-assessments"]));
       }
     } catch (cError: unknown) {
-      log.error({ error: cError }, 'mirror watchCallback error');
+      log.error({ error: cError }, "mirror watchCallback error");
     }
   }
 }
@@ -120,19 +120,19 @@ export async function watchFlSyncConfig() {
   }
 
   if (
-    typeof data === 'object' &&
+    typeof data === "object" &&
     !Array.isArray(data) &&
     !Buffer.isBuffer(data)
   ) {
-    setAutoApprove(Boolean(data['autoapprove-assessments']));
+    setAutoApprove(Boolean(data["autoapprove-assessments"]));
   }
 
   const { changes } = await CONNECTION.watch({
     path: `${SERVICE_PATH}`,
-    type: 'single',
+    type: "single",
   });
 
-  log.info('Watching %s for changes to the config', SERVICE_PATH);
+  log.info("Watching %s for changes to the config", SERVICE_PATH);
   void handleConfigChanges(changes);
 } // WatchFlSyncConfig
 
@@ -145,7 +145,7 @@ export async function handleItem(
   try {
     let sync;
     bid =
-      type === 'assessments'
+      type === "assessments"
         ? item?.performedOnBusiness?._id
         : item?.shareSource?.sourceBusiness?._id;
 
@@ -163,7 +163,7 @@ export async function handleItem(
       };
 
       // Check for changes to the resources
-      const equals = equal(resp['food-logiq-mirror'], item);
+      const equals = equal(resp["food-logiq-mirror"], item);
       if (!equals || FL_FORCE_WRITE) {
         log.info(
           `Document difference in FL doc [${item._id}] detected. Syncing...`,
@@ -176,7 +176,7 @@ export async function handleItem(
         throw cError;
       }
 
-      log.info('Resource is not already in trellis. Syncing...');
+      log.info("Resource is not already in trellis. Syncing...");
       sync = true;
     }
 
@@ -188,7 +188,7 @@ export async function handleItem(
       // this falls within was changed to .each for the time-being
       await (CONNECTION || oada).put({
         path: `${SERVICE_PATH}/businesses/${bid}/${type}/${item._id}`,
-        data: { 'food-logiq-mirror': item } as unknown as JsonObject,
+        data: { "food-logiq-mirror": item } as unknown as JsonObject,
         tree,
       });
       log.info(
@@ -227,19 +227,19 @@ export async function fetchCommunityResources({
   const parameters = new URLSearchParams({
     pageIndex: `${pageIndex}`,
   });
-  if (type === 'assessments') {
-    parameters.append('lastUpdatedAt', `${startTime}..${endTime}`);
+  if (type === "assessments") {
+    parameters.append("lastUpdatedAt", `${startTime}..${endTime}`);
   } else {
-    parameters.append('versionUpdated', `${startTime}..${endTime}`);
-    parameters.append('sourceCommunities', COMMUNITY_ID);
+    parameters.append("versionUpdated", `${startTime}..${endTime}`);
+    parameters.append("sourceCommunities", COMMUNITY_ID);
   }
 
   const url =
-    type === 'assessments'
+    type === "assessments"
       ? `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment?${parameters}`
       : `${FL_DOMAIN}/v2/businesses/${CO_ID}/${type}?${parameters}`;
   const response = await fetch(url, {
-    method: `get`,
+    method: "get",
     headers: { Authorization: FL_TOKEN },
   });
   const data = (await response.json()) as any;
@@ -253,7 +253,7 @@ export async function fetchCommunityResources({
       while (retries-- > 0 && !(await handleItem(type, item, oada)));
     }
   } catch (cError: unknown) {
-    log.error({ error: cError }, 'fetchCommunityResources');
+    log.error({ error: cError }, "fetchCommunityResources");
     throw cError;
   }
 
@@ -264,8 +264,8 @@ export async function fetchCommunityResources({
         data.pageItemCount * (pageIndex + 1)
       }/${data.totalItemCount}`,
     );
-    if (type === 'documents') log.info(`Pausing for ${delay / 60_000} minutes`);
-    if (type === 'documents') await setTimeout(delay);
+    if (type === "documents") log.info(`Pausing for ${delay / 60_000} minutes`);
+    if (type === "documents") await setTimeout(delay);
     await fetchCommunityResources({
       type,
       startTime,
@@ -281,7 +281,7 @@ export async function fetchCommunityResources({
  */
 async function getResources(startTime: string, endTime: string) {
   // Get pending resources
-  for await (const type of ['products', 'locations', 'documents'] as const) {
+  for await (const type of ["products", "locations", "documents"] as const) {
     log.trace(`Fetching community ${type}`);
     await fetchCommunityResources({
       type,
@@ -308,7 +308,7 @@ async function getResources(startTime: string, endTime: string) {
  */
 export async function pollFl(lastPoll: Moment, end: Moment) {
   // Sync list of suppliers
-  const startTime = (lastPoll || moment('20150101', 'YYYYMMDD')).utc().format();
+  const startTime = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format();
   const endTime = end.utc().format();
   log.trace(`Fetching FL community members with start time: [${startTime}]`);
 
@@ -319,9 +319,9 @@ export async function pollFl(lastPoll: Moment, end: Moment) {
     async forEach(index: { business: { _id: string } }) {
       // Ensure main endpoints
       for await (const type of [
-        'products',
-        'locations',
-        'documents',
+        "products",
+        "locations",
+        "documents",
         // 'assessments',
       ] as const) {
         await CONNECTION.put({
@@ -359,9 +359,9 @@ async function fetchAndSync({
 }) {
   try {
     const url = new URL(from);
-    url.searchParams.append('pageIndex', `${pageIndex}`);
+    url.searchParams.append("pageIndex", `${pageIndex}`);
     const response = await fetch(url, {
-      method: `get`,
+      method: "get",
       headers: { Authorization: FL_TOKEN },
     });
     const data = (await response.json()) as any;
@@ -373,7 +373,7 @@ async function fetchAndSync({
         let sync;
         if (to) {
           const path =
-            typeof to === 'function'
+            typeof to === "function"
               ? await to(item as any)
               : `${to}/${item._id}`;
           try {
@@ -381,15 +381,15 @@ async function fetchAndSync({
               data: any;
             };
             if (
-              typeof resp !== 'object' ||
+              typeof resp !== "object" ||
               Buffer.isBuffer(resp) ||
               Array.isArray(resp)
             ) {
-              throw new TypeError('Not an object');
+              throw new TypeError("Not an object");
             }
 
             // Check for changes to the resources
-            const equals = equal(resp?.['food-logiq-mirror'], item);
+            const equals = equal(resp?.["food-logiq-mirror"], item);
             if (equals)
               log.info(
                 `No resource difference in FL item [${item._id}]. Skipping...`,
@@ -417,7 +417,7 @@ async function fetchAndSync({
           if (sync) {
             await CONNECTION.put({
               path,
-              data: { 'food-logiq-mirror': item } as unknown as JsonObject,
+              data: { "food-logiq-mirror": item } as unknown as JsonObject,
               tree,
             });
           }
@@ -438,7 +438,7 @@ async function fetchAndSync({
       await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach });
     }
   } catch (cError: unknown) {
-    log.info({ error: cError }, 'getBusinesses Error, Please check error logs');
+    log.info({ error: cError }, "getBusinesses Error, Please check error logs");
     throw cError;
   }
 } // FetchAndSync
@@ -485,7 +485,7 @@ export async function initialize({
       });
       setConnection(conn);
     } catch (cError: unknown) {
-      log.error({ error: cError }, 'Initializing Trellis connection failed');
+      log.error({ error: cError }, "Initializing Trellis connection failed");
       throw cError;
     }
 
@@ -497,7 +497,7 @@ export async function initialize({
 
     if (watchConfig === undefined || watchConfig) {
       await watchFlSyncConfig();
-      log.info('Started fl-sync config handler.');
+      log.info("Started fl-sync config handler.");
     }
 
     // Some queued jobs may depend on the poller to complete, so start it now.
@@ -508,16 +508,16 @@ export async function initialize({
         pollOnStartup: true,
         pollFunc: pollFl,
         interval: INTERVAL_MS,
-        name: 'food-logiq-poll',
+        name: "food-logiq-poll",
         async getTime() {
           const { headers } = await fetch(`${FL_DOMAIN}/businesses`, {
-            method: 'head',
+            method: "head",
             headers: { Authorization: FL_TOKEN },
           });
-          return headers.get('Date')!;
+          return headers.get("Date")!;
         },
       });
-      log.info('Started fl-sync poller.');
+      log.info("Started fl-sync poller.");
     }
 
     // Create the service
@@ -531,33 +531,33 @@ export async function initialize({
 
       // Set the job type handlers
       svc.on(
-        'document-mirrored',
-        config.get('timeouts.mirrorWatch'),
+        "document-mirrored",
+        config.get("timeouts.mirrorWatch"),
         handleDocumentJob,
       );
       svc.on(
-        'assessment-mirrored',
-        config.get('timeouts.mirrorWatch'),
+        "assessment-mirrored",
+        config.get("timeouts.mirrorWatch"),
         handleAssessmentJob,
       );
       svc.on(
-        'business-lookup',
-        config.get('timeouts.mirrorWatch'),
+        "business-lookup",
+        config.get("timeouts.mirrorWatch"),
         handleFlBusiness,
       );
       svc.addReport({
-        name: 'fl-sync-report',
+        name: "fl-sync-report",
         reportConfig: docReportConfig,
         frequency: DOC_FREQUENCY,
         email: prepEmail,
-        type: 'document-mirrored',
+        type: "document-mirrored",
       });
       svc.addReport({
-        name: 'businesses-report',
+        name: "businesses-report",
         reportConfig: tpReportConfig,
         frequency: VENDOR_FREQUENCY,
         email: prepTpEmail,
-        type: 'business-lookup',
+        type: "business-lookup",
         filter: tpReportFilter,
       });
 
@@ -576,10 +576,10 @@ export async function initialize({
         process.exit(1);
       }
 
-      log.info('Started fl-sync mirror handler.');
+      log.info("Started fl-sync mirror handler.");
     }
 
-    log.info('Initialize complete. Service running...');
+    log.info("Initialize complete. Service running...");
   } catch (cError: unknown) {
     log.error(cError);
     throw cError;
@@ -587,12 +587,12 @@ export async function initialize({
 } // Initialize
 
 function prepEmail() {
-  const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
-  if (!REPORT_EMAIL) throw new Error('REPORT_EMAIL is required for prepEmail');
+  const date = moment().subtract(1, "day").format("YYYY-MM-DD");
+  if (!REPORT_EMAIL) throw new Error("REPORT_EMAIL is required for prepEmail");
   if (!REPORT_REPLYTO_EMAIL)
-    throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
+    throw new Error("REPORT_REPLYTO_EMAIL is required for prepEmail");
   return {
-    from: 'noreply@trellis.one',
+    from: "noreply@trellis.one",
     to: REPORT_CC_EMAIL ? [REPORT_EMAIL, REPORT_CC_EMAIL] : [REPORT_EMAIL],
     replyTo: { email: REPORT_REPLYTO_EMAIL },
     subject: `Trellis Automation Report - ${date}`,
@@ -600,20 +600,20 @@ function prepEmail() {
     attachments: [
       {
         filename: `TrellisAutomationReport-${date}.csv`,
-        type: 'text/csv',
-        content: '',
+        type: "text/csv",
+        content: "",
       },
     ],
   };
 }
 
 export function prepTpEmail() {
-  const date = moment().subtract(1, 'day').format('YYYY-MM-DD');
-  if (!REPORT_EMAIL) throw new Error('REPORT_EMAIL is required for prepEmail');
+  const date = moment().subtract(1, "day").format("YYYY-MM-DD");
+  if (!REPORT_EMAIL) throw new Error("REPORT_EMAIL is required for prepEmail");
   if (!REPORT_REPLYTO_EMAIL)
-    throw new Error('REPORT_REPLYTO_EMAIL is required for prepEmail');
+    throw new Error("REPORT_REPLYTO_EMAIL is required for prepEmail");
   return {
-    from: 'noreply@trellis.one',
+    from: "noreply@trellis.one",
     to: REPORT_CC_EMAIL ? [REPORT_EMAIL, REPORT_CC_EMAIL] : [REPORT_EMAIL],
     replyTo: { email: REPORT_REPLYTO_EMAIL },
     subject: `Trellis Automation Report - ${date}`,
@@ -621,23 +621,23 @@ export function prepTpEmail() {
     attachments: [
       {
         filename: `VendorsReportWeekly-${date}.csv`,
-        type: 'text/csv',
-        content: '',
+        type: "text/csv",
+        content: "",
       },
     ],
   };
 }
 
-process.on('uncaughtExceptionMonitor', (cError: unknown) => {
-  log.error({ error: cError }, 'Uncaught exception');
+process.on("uncaughtExceptionMonitor", (cError: unknown) => {
+  log.error({ error: cError }, "Uncaught exception");
   // The code can carry on for most of these errors, but I'd like to know about
   // them. If I throw, it causes more trouble so I won't.
   //  throw cError;
 });
 
 if (esMain(import.meta)) {
-  log.info('Starting up the service. Calling initialize');
+  log.info("Starting up the service. Calling initialize");
   await initialize(services);
 } else {
-  log.info('Just importing fl-sync');
+  log.info("Just importing fl-sync");
 }

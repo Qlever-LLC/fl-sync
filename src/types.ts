@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ErrorObject } from 'serialize-error';
+import type { ErrorObject } from "serialize-error";
 
 export interface TrellisCOI {
   _id: string;
@@ -30,23 +30,23 @@ export interface TrellisCOI {
 }
 
 export interface GeneralLiability {
-  'type': 'Commercial General Liability';
-  'each_occurrence': number;
-  'general_aggregate': number;
-  'products_-_compop_agg': number;
-  'expire_date': string;
-  'effective_date': string;
+  type: "Commercial General Liability";
+  each_occurrence: number;
+  general_aggregate: number;
+  "products_-_compop_agg": number;
+  expire_date: string;
+  effective_date: string;
 }
 
 export interface AutoLiability {
-  type: 'Automobile Liability';
+  type: "Automobile Liability";
   combined_single_limit: number;
   expire_date: string;
   effective_date: string;
 }
 
 export interface UmbrellaLiability {
-  type: 'Umbrella Liability';
+  type: "Umbrella Liability";
   each_occurrence: number | string;
   expire_date: string;
   effective_date: string;
@@ -103,19 +103,19 @@ export interface FlAssessment {
 }
 
 export interface JobConfig {
-  'fl-sync-type': 'document';
-  '_rev': number;
-  'type': string;
-  'key': string;
-  'bid': string;
-  'masterid': string;
-  'mirrorid': string;
-  'bname': string;
-  'name': string;
-  'allow-rejection'?: boolean;
-  'date': string;
-  'status': string;
-  'link': string;
+  "fl-sync-type": "document";
+  _rev: number;
+  type: string;
+  key: string;
+  bid: string;
+  masterid: string;
+  mirrorid: string;
+  bname: string;
+  name: string;
+  "allow-rejection"?: boolean;
+  date: string;
+  status: string;
+  link: string;
 }
 
 export interface FlObject {
@@ -378,10 +378,10 @@ export interface ExcelRow {
 }
 
 export type PolicyType =
-  | 'Commercial General Liability'
-  | 'Automobile Liability'
+  | "Commercial General Liability"
+  | "Automobile Liability"
   | `Employers' Liability`
-  | 'Umbrella Liability'
+  | "Umbrella Liability"
   | `Worker's Compensation`;
 
 export type Policy =
@@ -457,12 +457,12 @@ export interface CoiAssessment {
     reasons: string;
     dateParseWarning: boolean;
   };
-  expiryPassed?: boolean | '';
-  minExpiration?: string | '';
-  expiryMismatch?: boolean | '';
-  flExpiration?: string | '';
+  expiryPassed?: boolean | "";
+  minExpiration?: string | "";
+  expiryMismatch?: boolean | "";
+  flExpiration?: string | "";
   parsingError: boolean;
   invalidHolder?: boolean;
   limitResults?: Record<string, LimitResult>;
-  workersPassed?: boolean | '';
+  workersPassed?: boolean | "";
 }

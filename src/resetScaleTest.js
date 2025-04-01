@@ -27,14 +27,14 @@ async function main() {
 async function reset() {
   // 1. delete trading partners
   con.delete({
-    path: `/bookmarks/trellisfw/trading-partners`,
+    path: "/bookmarks/trellisfw/trading-partners",
   });
   // 2. delete businesses
   con.delete({
-    path: `/bookmarks/services/fl-sync/businesses`,
+    path: "/bookmarks/services/fl-sync/businesses",
   });
   // 3. delete target job list lib entry
   con.delete({
-    path: `/bookmarks/services/target/jobs/_meta/oada-list-lib/target-jobs-fl-sync`,
+    path: "/bookmarks/services/target/jobs/_meta/oada-list-lib/target-jobs-fl-sync",
   });
 }

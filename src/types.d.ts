@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-declare module 'convict-format-with-moment' {
-  import type { Format } from 'convict';
+declare module "convict-format-with-moment" {
+  import type { Format } from "convict";
   export const duration: Format;
 }
 
-declare module 'es-main' {
+declare module "es-main" {
   export default function (value: unknown): boolean;
 }
