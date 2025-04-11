@@ -28,9 +28,9 @@ import { connect } from "@oada/client";
 
 import type { TreeKey } from "@oada/types/oada/tree/v1.js";
 import { initialize as service } from "../dist/index.js";
-import type { FlObject } from "../dist/types.js";
 import { isObj as isObject } from "../dist/mirrorWatch.js";
 import { tree } from "../dist/tree.js";
+import type { FlObject } from "../dist/types.js";
 import { coi } from "./documents/coi.js";
 
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'

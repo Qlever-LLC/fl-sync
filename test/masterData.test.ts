@@ -33,9 +33,9 @@ import { Service, parseAttachment } from "@oada/jobs";
 
 import { prepTpEmail } from "../dist/index.js";
 import { handleFlBusiness, mapTradingPartner } from "../dist/masterData.js";
-import type { FlBusiness } from "../dist/types.js";
 import { tpReportConfig, tpReportFilter } from "../dist/reportConfig.js";
 import { tree } from "../dist/tree.js";
+import type { FlBusiness } from "../dist/types.js";
 
 const warn = debug("fl-sync:warn");
 const TOKEN = process.env.TOKEN ?? ""; // || config.get('trellis.token') || '';

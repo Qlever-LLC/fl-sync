@@ -31,9 +31,9 @@ import type { TreeKey } from "@oada/types/oada/tree/v1.js";
 
 import { initialize as service } from "../dist/index.js";
 import { handleDocumentJob, isObj, postJob } from "../dist/mirrorWatch.js";
-import type { JobConfig } from "../dist/types.js";
 import { mostRecentKsuid } from "../dist/report.js";
 import { tree } from "../dist/tree.js";
+import type { JobConfig } from "../dist/types.js";
 
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'
 const TOKEN = process.env.TOKEN ?? ""; // || config.get('trellis.token') || '';
