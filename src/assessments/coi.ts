@@ -17,13 +17,15 @@
 
 import "@oada/pino-debug";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import type { OADAClient } from "@oada/client";
 import { connect } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
-import { type AxiosRequestConfig, isAxiosError } from "axios";
-import { default as axios } from "axios";
+import { type AxiosRequestConfig, default as axios, isAxiosError } from "axios";
 import debug from "debug";
+import Excel from "exceljs";
 // @ts-expect-error jsonpath lacks types
 import jp from "jsonpath";
+import JsZip from "jszip";
 import { type ErrorObject, serializeError } from "serialize-error";
 import config from "../config.js";
 import type {
@@ -50,10 +52,6 @@ import type {
   WorkersCompensation,
 } from "../types.js";
 import { groupBy, minimumDate, sum } from "../utils.js";
-
-import type { OADAClient } from "@oada/client";
-import Excel from "exceljs";
-import JsZip from "jszip";
 
 const { domain, token } = config.get("trellis");
 const FL_TOKEN = config.get("foodlogiq.token");
@@ -520,7 +518,7 @@ export function generateAssessmentRow({
   return {
     "Trading Partner": {
       value:
-        // @ts-ignore
+        // @ts-expect-error
         flCoi?.shareSource?.sourceBusiness?.name ??
         "Unknown (error retrieving FL Doc)",
     },

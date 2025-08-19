@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 import "@oada/pino-debug";
-import type { JsonObject, OADAClient } from "@oada/client";
-import type { FlBusiness, OldTradingPartner } from "./types.js";
 
 import fs from "node:fs/promises";
+import { setTimeout } from "node:timers/promises";
+import type { JsonObject, OADAClient } from "@oada/client";
 import { connect } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
 // @ts-expect-error no types
@@ -26,10 +26,9 @@ import csvjson from "csvjson";
 import debug from "debug";
 import Fuse from "fuse.js";
 import config from "./config.js";
-
-import { setTimeout } from "node:timers/promises";
-import { type TradingPartner, mapTradingPartner } from "./masterData.js";
+import { mapTradingPartner, type TradingPartner } from "./masterData.js";
 import tree from "./tree.masterData.js";
+import type { FlBusiness, OldTradingPartner } from "./types.js";
 
 const { domain, token } = config.get("trellis");
 const CO_ID = config.get("foodlogiq.community.owner.id");
@@ -1202,9 +1201,7 @@ export async function generateFLDocsReport(inDate?: string) {
           ]),
       );
       Object.assign(object, data);
-    } catch {
-      continue;
-    }
+    } catch {}
   }
 
   const csvObject = Object.values(object);
@@ -1265,9 +1262,7 @@ export async function generateIncrementalFLVendorsReport(inDate?: string) {
       );
 
       Object.assign(object, data);
-    } catch {
-      continue;
-    }
+    } catch {}
   }
 
   const csvObject = Object.values(object);

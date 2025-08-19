@@ -17,15 +17,14 @@
 
 /* eslint-disable sonarjs/no-duplicate-string, unicorn/no-null */
 
-import config from "../dist/config.js";
-
-import test from "ava";
-
 import { setTimeout } from "node:timers/promises";
 
+import test from "ava";
 import sql from "mssql";
+import config from "../dist/config.js";
 
 import { ensureTable, fetchIncidentsCsv } from "../dist/flIncidentsCsv.js";
+
 // Import moment from 'moment';
 //
 const FL_TOKEN = config.get("foodlogiq.token") || "";

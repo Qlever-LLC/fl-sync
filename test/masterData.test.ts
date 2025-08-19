@@ -17,19 +17,15 @@
 
 /* eslint-disable unicorn/prevent-abbreviations, sonarjs/no-duplicate-string */
 
-import config from "../dist/config.js";
-
-import test from "ava";
-
 import { setTimeout } from "node:timers/promises";
-
-import debug from "debug";
-import ksuid from "ksuid";
-
 import type { JsonObject, OADAClient } from "@oada/client";
 import { connect } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
-import { Service, parseAttachment } from "@oada/jobs";
+import { parseAttachment, Service } from "@oada/jobs";
+import test from "ava";
+import debug from "debug";
+import ksuid from "ksuid";
+import config from "../dist/config.js";
 
 import { prepTpEmail } from "../dist/index.js";
 import { handleFlBusiness, mapTradingPartner } from "../dist/masterData.js";

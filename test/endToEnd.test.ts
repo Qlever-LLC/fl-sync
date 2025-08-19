@@ -17,20 +17,16 @@
 
 /* eslint-disable unicorn/prevent-abbreviations, unicorn/no-null, sonarjs/no-duplicate-string */
 
-import test from "ava";
-
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
-
-import FormData from "form-data";
-
 import type { JsonObject, OADAClient } from "@oada/client";
 import { connect } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
 import { AssumeState, ChangeType, ListWatch } from "@oada/list-lib";
-
 import type { TreeKey } from "@oada/types/oada/tree/v1.js";
+import test from "ava";
+import FormData from "form-data";
 import config from "../dist/config.js";
 import { initialize as service } from "../dist/index.js";
 import { tree } from "../dist/tree.js";

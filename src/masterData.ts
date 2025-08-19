@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-import config from "./config.js";
-
-import debug from "debug";
-
 import type { JsonObject, OADAClient } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
 import type { Job, WorkerFunction } from "@oada/jobs";
 import { postUpdate } from "@oada/jobs";
+import debug from "debug";
+import config from "./config.js";
 import tree from "./tree.masterData.js";
 import type { FlBusiness } from "./types.js";
 

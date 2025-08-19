@@ -15,18 +15,13 @@
  * limitations under the License.
  */
 
-import config from "../dist/config.js";
-
-import test from "ava";
-
 import { setTimeout } from "node:timers/promises";
-
-import moment from "moment";
-
 import type { JsonObject, OADAClient } from "@oada/client";
 import { connect } from "@oada/client";
-
 import type { TreeKey } from "@oada/types/oada/tree/v1.js";
+import test from "ava";
+import moment from "moment";
+import config from "../dist/config.js";
 import { initialize as service } from "../dist/index.js";
 import { isObj as isObject } from "../dist/mirrorWatch.js";
 import { tree } from "../dist/tree.js";
@@ -112,7 +107,7 @@ test.after(async () => {
   Let data = await oada.get({
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents`,
   }).then(r => r.data);
-  // @ts-ignore
+  // @ts-expect-error
   let list = Object.keys(data).filter(k => k.charAt(0) !== '_')
 
   for (const i of list) {
@@ -124,7 +119,7 @@ test.after(async () => {
   let d = await oada.get({
     path: `${SERVICE_PATH}/businesses`,
   }).then(r => r.data);
-  // @ts-ignore
+  // @ts-expect-error
   let l = Object.keys(d).filter(k => k.charAt(0) !== '_')
   l = l.filter(k => k !== '61c22e047953d4000ee0363f')
 
@@ -395,7 +390,7 @@ Test('Should handle an fl-sync job that is queued on startup.', async () => {
     path: `${SERVICE_PATH}/businesses/${SUPPLIER}/documents/${flId}/_meta`
   }).then(r => r.data)
 
-  //@ts-ignore
+  //@ts-expect-error
   expect(result?.services?.['fl-sync']?.jobs).to.equal(undefined);
 });
  */

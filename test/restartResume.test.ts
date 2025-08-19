@@ -17,17 +17,14 @@
 
 /* eslint-disable unicorn/prevent-abbreviations */
 
-import config from "../dist/config.js";
-
-import test from "ava";
-
 import { setTimeout } from "node:timers/promises";
-
 import type { JsonObject, OADAClient } from "@oada/client";
 import { connect } from "@oada/client";
 import type { Job, Logger } from "@oada/jobs";
 import { ListWatch } from "@oada/list-lib";
 import type { TreeKey } from "@oada/types/oada/tree/v1.js";
+import test from "ava";
+import config from "../dist/config.js";
 
 import { initialize as service } from "../dist/index.js";
 import { handleDocumentJob, isObj, postJob } from "../dist/mirrorWatch.js";

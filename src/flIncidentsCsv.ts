@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-// Load config first so it can set up env
-import config from "./config.js";
-
+import type { OADAClient } from "@oada/client";
+import { poll } from "@oada/poll";
 import debug from "debug";
 import type { Moment, MomentInput } from "moment";
 import moment from "moment";
 import sql from "mssql";
 import xlsx from "xlsx";
-
-import type { OADAClient } from "@oada/client";
-import { poll } from "@oada/poll";
+// Load config first so it can set up env
+import config from "./config.js";
 
 const FL_DOMAIN = config.get("foodlogiq.domain");
 const FL_TOKEN = config.get("foodlogiq.token");

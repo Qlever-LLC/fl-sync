@@ -16,11 +16,11 @@
  */
 
 import "@oada/pino-debug";
-import config from "./config.js";
-
-import debug from "debug";
 
 import type { JsonObject } from "@oada/client";
+
+import debug from "debug";
+import config from "./config.js";
 
 import type { FlAssessment } from "./types.js";
 

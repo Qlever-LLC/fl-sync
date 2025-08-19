@@ -17,14 +17,14 @@
 
 // Load config first so it can set up env
 import "@oada/pino-debug";
-import config from "./config.js";
+
+import type { JsonObject, OADAClient } from "@oada/client";
 
 import debug from "debug";
 import equal from "deep-equal";
 import type { Moment } from "moment";
 import moment from "moment";
-
-import type { JsonObject, OADAClient } from "@oada/client";
+import config from "./config.js";
 
 import tree from "./tree.js";
 

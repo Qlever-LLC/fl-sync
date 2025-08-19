@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import config from "./config.js";
-
 import moment from "moment";
+import config from "./config.js";
 
 const CO_ID = config.get("foodlogiq.community.owner.id");
 const TRELLIS_TOKEN = config.get("trellis.token");

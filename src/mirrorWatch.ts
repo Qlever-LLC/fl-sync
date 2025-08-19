@@ -19,12 +19,12 @@ import "@oada/pino-debug";
 import crypto from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import type { JsonObject, OADAClient } from "@oada/client";
-import { JobEventType, JobsRequest, doJob } from "@oada/client/jobs";
+import { doJob, JobEventType, JobsRequest } from "@oada/client/jobs";
 import {
   type Job,
   JobError,
-  type WorkerFunction,
   postUpdate,
+  type WorkerFunction,
 } from "@oada/jobs";
 import { AssumeState, ChangeType, ListWatch } from "@oada/list-lib";
 import type { Logger } from "@oada/pino-debug";
