@@ -16,17 +16,17 @@
  */
 
 import "@oada/pino-debug";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import type { OADAClient } from "@oada/client";
-import { connect } from "@oada/client";
+import { stat, readFile, writeFile } from "node:fs/promises";
+import { connect, type OADAClient } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
-import { type AxiosRequestConfig, default as axios, isAxiosError } from "axios";
+import ky, { HTTPError, Options as KyOptions } from "ky";
 import debug from "debug";
 import Excel from "exceljs";
 // @ts-expect-error jsonpath lacks types
 import jp from "jsonpath";
 import JsZip from "jszip";
 import { type ErrorObject, serializeError } from "serialize-error";
+
 import config from "../config.js";
 import type {
   AttachmentResources,
@@ -117,10 +117,12 @@ const coiReportColumns = {
   "Additional FoodLogiq \nDocs Considered": 20,
 };
 
+const trace = debug("fl-sync:trace");
 const info = debug("fl-sync:info");
 const error = debug("fl-sync:error");
 const warn = debug("fl-sync:warn");
 let oada: OADAClient;
+
 try {
   oada = await connect({ domain, token });
 } catch (error_) {
@@ -135,17 +137,20 @@ async function getFlCois(
   coiResults: Record<string, FlDocument> = {},
   pageIndex?: number,
 ): Promise<Record<string, FlDocument>> {
-  const request: AxiosRequestConfig = {
+  const request: KyOptions = {
     method: "get",
-    url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents${queryString}`,
     headers: { Authorization: `${FL_TOKEN}` },
   };
 
   if (pageIndex) {
-    request.params = { pageIndex };
+    request.searchParams = { pageIndex };
   }
 
-  const { data } = await axios<FlQuery>(request);
+  const response = await ky(
+    `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents${queryString}`,
+    request,
+  );
+  const data = await response.json<FlQuery>();
 
   for await (const flCoi of data.pageItems) {
     coiResults[flCoi._id] = flCoi;
@@ -170,16 +175,17 @@ async function fetchAndExtractAttachments(
 
   let zipFile: Uint8Array;
   try {
-    const { data } = await axios<Uint8Array>({
-      method: "get",
-      url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
-      headers: { Authorization: FL_TOKEN },
-      responseEncoding: "binary",
-    });
-    zipFile = data;
+    const response = await ky.get(
+      `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
+      {
+        headers: { Authorization: FL_TOKEN },
+      },
+    );
+    zipFile = await response.bytes();
   } catch (error_: unknown) {
-    if (isAxiosError(error_) && error_.response?.status === 404) {
-      info(
+    if (error_ instanceof HTTPError && error_.response?.status === 404) {
+      warn(
+        error_,
         `Bad attachments on item ${item._id}. Returning with no attachments`,
       );
       return {
@@ -188,7 +194,7 @@ async function fetchAndExtractAttachments(
       };
     }
 
-    info(`Errored on item ${item._id}. Returning with no attachments`);
+    error(error_, `Errored on item ${item._id}. Returning with no attachments`);
     return {
       serialized: serializeError(error_ as Error),
     };
@@ -199,7 +205,7 @@ async function fetchAndExtractAttachments(
 
   for await (const fKey of files) {
     if (!fKey) {
-      info(`Could not get file key for item ${item._id}`);
+      warn(`Could not get file key for item ${item._id}`);
       (attachments as Record<string, ExtractPdfResult | ErrObj>)[fKey] = {
         msg: `Could not get file key for item ${item._id}`,
       };
@@ -218,7 +224,9 @@ async function fetchAndExtractAttachments(
       });
       const _id = headers["content-location"]!.replace(/^\//, "");
 
-      info(`Extracting binary data for FL Doc ${item._id}. Attachment ${fKey}`);
+      debug(
+        `Extracting binary data for FL Doc ${item._id}. Attachment ${fKey}`,
+      );
       (attachments as Record<string, ExtractPdfResult | ErrObj>)[fKey] =
         await extractPdfData(_id);
     } catch (cError) {
@@ -270,7 +278,7 @@ async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
         serialized: serializeError(job.result),
       },
     };
-  } catch (error_) {
+  } catch (error_: unknown) {
     error(error_);
     return {
       results: { serialized: serializeError(error_ as Error) },
@@ -908,20 +916,20 @@ export async function draftsToAwaitingApproval() {
 
   for await (const [_, coi] of Object.entries(flCois)) {
     const _id = coi.shareSource.draftVersionId;
-    const request: AxiosRequestConfig = {
-      method: "put",
-      url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${_id}/approvalStatus`,
-      data: {
-        comment: "",
-        status: "Awaiting Approval",
-        visibleForSupplier: false,
+    await ky.put(
+      `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${_id}/approvalStatus`,
+      {
+        json: {
+          comment: "",
+          status: "Awaiting Approval",
+          visibleForSupplier: false,
+        },
+        headers: {
+          Authorization: `${FL_TOKEN}`,
+          "Content-Type": "application/json",
+        },
       },
-      headers: {
-        Authorization: `${FL_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    };
-    await axios<FlQuery>(request);
+    );
   }
 
   return flCois;
@@ -936,9 +944,9 @@ export async function gatherCoisReportData(fname: string) {
   let attachments: ReportDataSave["attachments"] = {};
 
   // Try to load what we can
-  if (existsSync(fname)) {
+  if (await stat(fname)) {
     // Load the saved JSON data
-    const json = readFileSync(fname, "utf8");
+    const json = await readFile(fname, "utf8");
     const obj = JSON.parse(json) as ReportDataSave;
     flCois = obj.flCois;
     attachments = obj.attachments;
@@ -963,11 +971,11 @@ export async function gatherCoisReportData(fname: string) {
   queryDate.setMonth(new Date().getMonth());
   let i = 0;
   for await (const [busId, supplierCois] of Object.entries(coisBySupplier)) {
-    info(
+    debug(
       `Processing Business ${busId} (${i++}/${Object.values(coisBySupplier).length})`,
     );
     if (attachments[supplierCois[0]!._id]) {
-      info(`Business ${busId} already processed.`);
+      trace(`Business ${busId} already processed.`);
       continue;
     }
 
@@ -989,10 +997,10 @@ export async function gatherCoisReportData(fname: string) {
       attachments[coi._id] = await fetchAndExtractAttachments(coi);
     }
 
-    writeFileSync(fname, JSON.stringify({ attachments, flCois }));
+    await writeFile(fname, JSON.stringify({ attachments, flCois }));
   }
 
-  writeFileSync(fname, JSON.stringify({ flCois, attachments }));
+  await writeFile(fname, JSON.stringify({ flCois, attachments }));
   return { flCois, attachments };
 }
 
@@ -1014,7 +1022,7 @@ export async function generateCoisReport(
   const excelData: Array<Record<string, ExcelRow>> = [];
   let i = 0;
   for (const [busId, supplierCois] of Object.entries(coisBySupplier)) {
-    info(
+    trace(
       `Processing Business ${busId} (${i++}/${Object.values(coisBySupplier).length})`,
     );
 

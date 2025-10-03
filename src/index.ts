@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// biome-ignore assist/source/organizeImports: <explanation>
 import { pino } from "@oada/pino-debug";
 
 // Load config first so it can set up env
@@ -44,7 +45,11 @@ import { poll } from "@oada/poll";
 import Bluebird from "bluebird";
 import equal from "deep-equal";
 import esMain from "es-main";
-import moment, { type Moment } from "moment";
+import dayjs, { type Dayjs } from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+
+dayjs.extend(utc);
+
 // Import { businessesReportConfig } from './businessesReportConfig.js';
 import { startIncidents } from "./flIncidentsCsv.js";
 import { handleFlBusiness } from "./masterData.js";
@@ -165,7 +170,7 @@ export async function handleItem(
       // Check for changes to the resources
       const equals = equal(resp["food-logiq-mirror"], item);
       if (!equals || FL_FORCE_WRITE) {
-        log.info(
+        log.debug(
           `Document difference in FL doc [${item._id}] detected. Syncing...`,
         );
         sync = true;
@@ -176,7 +181,7 @@ export async function handleItem(
         throw cError;
       }
 
-      log.info("Resource is not already in trellis. Syncing...");
+      log.debug("Resource is not already in trellis. Syncing...");
       sync = true;
     }
 
@@ -191,7 +196,7 @@ export async function handleItem(
         data: { "food-logiq-mirror": item } as unknown as JsonObject,
         tree,
       });
-      log.info(
+      log.debug(
         `Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`,
       );
     }
@@ -200,7 +205,7 @@ export async function handleItem(
   } catch (cError: unknown) {
     // TODO: Need to add this to some sort of retry
     log.error(
-      { error: cError },
+      cError,
       `fetchCommunityResources errored on item ${item._id} bid ${bid}. Moving on`,
     );
     return false;
@@ -259,12 +264,13 @@ export async function fetchCommunityResources({
 
   // Repeat for additional pages of FL results
   if (data.hasNextPage && pageIndex < 1000) {
-    log.info(
+    log.trace(
       `Finished page ${pageIndex}. Item ${
         data.pageItemCount * (pageIndex + 1)
       }/${data.totalItemCount}`,
     );
-    if (type === "documents") log.info(`Pausing for ${delay / 60_000} minutes`);
+    if (type === "documents")
+      log.trace(`Pausing for ${delay / 60_000} minutes`);
     if (type === "documents") await setTimeout(delay);
     await fetchCommunityResources({
       type,
@@ -306,9 +312,11 @@ async function getResources(startTime: string, endTime: string) {
 /**
  * The callback to be used in the poller. Gets lastPoll date
  */
-export async function pollFl(lastPoll: Moment, end: Moment) {
+export async function pollFl(lastPollMoment: any, pollStartedMoment: any) {
+  const lastPoll: Dayjs = dayjs(lastPollMoment.toDate());
+  const end: Dayjs = dayjs(pollStartedMoment.toDate());
   // Sync list of suppliers
-  const startTime = (lastPoll || moment("20150101", "YYYYMMDD")).utc().format();
+  const startTime = (lastPoll || dayjs("20150101", "YYYYMMDD")).utc().format();
   const endTime = end.utc().format();
   log.trace(`Fetching FL community members with start time: [${startTime}]`);
 
@@ -391,11 +399,11 @@ async function fetchAndSync({
             // Check for changes to the resources
             const equals = equal(resp?.["food-logiq-mirror"], item);
             if (equals)
-              log.info(
+              log.trace(
                 `No resource difference in FL item [${item._id}]. Skipping...`,
               );
             if (!equals)
-              log.info(
+              log.trace(
                 `Resource difference in FL item [${item._id}] detected. Syncing to ${path}`,
               );
             if (!equals) {
@@ -405,11 +413,12 @@ async function fetchAndSync({
             // @ts-expect-error stupid errors
             if (cError.status === 404) {
               log.info(
+                cError,
                 `FL Resource ${item._id} is not already on trellis. Syncing...`,
               );
               sync = true;
             } else {
-              log.error({ error: cError });
+              log.error(cError);
               throw cError;
             }
           }
@@ -430,7 +439,7 @@ async function fetchAndSync({
 
     // Repeat for additional pages of FL results
     if (data.hasNextPage) {
-      log.info(
+      log.trace(
         `fetchAndSync Finished page ${pageIndex}. Item ${
           data.pageItemCount * (pageIndex + 1)
         }/${data.totalItemCount}`,
@@ -438,7 +447,7 @@ async function fetchAndSync({
       await fetchAndSync({ from, to, pageIndex: pageIndex + 1, forEach });
     }
   } catch (cError: unknown) {
-    log.info({ error: cError }, "getBusinesses Error, Please check error logs");
+    log.error(cError, "getBusinesses Error, Please check error logs");
     throw cError;
   }
 } // FetchAndSync
@@ -448,7 +457,7 @@ export function setConnection(conn: OADAClient) {
 }
 
 function setAutoApprove(value: boolean) {
-  log.info(`Autoapprove value is ${value}`);
+  log.trace(`Autoapprove value is ${value}`);
   AUTO_APPROVE_ASSESSMENTS = value;
 }
 
@@ -473,7 +482,7 @@ export async function initialize({
 }) {
   try {
     log.info(
-      `<<<<<<<<<       Initializing fl-sync service. [v${process.env.npm_package_version}]       >>>>>>>>>>`,
+      `Initializing fl-sync service [v${process.env.npm_package_version}]`,
     );
     TOKEN = await getToken();
     // Connect to oada
@@ -485,7 +494,7 @@ export async function initialize({
       });
       setConnection(conn);
     } catch (cError: unknown) {
-      log.error({ error: cError }, "Initializing Trellis connection failed");
+      log.error(cError, "Initializing Trellis connection failed");
       throw cError;
     }
 
@@ -497,7 +506,7 @@ export async function initialize({
 
     if (watchConfig === undefined || watchConfig) {
       await watchFlSyncConfig();
-      log.info("Started fl-sync config handler.");
+      log.debug("Started fl-sync config handler.");
     }
 
     // Some queued jobs may depend on the poller to complete, so start it now.
@@ -517,7 +526,7 @@ export async function initialize({
           return headers.get("Date")!;
         },
       });
-      log.info("Started fl-sync poller.");
+      log.debug("Started fl-sync poller.");
     }
 
     // Create the service
@@ -571,15 +580,15 @@ export async function initialize({
       try {
         await Promise.all([serviceP, p]);
       } catch (cError: unknown) {
-        log.error(cError);
+        log.fatal(cError);
         // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
         process.exit(1);
       }
 
-      log.info("Started fl-sync mirror handler.");
+      log.debug("Started fl-sync mirror handler.");
     }
 
-    log.info("Initialize complete. Service running...");
+    log.debug("Initialize complete. Service running...");
   } catch (cError: unknown) {
     log.error(cError);
     throw cError;
@@ -587,7 +596,7 @@ export async function initialize({
 } // Initialize
 
 function prepEmail() {
-  const date = moment().subtract(1, "day").format("YYYY-MM-DD");
+  const date = dayjs().subtract(1, "day").format("YYYY-MM-DD");
   if (!REPORT_EMAIL) throw new Error("REPORT_EMAIL is required for prepEmail");
   if (!REPORT_REPLYTO_EMAIL)
     throw new Error("REPORT_REPLYTO_EMAIL is required for prepEmail");
@@ -608,7 +617,7 @@ function prepEmail() {
 }
 
 export function prepTpEmail() {
-  const date = moment().subtract(1, "day").format("YYYY-MM-DD");
+  const date = dayjs().subtract(1, "day").format("YYYY-MM-DD");
   if (!REPORT_EMAIL) throw new Error("REPORT_EMAIL is required for prepEmail");
   if (!REPORT_REPLYTO_EMAIL)
     throw new Error("REPORT_REPLYTO_EMAIL is required for prepEmail");
@@ -629,15 +638,15 @@ export function prepTpEmail() {
 }
 
 process.on("uncaughtExceptionMonitor", (cError: unknown) => {
-  log.error({ error: cError }, "Uncaught exception");
+  log.fatal(cError, "Uncaught exception");
   // The code can carry on for most of these errors, but I'd like to know about
   // them. If I throw, it causes more trouble so I won't.
   //  throw cError;
 });
 
 if (esMain(import.meta)) {
-  log.info("Starting up the service. Calling initialize");
+  log.debug("Starting up the service. Calling initialize");
   await initialize(services);
 } else {
-  log.info("Just importing fl-sync");
+  log.debug("Just importing fl-sync");
 }

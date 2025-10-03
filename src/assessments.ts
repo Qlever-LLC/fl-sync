@@ -19,7 +19,8 @@ import "@oada/pino-debug";
 
 import type { JsonObject } from "@oada/client";
 
-import debug from "debug";
+import _debug from "debug";
+
 import config from "./config.js";
 
 import type { FlAssessment } from "./types.js";
@@ -35,9 +36,9 @@ const COMMUNITY_NAME = config.get("foodlogiq.community.name");
 const FL_DOMAIN = config.get("foodlogiq.domain");
 const FL_TOKEN = config.get("foodlogiq.token");
 
-const info = debug("fl-sync:info");
-const trace = debug("fl-sync:trace");
-const error = debug("fl-sync:error");
+const debug = _debug("fl-sync:debug");
+const trace = _debug("fl-sync:trace");
+const error = _debug("fl-sync:error");
 
 interface AssessmentType {
   SupplierAudit: string;
@@ -291,7 +292,7 @@ async function updateAssessment(path: string, body: FlAssessment) {
       body: JSON.stringify(body),
     });
     const data = (await result.json()) as any;
-    info("--> assessment created. %s", data._id);
+    debug("--> assessment created. %s", data._id);
     return data;
   } catch (cError: unknown) {
     error(

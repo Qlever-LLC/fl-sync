@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import moment from "moment";
+import dayjs from "dayjs";
 import config from "./config.js";
 
 const CO_ID = config.get("foodlogiq.community.owner.id");
@@ -957,9 +957,9 @@ function pushReportItem(report, item, passFail, reason, remedy, newItems) {
   const id = item["food-logiq-mirror"]._id;
 
   // Determine if the doc was within the past 24 hours
-  const documentTime = moment(item["food-logiq-mirror"].versionInfo.createdAt);
+  const documentTime = dayjs(item["food-logiq-mirror"].versionInfo.createdAt);
   const offset = LOCAL ? 8 : 12;
-  const yday = moment().subtract(24, "hours");
+  const yday = dayjs().subtract(24, "hours");
 
   const entry = {
     "FL Document Name": item["food-logiq-mirror"].name,

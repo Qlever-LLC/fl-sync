@@ -16,15 +16,14 @@
  */
 
 import "@oada/pino-debug";
-import debug from "debug";
-import type { Moment } from "moment";
-import moment from "moment";
+import dayjs, { type Dayjs } from "dayjs";
+import _debug from "debug";
 
 import { fromOadaType } from "./conversions.js";
 import type { FlObject } from "./types.js";
 
-const info = debug("fl-sync:mirror-watch:info");
-const error = debug("fl-sync:mirror-watch:error");
+const debug = _debug("fl-sync:mirror-watch:debug");
+const error = _debug("fl-sync:mirror-watch:error");
 
 // TODO:
 //      3) Add in the overall expiration date into the array to be
@@ -45,7 +44,7 @@ export async function validateResult(
   flMirror: FlObject,
   type: string,
 ) {
-  info(`Validating pending doc [${trellisDocument._id}]; type: [${type}]`);
+  debug(`Validating pending doc [${trellisDocument._id}]; type: [${type}]`);
   try {
     const flType = fromOadaType(type)
       ?.name as unknown as keyof typeof validation;
@@ -53,7 +52,7 @@ export async function validateResult(
       throw new Error(`Validation of FL Type ${flType} unsupported`);
     return validation[flType](trellisDocument, flMirror);
   } catch (error_: unknown) {
-    error({ error: error_ }, "validateResult Errored");
+    error(error_, "validateResult Errored");
     return {
       status: false,
       message: `validateResult Errored: ${(error_ as Error).message}`,
@@ -77,8 +76,8 @@ export async function validateResult(
 
 const validation = {
   "100g Nutritional Information"(trellisDocument: any, flMirror: FlObject) {
-    const trellisExpiration = moment(trellisDocument.expire_date).utcOffset(0);
-    return validateExpiration(moment(trellisExpiration), flMirror);
+    const trellisExpiration = dayjs(trellisDocument.expire_date).utcOffset(0);
+    return validateExpiration(dayjs(trellisExpiration), flMirror);
   },
   /*
   'ACH Form': (trellisDoc: any, flMirror: FlObject) => {
@@ -102,7 +101,7 @@ const validation = {
   */
   "Certificate of Insurance"(trellisDocument: any, flMirror: FlObject) {
     const trellisDates: any[] = Object.values(trellisDocument.policies).map(
-      (object: any) => moment(object.expire_date).utcOffset(0),
+      (object: any) => dayjs(object.expire_date).utcOffset(0),
     );
     return validateExpiration(trellisDates, flMirror);
   },
@@ -185,13 +184,10 @@ const validation = {
   */
 };
 
-function validateExpiration(
-  trellisDates: Moment | Moment[],
-  flMirror: FlObject,
-) {
+function validateExpiration(trellisDates: Dayjs | Dayjs[], flMirror: FlObject) {
   let message = "";
   let status = true;
-  const flExp = moment(flMirror.expirationDate).format("YYYY-MM-DD");
+  const flExp = dayjs(flMirror.expirationDate).format("YYYY-MM-DD");
   let minimumExp: string;
 
   if (trellisDates && Array.isArray(trellisDates)) {
@@ -213,19 +209,19 @@ function validateExpiration(
     minimumExp = trellisDates.format("YYYY-MM-DD");
   }
 
-  const now = moment().utcOffset(0);
+  const now = dayjs().utcOffset(0);
 
-  if (moment(flExp) > moment(minimumExp)) {
+  if (dayjs(flExp) > dayjs(minimumExp)) {
     message = `Expiration date submitted in Food Logiq (${flExp}) does not match the minimum expiration date found in the PDF document (${minimumExp}).`;
     status = false;
   }
 
-  if (moment(minimumExp) <= now) {
+  if (dayjs(minimumExp) <= now) {
     message = `Minimum expiration date found on the document indicates it is already expired: ${minimumExp}`;
     status = false;
   }
 
-  if (message) info(message);
+  if (message) debug(message);
   return { message, status };
 }
 
@@ -233,8 +229,8 @@ function validateExpiration(
 Function validateEffective(trellisDoc: any, flMirror: FlObject) {
   let message: string;
   let status = true;
-  let flEffective = moment(flMirror.shareSource.shareSpecificAttributes.effectiveDate).format('YYYY-MM-DD');
-  let trellisEffective = moment(trellisDoc.effective_date).utcOffset(0).format('YYYY-MM-DD');
+  let flEffective = dayjs(flMirror.shareSource.shareSpecificAttributes.effectiveDate).format('YYYY-MM-DD');
+  let trellisEffective = dayjs(trellisDoc.effective_date).utcOffset(0).format('YYYY-MM-DD');
   if (!trellisEffective) {
     message = "Effective date missing from the PDF and is required to be present.";
     status = false;

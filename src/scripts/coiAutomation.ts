@@ -24,10 +24,6 @@ import {
 //const filename = 'cois-12-04-2024.json';
 const filename = "CoiReportData.json";
 const xlsxFilename = `cois-report-${new Date().toISOString()}.xlsx`;
-try {
-  //await draftsToAwaitingApproval();
-  const reportDataSave = await gatherCoisReportData(filename);
-  await generateCoisReport(reportDataSave, xlsxFilename);
-} catch (err) {
-  throw err;
-}
+//await draftsToAwaitingApproval();
+const reportDataSave = await gatherCoisReportData(filename);
+await generateCoisReport(reportDataSave, xlsxFilename);

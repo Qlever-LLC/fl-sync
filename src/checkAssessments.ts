@@ -16,11 +16,12 @@
  */
 
 import "@oada/pino-debug";
-import debug from "debug";
+import _debug from "debug";
 
 import type { FlAssessment } from "./types.js";
 
-const info = debug("fl-sync:mirror-watch:info");
+const debug = _debug("fl-sync:mirror-watch:debug");
+const trace = _debug("fl-sync:mirror-watch:trace");
 
 const DEPTH = 5;
 
@@ -30,7 +31,7 @@ const DEPTH = 5;
  * @returns
  */
 export function checkAssessment(assessment: FlAssessment) {
-  info(`Checking assessment ${assessment._id}`);
+  debug(`Checking assessment ${assessment._id}`);
 
   const { _id } = assessment?.assessmentTemplate ?? {};
 
@@ -49,7 +50,9 @@ export function checkAssessment(assessment: FlAssessment) {
             const res = column.statisticsCommon.percentWithinTolerance < 100;
             if (res) {
               const reason = `${column.name}(${column.statisticsNumeric.average}) did not meet the requirement (${column.acceptanceValueNumericPrimary})`;
-              info(`Assessment violation for id [${assessment._id}: ${reason}`);
+              trace(
+                `Assessment violation for id [${assessment._id}: ${reason}`,
+              );
               reasons.push(reason);
             }
 
@@ -73,7 +76,7 @@ const checkAssessments = new Map(
     // eslint-disable-next-line @typescript-eslint/naming-convention
     "606cc945c8f60c000e53947f"(assessment: FlAssessment) {
       const reasons: string[] = [];
-      info(`Checking COI assessment ${assessment._id}`);
+      debug(`Checking COI assessment ${assessment._id}`);
       const failed = assessment.sections.map((section) =>
         section.subsections.map((subsection) =>
           subsection.questions.map((question) => {
@@ -124,7 +127,7 @@ const checkAssessments = new Map(
                     }(${value}) and Umbrella Coverage(${umbCov}) was ${
                       value + umbCov
                     }. This does not meet the required coverage (${requirement})`;
-                    info(
+                    trace(
                       `Assessment violation for id [${assessment._id}: ${reason}`,
                     );
                     reasons.push(reason);
@@ -140,7 +143,7 @@ const checkAssessments = new Map(
               if (res) {
                 if (column.type === "numeric") {
                   const reason = `${column.name}(${value}; plus umbrella ${umbCov}) did not meet the requirement (${requirement})`;
-                  info(
+                  trace(
                     `Assessment violation for id [${assessment._id}: ${reason}`,
                   );
                   reasons.push(reason);
@@ -153,7 +156,7 @@ const checkAssessments = new Map(
                     question?.productEvaluationOptions?.answerRows?.[0]
                       ?.answers?.[answerIndex]?.answerBool;
                   const reason = `${column.name}(${value}) did not meet the requirement (${column.acceptanceValueBool})`;
-                  info(
+                  trace(
                     `Assessment violation for id [${assessment._id}: ${reason}`,
                   );
                   reasons.push(reason);

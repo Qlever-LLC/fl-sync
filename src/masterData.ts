@@ -20,6 +20,7 @@ import { doJob } from "@oada/client/jobs";
 import type { Job, WorkerFunction } from "@oada/jobs";
 import { postUpdate } from "@oada/jobs";
 import debug from "debug";
+
 import config from "./config.js";
 import tree from "./tree.masterData.js";
 import type { FlBusiness } from "./types.js";
@@ -33,9 +34,8 @@ if (SERVICE_NAME && tree?.bookmarks?.services?.["fl-sync"]) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services["fl-sync"];
 }
 
-const info = debug("fl-sync:master-data:info");
+const trace = debug("fl-sync:master-data:trace");
 const error = debug("fl-sync:master-data:error");
-const warn = debug("fl-sync:master-data:warn");
 
 enum SourceType {
   Vendor = "vendor",
@@ -190,8 +190,9 @@ export const handleFlBusiness: WorkerFunction = async (job: Job, { oada }) => {
         ...ensureJob.result,
         entry: updateResult,
       };
-    } catch {
-      warn(
+    } catch (err: unknown) {
+      error(
+        err,
         // @ts-expect-error fl-bus doesn't exist on Json
         `Food Logiq Business [${job.config["fl-business"].business._id}] externalID update failed.`,
       );
@@ -248,7 +249,9 @@ async function updateMasterId(
     path: `${SERVICE_PATH}/businesses/${flBusiness._id}`,
     data: { masterid } as JsonObject,
   });
-  info(`${SERVICE_PATH}/businesses/<bid> updated with masterid [${masterid}].`);
+  trace(
+    `${SERVICE_PATH}/businesses/<bid> updated with masterid [${masterid}].`,
+  );
 
   await oada.put({
     path: `/${masterid}/_meta`,
@@ -262,7 +265,7 @@ async function updateMasterId(
       },
     } as JsonObject,
   });
-  info(`${TL_TP}/ updated with masterid [${masterid}].`);
+  trace(`${TL_TP}/ updated with masterid [${masterid}].`);
 } // UpdateMasterId
 
 const trellisTPTemplate: TradingPartnerNoLinks = {

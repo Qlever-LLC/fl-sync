@@ -22,7 +22,7 @@ import { get, has, set } from "lodash-es";
 
 import type { FlObject } from "./types.js";
 
-const info = debug("fl-sync:mirror-watch:info");
+const trace = debug("fl-sync:mirror-watch:trace");
 
 export function fromOadaType(type: string) {
   const values = Object.values(conversions);
@@ -44,7 +44,7 @@ export async function flToTrellis(flDocument: FlObject) {
     const flValue: unknown =
       // @ts-expect-error bleh
       flDocument?.shareSource?.shareSpecificAttributes?.[key];
-    info(
+    trace(
       `Setting share attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,
     );
     set(document, trellisPath, flValue);
@@ -57,7 +57,7 @@ export async function flToTrellis(flDocument: FlObject) {
     const trellisPath =
       defaultAttributes[flPath as keyof typeof defaultAttributes];
     const flValue = get(flDocument, flPath);
-    info(
+    trace(
       `Setting default attribute ${trellisPath} from fl doc path ${flPath} with val ${flValue}`,
     );
     set(document, trellisPath, flValue);
@@ -67,7 +67,7 @@ export async function flToTrellis(flDocument: FlObject) {
   if (!document.document_date && document.effective_date) {
     document.document_date = document.effective_date; // ||
     //      get(flDocument, 'versionInfo.createdAt').slice(0, 10);
-    info(
+    trace(
       `Setting document date from effective or create date: ${document.document_date}`,
     );
   }

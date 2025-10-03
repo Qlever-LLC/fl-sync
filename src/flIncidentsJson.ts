@@ -16,14 +16,16 @@
  */
 
 // Load config first so it can set up env
+
+// biome-ignore assist/source/organizeImports: <explanation>
 import "@oada/pino-debug";
 
 import type { JsonObject, OADAClient } from "@oada/client";
 
 import debug from "debug";
 import equal from "deep-equal";
-import type { Moment } from "moment";
-import moment from "moment";
+import dayjs, { type Dayjs } from "dayjs";
+
 import config from "./config.js";
 
 import tree from "./tree.js";
@@ -36,8 +38,9 @@ const CO_ID = config.get("foodlogiq.community.owner.id");
 const SERVICE_NAME = config.get("service.name");
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
 
-const info = debug("fl-sync:info");
+const trace = debug("fl-sync:trace");
 const error = debug("fl-sync:error");
+
 if (SERVICE_NAME && tree?.bookmarks?.services?.["fl-sync"]) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services["fl-sync"];
 }
@@ -56,7 +59,7 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
       // Check for changes to the resources
       const equals = equal(resp["food-logiq-mirror"], item);
       if (!equals) {
-        info(
+        trace(
           `Document difference in FL doc [${item._id}] detected. Syncing...`,
         );
         sync = true;
@@ -67,7 +70,7 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
         throw cError;
       }
 
-      info("Resource is not already in trellis. Syncing...");
+      trace("Resource is not already in trellis. Syncing...");
       sync = true;
     }
 
@@ -78,16 +81,13 @@ export async function handleItem(item: FlIncident, oada: OADAClient) {
         data: { "food-logiq-mirror": item } as any,
         tree,
       });
-      info(`Document synced to mirror: type:${type} _id:${item._id}`);
+      trace(`Document synced to mirror: type:${type} _id:${item._id}`);
     }
 
     return true;
   } catch (cError: unknown) {
     // TODO: Need to add this to some sort of retry
-    error(
-      { error: cError },
-      `fetchIncidents errored on item ${item._id}. Moving on`,
-    );
+    error(cError, `fetchIncidents errored on item ${item._id}. Moving on`);
     return false;
   }
 }
@@ -129,13 +129,13 @@ export async function fetchIncidents({
       while (retries-- > 0 && !(await handleItem(item, oada)));
     }
   } catch (cError: unknown) {
-    error({ error: cError }, "fetchIncidents");
+    error(cError, "fetchIncidents");
     throw cError;
   }
 
   // Repeat for additional pages of FL results
   if (data.hasNextPage && pageIndex < 1000) {
-    info(
+    trace(
       `Finished page ${pageIndex}. Item ${
         data.pageItemCount * (pageIndex + 1)
       }/${data.totalItemCount}`,
@@ -150,12 +150,12 @@ export async function fetchIncidents({
 }
 
 export async function pollIncidents(
-  lastPoll: Moment,
-  end: Moment,
+  lastPoll: Dayjs,
+  end: Dayjs,
   oada: OADAClient,
 ) {
   // Sync list of suppliers
-  const startTime: string = (lastPoll || moment("20150101", "YYYYMMDD"))
+  const startTime: string = (lastPoll || dayjs("20150101", "YYYYMMDD"))
     .utc()
     .format();
   const endTime: string = end.utc().format();
@@ -196,13 +196,13 @@ export async function fetchIncidentTypes({
       while (retries-- > 0 && !(await handleIncidentType(item, oada)));
     }
   } catch (cError: unknown) {
-    error({ error: cError }, "fetchIncidents");
+    error(cError, "fetchIncidents");
     throw cError;
   }
 
   // Repeat for additional pages of FL results
   if (data.has_more) {
-    info(
+    trace(
       `Finished page ${pageIndex}. Item ${
         data.items.length * (pageIndex + 1)
       }/${data.total}`,
@@ -233,7 +233,7 @@ export async function handleIncidentType(
       // Check for changes to the resources
       const equals = equal(resp["food-logiq-mirror"], item);
       if (!equals) {
-        info(
+        trace(
           `Document difference in FL doc [${item._id}] detected. Syncing...`,
         );
         sync = true;
@@ -244,7 +244,7 @@ export async function handleIncidentType(
         throw cError;
       }
 
-      info("Resource is not already in trellis. Syncing...");
+      trace("Resource is not already in trellis. Syncing...");
       sync = true;
     }
 
@@ -255,16 +255,13 @@ export async function handleIncidentType(
         data: { "food-logiq-mirror": item } as any,
         tree,
       });
-      info(`Document synced to mirror: type:${item.name} _id:${item._id}`);
+      trace(`Document synced to mirror: type:${item.name} _id:${item._id}`);
     }
 
     return true;
   } catch (cError: unknown) {
     // TODO: Need to add this to some sort of retry
-    error(
-      { error: cError },
-      `fetchIncidents errored on item ${item._id}. Moving on`,
-    );
+    error(cError, `fetchIncidents errored on item ${item._id}. Moving on`);
     return false;
   }
 }

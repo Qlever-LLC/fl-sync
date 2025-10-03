@@ -17,7 +17,7 @@
 
 /* eslint-disable sonarjs/no-duplicate-string */
 
-// import type { Tree } from '@oada/list-lib';
+import type { Tree } from "@oada/types/oada/tree/v1.js";
 
 const docsTree = {
   _type: "application/vnd.oada.bookmarks.1+json",
@@ -46,8 +46,8 @@ const docsTree = {
       },
     },
   },
-} as const;
-export const tree: Record<string, any> = {
+} as const satisfies Tree;
+export const tree: Tree = {
   bookmarks: {
     _type: "application/vnd.oada.bookmarks.1+json",
     _rev: 0,
@@ -173,6 +173,6 @@ export const tree: Record<string, any> = {
       shared: docsTree,
     },
   },
-} as const;
+};
 
 export default tree;

@@ -14,17 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import "@oada/pino-debug";
 
 import fs from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
-import type { JsonObject, OADAClient } from "@oada/client";
-import { connect } from "@oada/client";
+import { connect, type JsonObject, type OADAClient } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
 // @ts-expect-error no types
 import csvjson from "csvjson";
 import debug from "debug";
 import Fuse from "fuse.js";
+
 import config from "./config.js";
 import { mapTradingPartner, type TradingPartner } from "./masterData.js";
 import tree from "./tree.masterData.js";
@@ -35,7 +36,6 @@ const CO_ID = config.get("foodlogiq.community.owner.id");
 const COMMUNITY_ID = config.get("foodlogiq.community.id");
 const FL_DOMAIN = config.get("foodlogiq.domain");
 const FL_TOKEN = config.get("foodlogiq.token");
-const info = debug("fl-sync:vendorsReport:info");
 const warn = debug("fl-sync:vendorsReport:warn");
 const trace = debug("fl-sync:vendorsReport:trace");
 const error = debug("fl-sync:vendorsReport:error");
@@ -427,7 +427,7 @@ async function fixVendors(oada: OADAClient, matches: any[]) {
     });
 
     if (fromTP.length !== 1 || toTP.length !== 1) {
-      info(`Multiple TP results found for food logiq: ${flId}, sap: ${sapid}`);
+      warn(`Multiple TP results found for food logiq: ${flId}, sap: ${sapid}`);
       continue;
     }
 
@@ -508,7 +508,7 @@ async function updateFlInternalIds() {
       );
       const member = (await res.json()) as any;
       member.internalId = sapid;
-      info(`Putting internalId ${sapid} to fl: ${member?.business?._id}`);
+      trace(`Putting internalId ${sapid} to fl: ${member?.business?._id}`);
       /*
       Await fetch(
         `${FL_DOMAIN}/businesses/${CO_ID}/memberships/${memberId}`,
@@ -519,7 +519,7 @@ async function updateFlInternalIds() {
       });
       */
     } else {
-      info("internalId already set for FL vendor", bid);
+      trace("internalId already set for FL vendor", bid);
     }
   }
 }
@@ -598,7 +598,7 @@ async function copyProdData() {
 
   let passed = false;
   for await (const tpKey of tpKeys) {
-    info({ tpKey });
+    trace({ tpKey });
     if (tpKey === "5ddd8032343c9b000126f0f8") passed = true;
     if (!passed) continue;
     let { data: tp } = (await prod.get({
@@ -635,7 +635,7 @@ async function copyProdData() {
         doc = Object.fromEntries(
           Object.entries(doc).filter(([k, _]) => !k.startsWith("_")),
         );
-        info(
+        trace(
           { doc },
           `/bookmarks/trellisfw/trading-partners/${tpKey}/bookmarks/trellisfw/documents/${docTypeKey}/${docKey}`,
         );
@@ -933,11 +933,11 @@ async function tradingPartnerPrep06142023() {
 
   for await (const tpKey of tpKeys) {
     if (list.has(tpKey)) {
-      info("skipping", tpKey);
+      trace("skipping", tpKey);
       continue;
     }
 
-    info({ tpKey });
+    trace({ tpKey });
     const { data: tp } = (await prod.get({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}`,
     })) as unknown as { data: OldTradingPartner };
@@ -990,7 +990,7 @@ async function tradingPartnerPrep06142023() {
     await prod.delete({
       path: `/bookmarks/trellisfw/trading-partners/${tpKey}/foodlogiq`,
     });
-    info("done with tp");
+    trace("done with tp");
   }
 
   process.exit();
@@ -1216,7 +1216,7 @@ export async function generateFLDocsReport(inDate?: string) {
     csvData,
     { encoding: "utf8" },
   );
-  info("done");
+  trace("done");
 }
 
 export async function generateIncrementalFLVendorsReport(inDate?: string) {
@@ -1277,11 +1277,11 @@ export async function generateIncrementalFLVendorsReport(inDate?: string) {
     csvData,
     { encoding: "utf8" },
   );
-  info("done");
+  trace("done");
 }
 
 setInterval(() => {
-  info("stay alive");
+  trace("stay alive");
 }, 3000);
 // Await loadVendors();
 // await makeVendors();

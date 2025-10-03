@@ -17,13 +17,15 @@
 
 import type { OADAClient } from "@oada/client";
 import { poll } from "@oada/poll";
+import dayjs, { type Dayjs } from "dayjs";
 import debug from "debug";
-import type { Moment, MomentInput } from "moment";
-import moment from "moment";
 import sql from "mssql";
 import xlsx from "xlsx";
+
 // Load config first so it can set up env
 import config from "./config.js";
+
+type DayjsInput = Parameters<typeof dayjs>[0];
 
 const FL_DOMAIN = config.get("foodlogiq.domain");
 const FL_TOKEN = config.get("foodlogiq.token");
@@ -37,9 +39,9 @@ const SQL_MAX_VALUE = 9_007_199_254_740_991;
 const info = debug("fl-sync-incidents:info");
 const trace = debug("fl-sync-incidents:trace");
 
-export async function pollIncidents(lastPoll: Moment, end: Moment) {
+export async function pollIncidents(lastPoll: Dayjs, end: Dayjs) {
   // Sync list of suppliers
-  const startTime: string = (lastPoll || moment("20230801", "YYYYMMDD"))
+  const startTime: string = (lastPoll || dayjs("20230801", "YYYYMMDD"))
     .utc()
     .format();
   const endTime: string = end.utc().format();
@@ -87,7 +89,7 @@ export async function fetchIncidentsCsv({
 
   // Repeat for additional pages of FL results
   if (data.hasNextPage && pageIndex < 1000) {
-    info(
+    trace(
       `Finished page ${pageIndex}. Item ${
         data.pageItemCount * (pageIndex + 1)
       }/${data.totalItemCount}`,
@@ -136,7 +138,7 @@ export async function startIncidents(connection: OADAClient) {
     }) as unknown as () => Promise<string>,
   });
 
-  info(`Started foodlogiq-incidents poller. Polling interval: ${interval} ms`);
+  trace(`Started foodlogiq-incidents poller. Polling interval: ${interval} ms`);
 }
 
 export async function ensureTable() {
@@ -275,7 +277,7 @@ async function syncToSql(csvData: any) {
     let newRow = handleSchemaChanges(row);
     newRow = handleTypes(newRow);
     newRow = ensureNotNull(newRow);
-    info({ row, newRow }, "Input Row and new Row");
+    trace({ row, newRow }, "Input Row and new Row");
 
     const columnKeys = Object.keys(allColumns).sort() as Array<keyof Row>;
 
@@ -321,21 +323,21 @@ function handleTypes(newRow: Row) {
   return Object.fromEntries(
     columnKeys.map((key) => {
       if (allColumns[key].type.includes("DATE")) {
-        const value = newRow[key] as MomentInput;
-        if (moment.isDate(value)) {
-          return [key, moment(value).toDate()];
+        const value = newRow[key] as DayjsInput;
+        if (dayjs.isDayjs(value)) {
+          return [key, dayjs(value).toDate()];
         }
 
-        if (moment(value, "MMM DD, YYYY", true).isValid()) {
-          return [key, moment(value, "MMM DD, YYYY").toDate()];
+        if (dayjs(value, "MMM DD, YYYY", true).isValid()) {
+          return [key, dayjs(value, "MMM DD, YYYY").toDate()];
         }
 
-        if (moment(value, "MMMM D, YYYY hh:mma", true).isValid()) {
-          return [key, moment(value, "MMMM D, YYYY hh:mma", true).toDate()];
+        if (dayjs(value, "MMMM D, YYYY hh:mma", true).isValid()) {
+          return [key, dayjs(value, "MMMM D, YYYY hh:mma", true).toDate()];
         }
 
-        if (moment(value, "YYYY-MM-DD", true).isValid()) {
-          return [key, moment(value, "YYYY-MM-DD", true).toDate()];
+        if (dayjs(value, "YYYY-MM-DD", true).isValid()) {
+          return [key, dayjs(value, "YYYY-MM-DD", true).toDate()];
         }
       }
 

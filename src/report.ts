@@ -16,19 +16,22 @@
  */
 
 import fs from "node:fs/promises";
+
 import config from "./config.js";
 
 import "@oada/pino-debug";
 
-import type { OADAClient } from "@oada/client";
-import { connect } from "@oada/client";
+import { connect, type OADAClient } from "@oada/client";
 import type { Job } from "@oada/jobs";
 import type Link from "@oada/types/oada/link/v1.js";
 // @ts-expect-error no types
 import csvjson from "csvjson";
-import debug from "debug";
+import dayjs from "dayjs";
+import dayOfYear from "dayjs/plugin/dayOfYear.js";
+import _debug from "debug";
 import ksuid from "ksuid";
-import moment from "moment";
+
+dayjs.extend(dayOfYear);
 
 const DOMAIN = config.get("trellis.domain");
 const TOKEN = config.get("trellis.token");
@@ -40,9 +43,9 @@ const CO_ID = config.get("foodlogiq.community.owner.id");
 const FL_DOMAIN = config.get("foodlogiq.domain");
 const FL_TOKEN = config.get("foodlogiq.token");
 
-const info = debug("fl-sync:info");
-const trace = debug("fl-sync:trace");
-const error = debug("fl-sync:error");
+const debug = _debug("fl-sync:debug");
+const trace = _debug("fl-sync:trace");
+const error = _debug("fl-sync:error");
 
 const humanReadableJobError: Record<string, string> = {
   "target-other": "Other target errors",
@@ -94,7 +97,7 @@ export async function makeFinalReport() {
   try {
     // 1. Iterate over the docs
     const mint = setInterval(() => {
-      info("ping");
+      trace("ping");
     }, 3000);
     const oada = await connect({
       domain: `https://${DOMAIN}`,
@@ -282,7 +285,7 @@ export async function makeFinalReport() {
             "FoodLogiQ Document ID": docId,
             "FoodLogiQ Supplier ID": bid,
           });
-          info({ docid: docId, jobid: jobId, status: job.status });
+          trace({ docid: docId, jobid: jobId, status: job.status });
         } else {
           finalReport.otherErrors++;
           otherReport.otherErrors[docId] = { docid: docId, bid, jobid: jobId };
@@ -336,7 +339,7 @@ export async function makeFinalReport() {
       }
     }
 
-    info(finalReport);
+    trace(finalReport);
     await fs.writeFile(
       "./scripts/finalReportDocs-Prod.json",
       JSON.stringify(otherReport),
@@ -382,11 +385,11 @@ export async function makeFinalReport() {
         inLaserfiche: finalReport.inLaserfiche,
       },
     };
-    info(finalReport);
+    trace(finalReport);
     let csv = csvjson.toCSV(spreadsheet, { delimiter: ",", wrap: false });
     csv = fixHeaders(csv, Object.keys(spreadsheet[0]));
     await fs.writeFile("./scripts/finalReport-Prod.csv", csv);
-    info("Done with CSV");
+    debug("Done with CSV");
 
     clearInterval(mint);
     return csv;
@@ -426,11 +429,11 @@ export function extraStuff(oada: OADAClient) {
 
 export async function isItTime(oada: OADAClient) {
   let currentlyReporting = false;
-  const now = moment();
+  const now = dayjs();
   const { data: reportTime } = await oada.get({
     path: `${SERVICE_PATH}/_meta/report/fl-sync-daily/last-report`,
   });
-  const lastTime = moment(reportTime as string);
+  const lastTime = dayjs(reportTime as string);
 
   if (
     lastTime.year() === now.year() &&
@@ -444,7 +447,7 @@ export async function isItTime(oada: OADAClient) {
 }
 
 async function postEmailJob(csv: string, oada: OADAClient) {
-  const date = moment().subtract(1, "day").format("YYYY-MM-DD");
+  const date = dayjs().subtract(1, "day").format("YYYY-MM-DD");
   const job = {
     service: "abalonemail",
     type: "email",

@@ -32,6 +32,7 @@ import oError from "@overleaf/o-error";
 import pointer from "json-pointer";
 import JSZip from "jszip";
 import md5 from "md5";
+
 import { linkAssessmentToDocument, spawnAssessment } from "./assessments.js";
 import checkAssessment from "./checkAssessments.js";
 import config from "./config.js";
@@ -189,7 +190,7 @@ async function handleTargetStatus(
   const docJobId = docJob.oadaId;
   const { masterid, key } = docJob.config;
   if (docJob && docJob.config["allow-rejection"] === false) {
-    log.info(
+    log.trace(
       `[job ${docJobId}] Target finished with status ${status} on already-approved doc.`,
     );
     if (status === "success") {
@@ -257,7 +258,8 @@ async function handleTargetStatus(
           }
         }
 
-        log.info(
+        log.error(
+          jobError,
           `[job ${docJobId}] Target job ${targetJob._id} errored. reject: ${reject}; fl-sync job error ${jobError}`,
         );
 
@@ -288,7 +290,7 @@ async function approveFlDocument(
   jobId: string,
   log: Logger,
 ) {
-  log.info(`[job ${jobId}] Approving associated FL Doc ${documentId}`);
+  log.debug(`[job ${jobId}] Approving associated FL Doc ${documentId}`);
   try {
     await fetch(
       `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
@@ -325,7 +327,7 @@ export const handleAssessmentJob: WorkerFunction = async (
     const { bid, key, flDocJobId: docJobId } = job.config;
     // Is this recommended?
     //log = log.child({ document: key })
-    log.info(`[job ${docJobId}] Handling incoming Assessment job ${jobKey}`);
+    log.trace(`[job ${docJobId}] Handling incoming Assessment job ${jobKey}`);
     const { data: itemData } = await oada.get({
       path: `${SERVICE_PATH}/businesses/${bid}/assessments/${key}`,
     });
@@ -358,7 +360,7 @@ export const handleAssessmentJob: WorkerFunction = async (
     });
 
     const aaa = getAutoApprove();
-    log.info(
+    log.trace(
       `[job ${docJobId}] Autoapprove Assessments Configuration: [${aaa}]`,
     );
     if (aaa) {
@@ -371,7 +373,7 @@ export const handleAssessmentJob: WorkerFunction = async (
           approval: !failed,
         },
       });
-      log.info(
+      log.trace(
         `[job ${docJobId}] Assessment Auto-${item.state}. [${item._id}]`,
       );
       await fetch(
@@ -384,7 +386,7 @@ export const handleAssessmentJob: WorkerFunction = async (
           body: JSON.stringify(item),
         },
       );
-      log.info(`[job ${docJobId}] Assessment Reasons: ${reasons.join(";")}`);
+      log.trace(`[job ${docJobId}] Assessment Reasons: ${reasons.join(";")}`);
 
       const docJob = assessmentToFlId.get(item._id);
       if (docJob && failed) {
@@ -423,11 +425,11 @@ export const handleAssessmentJob: WorkerFunction = async (
         resolve,
         reject,
       });
-      log.info("Saved assessmentjob");
+      log.trace("Saved assessmentjob");
     });
-  } catch (error_) {
-    log.error("Error handleAssessmentJob", error_);
-    throw error_;
+  } catch (err: unknown) {
+    log.error(err, "Error handleAssessmentJob");
+    throw err;
   }
 }; // HandleAssessmentJob
 
@@ -450,7 +452,7 @@ export async function postTpDocument({
   docJob: Job;
   log: Logger;
 }) {
-  log.info(`postTpDocument: bid:${bid} item:${item._id}`);
+  log.debug(`postTpDocument: bid:${bid} item:${item._id}`);
   const type = item?.shareSource?.type?.name;
 
   // 1. Retrieve the attachments and unzip
@@ -462,7 +464,7 @@ export async function postTpDocument({
     },
   ).catch((error_) => {
     if (error_.response?.status === 404) {
-      log.info(`Bad attachments on item ${item._id}. Throwing JobError`);
+      log.warn(`Bad attachments on item ${item._id}. Throwing JobError`);
       throw new JobError(attachmentsErrorMessage, "bad-fl-attachments");
     }
     throw error_;
@@ -476,7 +478,7 @@ export async function postTpDocument({
   const files = Object.keys(zip.files);
 
   if (files.length !== 1 && noMultiFile.has(type)) {
-    log.info(`Multiple files not allowed for doc type ${type}`);
+    log.warn(`Multiple files not allowed for doc type ${type}`);
     throw new JobError(multipleFilesErrorMessage, "multi-files-attached");
   }
 
@@ -629,7 +631,7 @@ export async function postTpDocument({
     },
     tree,
   });
-  log.info(
+  log.debug(
     `Created partial JSON in docs list: /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`,
   );
 
@@ -709,7 +711,7 @@ export async function postTpDocument({
       [targetJobKey]: { _id: targetJobId },
     },
   });
-  log.info(
+  log.debug(
     `[job ${docJob.oadaId}] Noted target job ${targetJobKey} in fl-sync job ${jobId}`,
   );
 
@@ -731,7 +733,7 @@ export const handleDocumentJob: WorkerFunction = async (
   const { bid, key, masterid } = indexConfig;
   let flType: string;
   try {
-    log.info(
+    log.trace(
       "handleDocumentJob processing new document job resource[%s] doc [%s]",
       jobId,
       `${SERVICE_NAME}/businesses/${bid}/documents/${key}`,
@@ -771,24 +773,22 @@ export const handleDocumentJob: WorkerFunction = async (
           log,
         });
       } catch (cError: unknown) {
-        log.error(
-          { error: cError },
-          "postTpDocument Promise threw. Rejecting...",
-        );
+        log.error(cError, "postTpDocument Promise threw. Rejecting...");
         const { message, JobError } = cError as Error & {
           JobError?: string;
         };
         if (
           [multipleFilesErrorMessage, attachmentsErrorMessage].includes(message)
         ) {
-          log.info("error type", JobError);
+          log.error(JobError, "error type");
           if (indexConfig["allow-rejection"] !== false) {
             try {
               // @ts-expect-error
               if (flType && rejectable[flType])
                 await rejectFlDocument(item!._id, jobId, log, message);
-            } catch {
-              log.info(
+            } catch (error: unknown) {
+              log.warn(
+                error,
                 `Caught in rejectFlDocument, likely because this document id:${
                   item!._id
                 } no longer exists in FL.`,
@@ -798,20 +798,20 @@ export const handleDocumentJob: WorkerFunction = async (
           // Now let it continue below and throw; no promise gets made, but the job is failed now
         }
 
-        // If allow-rejection is false and it throws, the job will fail and leave
+        // If allowejection is false and it throws, the job will fail and leave
         // the document "suspended" for further review, which is fine
         reject(cError);
       }
     });
   } catch (cError: unknown) {
-    log.error({ error: cError }, "handleDocumentJob errored");
+    log.error(cError, "handleDocumentJob errored");
     const { message, JobError } = cError as Error & {
       JobError?: string;
     };
     if (
       [multipleFilesErrorMessage, attachmentsErrorMessage].includes(message)
     ) {
-      log.info("error type", JobError);
+      log.error(JobError, "error type");
       await oada.put({
         path: `/${jobId}`,
         data: {
@@ -826,8 +826,9 @@ export const handleDocumentJob: WorkerFunction = async (
           // @ts-expect-error
           if (flType && rejectable[flType])
             await rejectFlDocument(item!._id, jobId, log, message);
-        } catch {
-          log.info(
+        } catch (error: unknown) {
+          log.warn(
+            error,
             `Caught in rejectFlDocument, likely because this document id:${
               item!._id
             } no longer exists in FL.`,
@@ -851,7 +852,7 @@ async function finishDocument(
   log: Logger,
 ) {
   if (status === "Approved") {
-    log.info(`Finishing doc: [${itemId}] with status [${status}] `);
+    log.debug(`Finishing doc: [${itemId}] with status [${status}] `);
     // Get the target job, result, and clean everything up
     // Get reference to corresponding pending scraped pdf
 
@@ -913,7 +914,7 @@ async function finishDocument(
 
     // Move approved docs to trading partner /bookmarks
     try {
-      log.info(
+      log.trace(
         `[job ${docJobId}] Moving approved document to [/${masterid}/bookmarks/trellisfw/documents/${type}/${key}]`,
       );
       await CONNECTION.ensure({
@@ -956,15 +957,15 @@ async function finishDocument(
       });
 
       await syncToLf(CONNECTION, masterid, _id);
-      log.info("Laserfiche sync job completed");
-    } catch (error_) {
-      log.error(`Error during move to bookmarks ${error_}`);
+      log.trace("Laserfiche sync job completed");
+    } catch (err: unknown) {
+      log.error(err, `Error during move to bookmarks`);
     }
 
     endJob(docJobId, log);
   } else {
     // Don't do anything; the job was already failed at the previous step and just marked in FL as Rejected.
-    log.info(
+    log.trace(
       `[job ${docJobId}] Document [${itemId}] with status [${status}]. finishDoc skipping.`,
     );
   }
@@ -981,7 +982,7 @@ function endJob(
   log: Logger,
   message?: string | Error | JobError,
 ) {
-  log.info(`[job ${jobId}] Removing job from flSyncJobs Map`);
+  log.trace(`[job ${jobId}] Removing job from flSyncJobs Map`);
   // Trace(flSyncJobs, 'All flSyncJobs');
   const prom = flSyncJobs.get(jobId);
   if (prom) {
@@ -1107,7 +1108,7 @@ async function handleScrapedResult(
       isObj(targetResultItem?.[key])
     ) {
       const targetRes = targetResultItem?.[key];
-      log.info(
+      log.trace(
         `[job ${docJobId}] Job result: [type: ${type}, key: ${key}, _id: ${targetRes?._id}]`,
       );
     }
@@ -1141,7 +1142,7 @@ async function handleScrapedResult(
 
     const validationResult = await validateResult(result, flMirror, type);
 
-    log.info(
+    log.trace(
       `[job ${docJobId}] Validation of pending document result:[${result._id}]: ${validationResult.status}`,
     );
     await CONNECTION.put({
@@ -1166,7 +1167,7 @@ async function handleScrapedResult(
         ) && // @ts-expect-error todo
         rejectable[type]
       ) {
-        log.info(
+        log.trace(
           `[job ${docJobId}] Document type ${type} was rejectable. Rejecting`,
         );
         await rejectFlDocument(flId, docJobId, log, validationResult?.message);
@@ -1193,7 +1194,7 @@ async function handleScrapedResult(
         });
 
       if (assessmentId) {
-        log.info(
+        log.trace(
           `[job ${docJobId}] Assessment with id [${assessmentId}] already exists for document _id [${flId}].`,
         );
         assessmentToFlId.set(assessmentId, {
@@ -1202,7 +1203,7 @@ async function handleScrapedResult(
           flId,
         });
       } else {
-        log.info(
+        log.trace(
           `[job ${docJobId}] Assessment does not yet exist for document _id [${flId}]`,
         );
       }
@@ -1236,7 +1237,7 @@ async function handleScrapedResult(
           const { state } = mirrorAssess[
             "food-logiq-mirror"
           ] as unknown as FlObject;
-          log.info(
+          log.trace(
             `[job ${docJobId}] Assessment ${assessmentId} - bid: ${bid}; state: ${state}. Could not be modified.`,
           );
 
@@ -1258,7 +1259,7 @@ async function handleScrapedResult(
         } else throw cError;
       }
 
-      log.info(
+      log.trace(
         `[job ${docJobId}] Spawned assessment [${assessmentId}] for business id [${bid}]`,
       );
       await postUpdate(
@@ -1275,7 +1276,7 @@ async function handleScrapedResult(
         });
       }
     } else {
-      log.info(
+      log.trace(
         `[job ${docJobId}] Skipping assessment for result of type [${flType}] [${type}].`,
       );
     }
@@ -1294,7 +1295,7 @@ async function rejectFlDocument(
   log: Logger,
   message?: string,
 ) {
-  log.info(`[job ${jobId}] Rejecting FL document [${documentId}]. ${message}`);
+  log.trace(`[job ${jobId}] Rejecting FL document [${documentId}]. ${message}`);
 
   // Extra check prior to rejection.
   const response = await fetch(
@@ -1369,7 +1370,7 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
       throw cError as Error;
     });
 
-    log.info(`Path: ${SERVICE_PATH}/businesses`);
+    log.trace(`Path: ${SERVICE_PATH}/businesses`);
 
     const docsWatch = new ListWatch({
       conn: CONNECTION,
@@ -1440,7 +1441,7 @@ async function queueAssessmentJob(
 ) {
   try {
     // 1. Gather fl indexing, mirror data, fl document lookup, etc.
-    log.info("queueAssessmentJob processing mirror change");
+    log.debug("queueAssessmentJob processing mirror change");
     const pieces = pointer.parse(path);
     const [bid, , key] = pieces;
 
@@ -1462,7 +1463,7 @@ async function queueAssessmentJob(
     // Skip when there is no associated document job.
     // This may happen on startup with lots of assessments already sitting there.
     if (!assessmentToFlId.has(key)) {
-      log.info(
+      log.trace(
         `No associated fl-sync document job could be found for assessment: ${item._id}`,
       );
       return;
@@ -1480,7 +1481,7 @@ async function queueAssessmentJob(
 
     const { key: flDocumentId, type: flDocumentType, masterid } = indexConfig;
     if (!flDocumentType) {
-      log.info(
+      log.trace(
         `[job ${docJobId}] Assessment [${item._id}] could not find fl doc type prior to queueing. Ignoring.`,
       );
       return;
@@ -1489,7 +1490,7 @@ async function queueAssessmentJob(
     const assessmentType = item?.assessmentTemplate?.name;
     const docs = flTypes.get(flDocumentType);
     if (!assessmentType || !docs) {
-      log.info(
+      log.trace(
         `[job ${docJobId}] Assessment type of [${item._id}] was of type [${assessmentType}]. Ignoring.`,
       );
       return;
@@ -1499,7 +1500,7 @@ async function queueAssessmentJob(
       !docs.assessments ||
       !Object.keys(docs.assessments).includes(assessmentType)
     ) {
-      log.info(
+      log.trace(
         `[job ${docJobId}] Assessment [${item._id}] was of type [${assessmentType}]. Ignoring.`,
       );
       return;
@@ -1510,7 +1511,7 @@ async function queueAssessmentJob(
     const usersEqual =
       approvalUser === FL_TRELLIS_USER ||
       approvalUser === APPROVAL_TRELLIS_USER;
-    log.info(
+    log.trace(
       `[job ${docJobId}] approvalInfo user ${
         usersEqual
           ? "matches our user"
@@ -1553,7 +1554,7 @@ async function queueAssessmentJob(
             [jobkey]: { _id: `resources/${jobkey}`, _rev: 0 },
           },
         });
-        log.info(
+        log.trace(
           `[job ${docJobId}] Posted job [assessment] at /resources/${jobkey}`,
         );
 
@@ -1590,11 +1591,11 @@ async function queueAssessmentJob(
         // Reject the assessment job;
         endJob(item._id, log, message);
         assessmentToFlId.delete(item._id);
-        log.info(`[job ${docJobId}] REASONS: ${reasons}`);
+        log.trace(`[job ${docJobId}] REASONS: ${reasons}`);
 
         // Reject the FL Document with a supplier message and reject the doc job
         if (flSyncJobs.get(docJobId)["allow-rejection"] === false) {
-          log.info(
+          log.warn(
             `[job ${docJobId}] Assessment ${item._id} failed logic, but cannot override approval. Calling finishDoc.`,
           );
           await approveFlDocument(flDocumentId, docJobId, log);
@@ -1626,7 +1627,7 @@ async function queueAssessmentJob(
       default: {
         // 2c. Job not handled by trellis system.
         const message = `Assessment not pending, approval status not set by Trellis. Skipping. Assessment: [${item._id}] User: [${approvalUser}] Status: [${status}]`;
-        log.info(`[job ${docJobId}] ${message}`);
+        log.trace(`[job ${docJobId}] ${message}`);
       }
     }
   } catch (cError: unknown) {
@@ -1680,7 +1681,7 @@ export async function postJob(
     },
   });
 
-  log.info(`[job ${_id}] Posted job [document] at /${_id}`);
+  log.trace(`[job ${_id}] Posted job [document] at /${_id}`);
   return _id;
 }
 
@@ -1711,7 +1712,9 @@ async function queueDocumentJob(
     const item = fullData["food-logiq-mirror"] as unknown as FlObject;
 
     if (item.shareSource.isDeleted) {
-      log.info(`Document [${item._id}] was deleted by the supplier. Skipping.`);
+      log.trace(
+        `Document [${item._id}] was deleted by the supplier. Skipping.`,
+      );
       return;
     }
 
@@ -1720,7 +1723,7 @@ async function queueDocumentJob(
     })) as { data: JsonObject };
 
     let masterid;
-    if (!bus) log.error(`No trading partner found for business ${bid}.`);
+    if (!bus) log.warn(`No trading partner found for business ${bid}.`);
     if (bus["food-logiq-mirror"]) {
       const { result } = (await doJob(CONNECTION, {
         service: SERVICE_NAME,
@@ -1735,7 +1738,7 @@ async function queueDocumentJob(
 
     // TODO: Determine how to report this skipping due to no trading-partner.
     if (!masterid) return;
-    log.info(
+    log.trace(
       `Found trading partner masterid [${masterid}] for FL business ${bid}`,
     );
 
@@ -1743,7 +1746,7 @@ async function queueDocumentJob(
       ? pointer.get(item, "/shareSource/type/name")
       : undefined;
     if (!documentType || !flTypes.has(documentType)) {
-      log.info(
+      log.trace(
         `Document [${item._id}] was of type [${documentType}]. Ignoring.`,
       );
       return;
@@ -1751,7 +1754,7 @@ async function queueDocumentJob(
 
     const status = item?.shareSource?.approvalInfo?.status;
     const approvalUser = item?.shareSource?.approvalInfo?.setBy?._id;
-    log.info(
+    log.trace(
       `approvalInfo user: ${approvalUser} (${
         approvalUser === FL_TRELLIS_USER ||
         approvalUser === APPROVAL_TRELLIS_USER
@@ -1763,7 +1766,7 @@ async function queueDocumentJob(
     // Accept all supplier drafts as we had previously while changing the doc
     // status back to Awaiting Approval.
     if (item.shareSource?.draftVersionId && status !== "Awaiting Approval") {
-      log.info(
+      log.trace(
         `Document [${item._id}] has a supplier update. Setting status to 'Awaiting Approval'.`,
       );
       await fetch(
@@ -1803,7 +1806,7 @@ async function queueDocumentJob(
       approvalUser === FL_TRELLIS_USER ||
       approvalUser === APPROVAL_TRELLIS_USER
     ) {
-      log.info(
+      log.trace(
         `Document ${item._id} approvalUser was Trellis. Calling finishDoc`,
       );
       // B. Approved or rejected by us. Finish up the automation
@@ -1818,14 +1821,14 @@ async function queueDocumentJob(
       }
       // C. Document handled by others
     } else if (status === "Approved") {
-      log.info(
+      log.debug(
         `Already approved document[${item._id}]; bid[${bid}]; ApprovalUser was not us. Reprocessing and ushering through.`,
       );
       // Run it through target and move it to trading-partner /bookmarks
       jobConfig["allow-rejection"] = false;
       await postJob(CONNECTION, jobConfig, status, log);
     } else {
-      log.info(
+      log.warn(
         `Document ${item._id} approvalUser was not us. status !== Approved. Skipping. Killing any running jobs.`,
       );
       await cancelDocJobs(item._id, log);
