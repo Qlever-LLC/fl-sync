@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ErrorObject } from 'serialize-error';
+import type { ErrorObject } from "serialize-error";
 
 export interface TrellisCOI {
   _id: string;
@@ -27,9 +27,9 @@ export interface TrellisCOI {
       street_address?: string;
       postal_code?: string;
       country?: string;
-    } 
+    }
   };
-  policies: Record<string, Policy>; 
+  policies: Record<string, Policy>;
 }
 
 export interface CombinedTrellisCOI {
@@ -42,36 +42,36 @@ export interface CombinedTrellisCOI {
       street_address?: string;
       postal_code?: string;
       country?: string;
-    } 
+    }
   };
   expire_date: string;
   policies: {
     cgl: GeneralLiability;
     al: AutoLiability;
     ul: UmbrellaLiability;
-    wcel: WorkersCompEmployersLiability; 
+    wcel: WorkersCompEmployersLiability;
   }
 }
 
 
 export interface GeneralLiability {
-  'type': 'Commercial General Liability';
-  'each_occurrence': number;
-  'general_aggregate': number;
-  'products_-_compop_agg': number;
-  'expire_date': string;
-  'effective_date': string;
+  type: "Commercial General Liability";
+  each_occurrence: number;
+  general_aggregate: number;
+  "products_-_compop_agg": number;
+  expire_date: string;
+  effective_date: string;
 }
 
 export interface AutoLiability {
-  type: 'Automobile Liability';
+  type: "Automobile Liability";
   combined_single_limit: number;
   expire_date: string;
   effective_date: string;
 }
 
 export interface UmbrellaLiability {
-  type: 'Umbrella Liability';
+  type: "Umbrella Liability";
   each_occurrence: number | string;
   expire_date: string;
   effective_date: string;
@@ -139,19 +139,19 @@ export interface FlAssessment {
 }
 
 export interface JobConfig {
-  'fl-sync-type': 'document';
-  '_rev': number;
-  'type': string;
-  'key': string;
-  'bid': string;
-  'masterid': string;
-  'mirrorid': string;
-  'bname': string;
-  'name': string;
-  'allow-rejection'?: boolean;
-  'date': string;
-  'status': string;
-  'link': string;
+  "fl-sync-type": "document";
+  _rev: number;
+  type: string;
+  key: string;
+  bid: string;
+  masterid: string;
+  mirrorid: string;
+  bname: string;
+  name: string;
+  "allow-rejection"?: boolean;
+  date: string;
+  status: string;
+  link: string;
 }
 
 export interface FlObject {
@@ -467,7 +467,7 @@ export interface ReportDataSave {
 
 /* Example ReportDataSave
 {
-  flCois: { 
+  flCois: {
     [<FL Doc _id>]: FL Doc,
     ...
   },
@@ -485,7 +485,7 @@ export interface ReportDataSave {
     },
     ...
   }
-    
+
 }
 */
 
@@ -497,15 +497,15 @@ export interface HolderCheckResult {
 
 export interface CoiAssessment {
   assessment: {
-    passed: boolean,
-    reasons: string,
-    dateParseWarning: boolean,
-  },
-  expiryPassed?: boolean | "",
-  minExpiration?: string | "",
-  expiryMismatch?: boolean | "",
-  flExpiration?: string | "",
-  parsingError: boolean,
+    passed: boolean;
+    reasons: string;
+    dateParseWarning: boolean;
+  };
+  expiryPassed?: boolean | "";
+  minExpiration?: string | "";
+  expiryMismatch?: boolean | "";
+  flExpiration?: string | "";
+  parsingError: boolean;
   invalidHolder?: boolean;
   limitResults?: Record<string, LimitResult>;
   workersCheck: {

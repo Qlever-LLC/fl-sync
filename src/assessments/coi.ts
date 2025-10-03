@@ -14,7 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import '@oada/pino-debug';
+
+import "@oada/pino-debug";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import type { OADAClient } from "@oada/client";
+import { connect } from "@oada/client";
+import { doJob } from "@oada/client/jobs";
+import { type AxiosRequestConfig, default as axios, isAxiosError } from "axios";
+import debug from "debug";
+import Excel from "exceljs";
+// @ts-expect-error jsonpath lacks types
+import jp from "jsonpath";
+import JsZip from "jszip";
+import { type ErrorObject, serializeError } from "serialize-error";
+import config from "../config.js";
 import type {
   AttachmentResources,
   AutoLiability,
@@ -39,31 +52,20 @@ import type {
   TrellisCOI,
   UmbrellaLiability,
 } from '../types.js';
-import { type AxiosRequestConfig, isAxiosError } from 'axios';
-import { type ErrorObject, serializeError } from 'serialize-error';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { groupBy, minimumDate, sum } from '../utils.js';
-import { default as axios } from 'axios';
-import config from '../config.js';
-import { connect } from '@oada/client';
-import debug from 'debug';
-import { doJob } from '@oada/client/jobs';
 // @ts-expect-error jsonpath lacks types
 import jp from 'jsonpath';
 
-import Excel from 'exceljs';
-import JsZip from 'jszip';
-import type { OADAClient } from '@oada/client';
-const { domain, token } = config.get('trellis');
-const FL_TOKEN = config.get('foodlogiq.token');
-const FL_DOMAIN = config.get('foodlogiq.domain');
-const CO_ID = config.get('foodlogiq.community.owner.id');
-const COMMUNITY_ID = config.get('foodlogiq.community.id');
+const { domain, token } = config.get("trellis");
+const FL_TOKEN = config.get("foodlogiq.token");
+const FL_DOMAIN = config.get("foodlogiq.domain");
+const CO_ID = config.get("foodlogiq.community.owner.id");
+const COMMUNITY_ID = config.get("foodlogiq.community.id");
 
-const fail = 'FFb96161';
-const passFill = 'FF80a57d';
-const warnFill = 'FFffff93';
-const actionFill = 'FFffffa6';
+const fail = "FFb96161";
+const passFill = "FF80a57d";
+const warnFill = "FFffff93";
+const actionFill = "FFffffa6";
 
 const limits: Record<string, Limit> = {
   'General Liability Per Occurrence': {
@@ -101,15 +103,15 @@ const limits: Record<string, Limit> = {
 };
 
 const coiReportColumns = {
-  'Trading Partner': 40,
-  'FoodLogiq Document Link': 35,
-  'Grouped FoodLogiq\nDocuments': 18,
-  'Recommended Action': 18,
-  'ACTION SELECTION': 18,
-  'Rejection Reasons': 30,
-  'Custom Message': 30,
-  'Minimum Policy\nExpiration Date': 15,
-  'Different FoodLogiq\nExpiration Date': 20,
+  "Trading Partner": 40,
+  "FoodLogiq Document Link": 35,
+  "Grouped FoodLogiq\nDocuments": 18,
+  "Recommended Action": 18,
+  "ACTION SELECTION": 18,
+  "Rejection Reasons": 30,
+  "Custom Message": 30,
+  "Minimum Policy\nExpiration Date": 15,
+  "Different FoodLogiq\nExpiration Date": 20,
   ...Object.fromEntries(Object.values(limits).map(({ title }) => [title, 20])),
   'Umbrella Liability': 15,
   'Workers Compensation\n(per Statutory Requirements)\n(Is equal to Yes)': 20,
@@ -119,9 +121,9 @@ const coiReportColumns = {
   'Additional FoodLogiq \nDocs Considered': 20,
 }
 
-const info = debug('fl-sync:info');
-const error = debug('fl-sync:error');
-const warn = debug('fl-sync:warn');
+const info = debug("fl-sync:info");
+const error = debug("fl-sync:error");
+const warn = debug("fl-sync:warn");
 let oada: OADAClient;
 try {
   oada = await connect({ domain, token });
@@ -134,12 +136,11 @@ try {
  */
 async function getFlCois(
   queryString: string,
-  coiResults?: Record<string, FlDocument>,
+  coiResults: Record<string, FlDocument> = {},
   pageIndex?: number,
 ): Promise<Record<string, FlDocument>> {
-  coiResults ||= {};
   const request: AxiosRequestConfig = {
-    method: 'get',
+    method: "get",
     url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents${queryString}`,
     headers: { Authorization: `${FL_TOKEN}` },
   };
@@ -174,10 +175,10 @@ async function fetchAndExtractAttachments(
   let zipFile: Uint8Array;
   try {
     const { data } = await axios<Uint8Array>({
-      method: 'get',
+      method: "get",
       url: `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item._id}/attachments`,
       headers: { Authorization: FL_TOKEN },
-      responseEncoding: 'binary',
+      responseEncoding: "binary",
     });
     zipFile = data;
   } catch (error_: unknown) {
@@ -193,7 +194,7 @@ async function fetchAndExtractAttachments(
 
     info(`Errored on item ${item._id}. Returning with no attachments`);
     return {
-      serialized: serializeError(error_),
+      serialized: serializeError(error_ as Error),
     };
   }
 
@@ -210,16 +211,16 @@ async function fetchAndExtractAttachments(
     }
 
     // Prepare the pdf resource
-    const ab = await zip.file(fKey)!.async('uint8array');
+    const ab = await zip.file(fKey)!.async("uint8array");
     const zdata = Buffer.alloc(ab.byteLength).map((_, index) => ab[index]!);
 
     try {
       const { headers } = await oada.post({
-        path: `/resources`,
+        path: "/resources",
         data: zdata,
-        contentType: 'application/pdf',
+        contentType: "application/pdf",
       });
-      const _id = headers['content-location']!.replace(/^\//, '');
+      const _id = headers["content-location"]!.replace(/^\//, "");
 
       info(`Extracting binary data for FL Doc ${item._id}. Attachment ${fKey}`);
       (attachments as Record<string, ExtractPdfResult | ErrObj>)[fKey] =
@@ -228,11 +229,11 @@ async function fetchAndExtractAttachments(
       (attachments as Record<string, ExtractPdfResult | ErrObj>)[fKey] =
         Buffer.byteLength(zdata) === 0
           ? {
-              msg: `Attachment data was corrupt or empty.`,
-              serialized: serializeError(cError),
+              msg: "Attachment data was corrupt or empty.",
+              serialized: serializeError(cError as Error),
             }
-          : { serialized: serializeError(cError) };
-      continue;
+          : { serialized: serializeError(cError as Error) };
+      // continue;
     }
   }
 
@@ -242,19 +243,19 @@ async function fetchAndExtractAttachments(
 async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
   try {
     const job = (await doJob(oada, {
-      service: 'target',
-      type: 'transcription-only',
+      service: "target",
+      type: "transcription-only",
       config: {
-        'type': 'pdf',
-        'pdf': { _id },
-        'document-type': 'application/vnd.trellisfw.coi.accord.1+json',
-        'oada-doc-type': 'cois',
+        type: "pdf",
+        pdf: { _id },
+        "document-type": "application/vnd.trellisfw.coi.accord.1+json",
+        "oada-doc-type": "cois",
       },
     })) as unknown as TargetJob;
 
     // Accumulate the attachments
     // Target result is like { cois: { abcx123: {_id: "resources/abc123"}}}
-    const results: ExtractPdfResult['results'] = {};
+    const results: ExtractPdfResult["results"] = {};
     if (job.result.cois) {
       for await (const [key, value] of Object.entries(job.result.cois)) {
         const { data: doc } = (await oada.get({
@@ -276,7 +277,7 @@ async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
   } catch (error_) {
     error(error_);
     return {
-      results: { serialized: serializeError(error_) },
+      results: { serialized: serializeError(error_ as Error) },
     };
   }
 }
@@ -288,14 +289,14 @@ async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
  */
 function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): CombinedTrellisCOI {
   const cois: TrellisCOI[] = mixedCois.filter(
-    (coi) => '_id' in coi,
+    (coi) => "_id" in coi,
   ) as TrellisCOI[];
 
   return {
     _id: cois.map((coi) => coi._id).join(';'),
     expire_date: policiesToExpirations(
         cois.flatMap(coi => Object.values(coi?.policies || {}))
-      ).sort((a: string, b: string) => 
+      ).sort((a: string, b: string) =>
         new Date(a).getTime() - new Date(b).getTime()
       )[0]!,
 
@@ -309,13 +310,11 @@ function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): CombinedTrelli
 }
 
 function policiesToExpirations(policies: Policy[]) {
-  return (
-    policies
-      .filter(Boolean)
-      .filter((p) => typeof p !== 'string' && 'expire_date' in p)
-      .map((policy: Policy) => policy.expire_date)
-      .filter((d) => new Date(d).getFullYear() !== 1900)
-  );
+  return policies
+    .filter(Boolean)
+    .filter((p) => typeof p !== "string" && "expire_date" in p)
+    .map((policy: Policy) => policy.expire_date)
+    .filter((d) => new Date(d).getFullYear() !== 1900);
 }
 
 // Compose a single policy of a particular type from an array of COIs (each with
@@ -331,13 +330,13 @@ function composePolicy(
     .flatMap((coi) => Object.values(coi.policies || {}))
     .filter((p) => typeof p !== 'string');
 
-  policies = policies.filter((p)=> p.type === type)
+  policies = policies.filter((p) => p.type === type);
 
   const uniques = new Set<string>();
   const activePolicies = policies
     // Filter dates first; policy numbers may not change each year
     .filter((p) => new Date(p.expire_date) > new Date() || hasBadDates([p.expire_date]))
-    // Filter by unique policy number 
+    // Filter by unique policy number
     .filter((p) => {
       if ('number' in p) {
         if (uniques.has(p.number)) {
@@ -346,10 +345,9 @@ function composePolicy(
 
         uniques.add(p.number)
       }
-     
-      return true;
-    })
 
+      return true;
+    });
 
   if (Object.values(activePolicies).length === 0) {
     return undefined;
@@ -366,8 +364,6 @@ function composePolicy(
     return combined;
   }
 
-
-
   for (const pol of activePolicies) {
     combined.effective_date = minimumDate(
       combined.effective_date,
@@ -375,39 +371,39 @@ function composePolicy(
     );
     combined.expire_date = minimumDate(combined.expire_date, pol.expire_date);
     switch (type) {
-      case 'Commercial General Liability': {
+      case "Commercial General Liability": {
         (combined as GeneralLiability).each_occurrence = sum(
           combined as GeneralLiability,
           pol as GeneralLiability,
-          'each_occurrence',
+          "each_occurrence",
         );
         (combined as GeneralLiability).general_aggregate = sum(
           combined as GeneralLiability,
           pol as GeneralLiability,
-          'general_aggregate',
+          "general_aggregate",
         );
-        (combined as GeneralLiability)['products_-_compop_agg'] = sum(
+        (combined as GeneralLiability)["products_-_compop_agg"] = sum(
           combined as GeneralLiability,
           pol as GeneralLiability,
-          'products_-_compop_agg',
+          "products_-_compop_agg",
         );
         break;
       }
 
-      case 'Automobile Liability': {
+      case "Automobile Liability": {
         (combined as AutoLiability).combined_single_limit = sum(
           combined as AutoLiability,
           pol as AutoLiability,
-          'combined_single_limit',
+          "combined_single_limit",
         );
         break;
       }
 
-      case 'Umbrella Liability': {
+      case "Umbrella Liability": {
         (combined as UmbrellaLiability).each_occurrence = sum(
           combined as UmbrellaLiability,
           pol as UmbrellaLiability,
-          'each_occurrence',
+          "each_occurrence",
         );
         break;
       }
@@ -430,10 +426,10 @@ function composePolicy(
         );
         (combined as WorkersCompEmployersLiability).per_statute =
           ((combined as WorkersCompEmployersLiability).per_statute || '1') === '1'
-          && (pol as WorkersCompEmployersLiability).per_statute === '1' 
+          && (pol as WorkersCompEmployersLiability).per_statute === '1'
           ? '1'
           : '0';
-        
+
         break;
       }
 
@@ -467,7 +463,7 @@ function assessCoi({
 
   // Check if the coverages are satisfactory
   const umbrella = Number.parseInt(
-    String(combinedTrellisCoi?.policies?.ul?.each_occurrence ?? '0'),
+    String(combinedTrellisCoi?.policies?.ul?.each_occurrence ?? "0"),
     10,
   );
 
@@ -480,7 +476,7 @@ function assessCoi({
   const parsingError = false;
 
   if (parsingError) {
-    reasons.push('PDF Parsing error');
+    reasons.push("PDF Parsing error");
   }
 
   // Check Worker's Comp
@@ -539,19 +535,19 @@ export function generateAssessmentRow({
   attachmentStatuses: Record<string, string>;
 }): Record<string, ExcelRow> {
   return {
-    'Trading Partner': {
+    "Trading Partner": {
       value:
-        // @ts-ignore
+        // @ts-expect-error
         flCoi?.shareSource?.sourceBusiness?.name ??
-        'Unknown (error retrieving FL Doc)',
+        "Unknown (error retrieving FL Doc)",
     },
 
-    'FoodLogiq Document Link': {
-      value: 'name' in flCoi ? flCoi.name : flCoi._id,
+    "FoodLogiq Document Link": {
+      value: "name" in flCoi ? flCoi.name : flCoi._id,
       hyperlink: flIdToLink(flCoi._id),
     },
 
-    'Grouped FoodLogiq\nDocuments': {
+    "Grouped FoodLogiq\nDocuments": {
       value: part,
     },
 
@@ -568,19 +564,19 @@ export function generateAssessmentRow({
       },
     },
 
-    'Rejection Reasons': {
+    "Rejection Reasons": {
       value: assessment.passed
-        ? ' '
+        ? " "
         : parsingError
-          ? `PDF extraction errors occurred. ${invalidHolder ? 'Invalid Holder info detected. ': ''}`
-          : assessment.reasons || '',
+          ? `PDF extraction errors occurred. ${invalidHolder ? "Invalid Holder info detected. " : ""}`
+          : assessment.reasons || "",
       // ...(assessment.passed ? {fill: passFill}: parsingError ? {fill: warnFill } : {}), // {fill: fail}),
     },
 
-    'Custom Message': { value: '' },
+    "Custom Message": { value: "" },
 
-    'Minimum Policy\nExpiration Date': {
-      value: minExpiration ? minExpiration.split('T')[0] : '',
+    "Minimum Policy\nExpiration Date": {
+      value: minExpiration ? minExpiration.split("T")[0] : "",
 
       ...(expiryPassed === undefined
         ? {}
@@ -591,8 +587,8 @@ export function generateAssessmentRow({
             : { fill: fail }),
     },
 
-    'Different FoodLogiq\nExpiration Date': {
-      value: expiryMismatch ? flExpiration : '',
+    "Different FoodLogiq\nExpiration Date": {
+      value: expiryMismatch ? flExpiration : "",
       ...(expiryMismatch ? { fill: fail } : {}),
     },
 
@@ -614,16 +610,16 @@ export function generateAssessmentRow({
       ]),
     ),
 
-    'Umbrella Liability (Per Accident) (Greater than or equal\nto 1000000)': {
+    "Umbrella Liability (Per Accident) (Greater than or equal\nto 1000000)": {
       value: combinedTrellisCoi?.policies?.ul?.each_occurrence,
     },
 
     'Workers Compensation (per Statutory Requirements) (Is equal to Yes)': {
       value: workersCheck.workersPerStatute,
       ...(workersCheck.workersDateParseWarning
-        ? { fill: warnFill } 
+        ? { fill: warnFill }
         : workersCheck.workersExpired
-          ? { fill: fail } 
+          ? { fill: fail }
           : workersCheck.workersPerStatute.startsWith('No')
             ? { fill: fail } : {}),
     },
@@ -633,16 +629,16 @@ export function generateAssessmentRow({
       ...((parsingError || holderCheck?.pass) ? {} : { fill: fail }),
     },
 
-    'Comments': gatherComments(flCoi as FlDocument),
+    Comments: gatherComments(flCoi as FlDocument),
 
-    'Attachment Details': {
+    "Attachment Details": {
       value: Object.entries(attachmentStatuses)
         .map(([id, status]) => `${id}: ${status}`)
-        .join('\n'),
+        .join("\n"),
     },
 
-    'Additional FoodLogiq Docs Considered': { value: additionalCoisConsidered },
-  } 
+    "Additional FoodLogiq Docs Considered": { value: additionalCoisConsidered },
+  };
 }
 
 function checkHolders(cois: TrellisCOI[]): HolderCheckResult {
@@ -657,7 +653,7 @@ function checkHolders(cois: TrellisCOI[]): HolderCheckResult {
   ].filter(Boolean)))
   .join('\n');
 
-  const goodValues = cois.filter((coi) => 
+  const goodValues = cois.filter((coi) =>
     Boolean(
       coi?.holder?.name
       && coi?.holder?.location
@@ -685,14 +681,14 @@ function checkExpirations(flCoi: FlDocument, combinedTrellisCoi: TrellisCOI) {
   const expiryPassed = minExpirationDate && minExpirationDate > new Date();
 
   const flExp = new Date(flCoi.expirationDate);
-  const flExpiration = flExp.toISOString().split('T')[0];
+  const flExpiration = flExp.toISOString().split("T")[0];
   flExp.setHours(0);
 
   // Check if the FL Document expiration date does not match the minimum of the COI doc
   // False and undefined are treated the same
   const expiryMismatch = minExpirationDate && minExpirationDate < flExp;
   if (expiryMismatch) {
-    warn(`The policy expiration date does not match the FL expiration date.`);
+    warn("The policy expiration date does not match the FL expiration date.");
   }
 
   return { flExpiration, expiryPassed, minExpiration, expiryMismatch };
@@ -723,14 +719,14 @@ function checkPolicyLimits(
           {
             ...limit,
             pass: false,
-            value: '',
+            value: "",
             dateParseWarning: false,
           },
         ];
       }
 
       // Compute the "effective" coverage with umbrella liability included
-      const effValue = Number.parseInt(value ?? '0', 10) + umbrella;
+      const effValue = Number.parseInt(value ?? "0", 10) + umbrella;
 
       const expireDate =
         coi?.policies?.[limit.type as 'wcel' | 'al' | 'cgl']?.expire_date;
@@ -742,13 +738,13 @@ function checkPolicyLimits(
         reasons.push(`${limit.name} policy has no expiration date`);
       } else if (expired && !dateParseWarning) {
         reasons.push(
-          `${limit.name} policy expired ${expireDate.split('T')[0]}`,
+          `${limit.name} policy expired ${expireDate.split("T")[0]}`,
         );
       }
 
       const pass = !dateParseWarning && effValue >= limit.limit;
       if (dateParseWarning) {
-        reasons.push(`Confirm Effective Dates for ${limit.name} policy.`)
+        reasons.push(`Confirm Effective Dates for ${limit.name} policy.`);
       } else if (!pass && !Number.isNaN(effValue)) {
         reasons.push(
           `Insufficient ${limit.longname ?? limit.name} coverage. ${limit.limit} is required. Coverage${
@@ -766,7 +762,7 @@ function checkPolicyLimits(
           value: expired
             ? dateParseWarning
               ? `${value} (Confirm Effective Dates)`
-              : `Expired ${expireDate ? expireDate.split('T')[0] : '(unknown)'}`
+              : `Expired ${expireDate ? expireDate.split("T")[0] : "(unknown)"}`
             : value,
           dateParseWarning,
         },
@@ -786,7 +782,7 @@ function checkWorkersComp(
   parsingError: boolean,
   reasons: string[],
 ) {
-  
+
   const wcelPolicies = ([coi?.policies?.wcel].filter(Boolean)) as WorkersCompEmployersLiability[];
   //const wcelPolicies = Object.values(coi?.policies ?? [])
   //  .filter(p => typeof p === 'object' && p.type === "Worker's Compensation Employee Liability");
@@ -806,7 +802,7 @@ function checkWorkersComp(
       workersPerStatute = `${workersPerStatute} (Confirm Effective Dates)`;
       continue;
     }
-    
+
     if (new Date(p.expire_date) < new Date()) {
       reasons.push(`Worker's Comp policy ${p.number ? `${p.number} `: ''}is expired.`);
       workersPerStatute = `${p.per_statute} (Expired ${p.expire_date.split('T')[0]})`
@@ -834,11 +830,11 @@ function gatherComments(coi: FlDocument) {
           (com) =>
             `${com.createdBy.firstName} ${com.createdBy.lastName}: ${com.comment}`,
         )
-        .join('\n'),
+        .join("\n"),
   );
 
   return {
-    value: comments.join('\n'),
+    value: comments.join("\n"),
   };
 }
 
@@ -848,10 +844,10 @@ async function writeExcelFile(
   fname: string,
 ) {
   const workbook = new Excel.Workbook();
-  const worksheet = workbook.addWorksheet('Report', {
+  const worksheet = workbook.addWorksheet("Report", {
     views: [
       {
-        state: 'frozen',
+        state: "frozen",
         xSplit: 1,
       },
     ],
@@ -880,15 +876,15 @@ async function writeExcelFile(
 
       if (fill) {
         cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
+          type: "pattern",
+          pattern: "solid",
           fgColor: { argb: fill },
         };
       }
 
       if (dropdown) {
         cell.dataValidation = {
-          type: 'list',
+          type: "list",
           allowBlank: true,
           formulae: [dropdown.formulae],
         };
@@ -897,11 +893,11 @@ async function writeExcelFile(
   }
 
   // Changing this appears to change the font different from the rest, so I apparently need to specify it now...
-  worksheet.getColumn(5).font = { bold: true, name: 'Calibri' };
+  worksheet.getColumn(5).font = { bold: true, name: "Calibri" };
 
   worksheet.getColumn(5).fill = {
-    type: 'pattern',
-    pattern: 'solid',
+    type: "pattern",
+    pattern: "solid",
     fgColor: { argb: actionFill },
   };
 
@@ -924,7 +920,7 @@ async function writeExcelFile(
 }
 
 const defaultPosition = { row: 1, col: 1 };
-const defaultBorderWidth = 'thick';
+const defaultBorderWidth = "thick";
 function createOuterBorder(
   worksheet: Excel.Worksheet,
   start: {
@@ -932,7 +928,7 @@ function createOuterBorder(
     col: number;
   } = defaultPosition,
   end: { row: number; col: number } = defaultPosition,
-  borderWidth: 'thick' = defaultBorderWidth,
+  borderWidth: "thick" = defaultBorderWidth,
 ) {
   const borderStyle = {
     style: borderWidth,
@@ -969,50 +965,48 @@ function flIdToLink(_id: string) {
 }
 
 /**
- * Find documents with drafts and apply an "Awaiting Approval" status. 
+ * Find documents with drafts and apply an "Awaiting Approval" status.
  * Because FL seems to lack the appropriate query parameters, a 2-year
- * limit is placed on versionUpdated (apart from the COI doc type). 
+ * limit is placed on versionUpdated (apart from the COI doc type).
  * Then, we filter the returned results by presence of draftVersionId.
- *  
+ *
  * @returns voice
  */
 export async function draftsToAwaitingApproval() {
-  const queryDate = new Date()
+  const queryDate = new Date();
   queryDate.setMonth(new Date().getMonth() - 24);
-  const flBaseQuery = 
-    '?sourceCommunities=5fff03e0458562000f4586e9' + 
-    '&shareSourceTypeId=60653e5e18706f0011074ec8' +
-    `&versionUpdated=${queryDate.toISOString()}..`;
-  let flCois = await getFlCois(flBaseQuery); 
-  
+  const flBaseQuery = `?sourceCommunities=5fff03e0458562000f4586e9&shareSourceTypeId=60653e5e18706f0011074ec8&versionUpdated=${queryDate.toISOString()}..`;
+  let flCois = await getFlCois(flBaseQuery);
+
   // Find docs with drafts
   flCois = Object.fromEntries(
-    Object.entries(flCois).filter(([_, flCoi]) => flCoi.shareSource.draftVersionId)
+    Object.entries(flCois).filter(
+      ([_, flCoi]) => flCoi.shareSource.draftVersionId,
+    ),
   );
 
   for await (const [_, coi] of Object.entries(flCois)) {
     const _id = coi.shareSource.draftVersionId;
-    const request : AxiosRequestConfig = {
-      method: 'put',
+    const request: AxiosRequestConfig = {
+      method: "put",
       url: `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${_id}/approvalStatus`,
       data: {
         comment: "",
         status: "Awaiting Approval",
         visibleForSupplier: false,
       },
-      headers: { 
+      headers: {
         Authorization: `${FL_TOKEN}`,
         "Content-Type": "application/json",
       },
     };
-    await axios<FlQuery>(request)
+    await axios<FlQuery>(request);
   }
 
   return flCois;
 }
 
-
-/* 
+/*
  * The original setup in generateCoisReport used the attachments on a single FL doc; Instead, let's combine documents
  * across the trading partner to handle multiple FL docs.
  */
@@ -1031,13 +1025,8 @@ export async function gatherCoisReportData(outputFilename: string) {
     // 1. Grab all FL COIs currently awaiting-review
     const queryDate = new Date();
     queryDate.setMonth(new Date().getMonth());
-    const flBaseQuery = 
-      '?sourceCommunities=5fff03e0458562000f4586e9' + 
-      '&approvalStatuses=Awaiting Approval' +
-      '&shareSourceTypeId=60653e5e18706f0011074ec8' +
-      '&archived=false' +
-      `&expirationDate=${queryDate.toISOString()}..`;
-    flCois = await getFlCois(flBaseQuery); 
+    const flBaseQuery = `?sourceCommunities=5fff03e0458562000f4586e9&approvalStatuses=Awaiting Approval&shareSourceTypeId=60653e5e18706f0011074ec8&archived=false&expirationDate=${queryDate.toISOString()}..`;
+    flCois = await getFlCois(flBaseQuery);
   }
 
   // 2. Group COIs by supplier
@@ -1063,12 +1052,7 @@ export async function gatherCoisReportData(outputFilename: string) {
 
     // 3. Grab additional COIs of other statuses from that supplier
     //    that may contribute to the assessment.
-    const flTradingPartnerQuery =
-      '?sourceCommunities=5fff03e0458562000f4586e9' +
-      '&approvalStatuses=Approved' +
-      `&sourceBusinesses=${busId}` +
-      '&shareSourceTypeId=60653e5e18706f0011074ec8' +
-      `&expirationDate=${queryDate.toISOString()}..`;
+    const flTradingPartnerQuery = `?sourceCommunities=5fff03e0458562000f4586e9&approvalStatuses=Approved&sourceBusinesses=${busId}&shareSourceTypeId=60653e5e18706f0011074ec8&expirationDate=${queryDate.toISOString()}..`;
     const moreFlCois = await getFlCois(flTradingPartnerQuery);
 
     flCois = {
@@ -1120,7 +1104,7 @@ export async function generateCoisReport(
       .flatMap(({ _id }) =>
         Object.values(attachments[_id] ?? {})
           // Filter ErrObjs at the individual attachment level
-          .filter((value) => 'results' in value)
+          .filter((value) => "results" in value)
           .flatMap(
             ({ results }: ExtractPdfResult) =>
               Object.values(results) as TrellisCOI[],
@@ -1129,36 +1113,41 @@ export async function generateCoisReport(
 
     const coisToReport = supplierCois
       // Filter errors at the coi level (failed to retrieve all attachments)
-      .filter((flCoi) => 
-        !('error' in flCoi) 
-        && flCoi?.shareSource?.approvalInfo?.status === 'Awaiting Approval'
-        && flCoi?.isArchived !== true
-      )
+      .filter(
+        (flCoi) =>
+          !("error" in flCoi) &&
+          flCoi?.shareSource?.approvalInfo?.status === "Awaiting Approval" &&
+          flCoi?.isArchived !== true,
+      );
 
     const additionalCoisConsidered = supplierCois
       .map(({ _id }) => flIdToLink(_id))
-      .join('\n');
+      .join("\n");
 
     const combinedTrellisCoi = combineCois(coisToCombine);
     for (const [index, flCoi] of coisToReport.entries()) {
-      const attachmentStatuses = Object.fromEntries(supplierCois
-        // Filter errors at the coi level (failed to retrieve all attachments)
-        .filter(({_id}) => !attachments[_id]!.serialized)
-        .flatMap(({_id}) => 
-          Object.entries(attachments[_id] ?? {})
-            // Filter ErrObjs at the individual attachment level
-            .map(([key, trellisCoiOrError]) => 
-              ([
-                key, 
-                'serialized' in trellisCoiOrError || trellisCoiOrError.results.serialized 
-                  ? `Parsing Error: ${(trellisCoiOrError?.results?.serialized?.cause?.cause?.information ?? trellisCoiOrError?.msg ?? '')
-                      .replaceAll('!','')
-                      .replaceAll(';', '; ')
-                    }`
-                  : 'Success'
-              ])
-            )
-        )
+      const attachmentStatuses = Object.fromEntries(
+        supplierCois
+          // Filter errors at the coi level (failed to retrieve all attachments)
+          .filter(({ _id }) => !attachments[_id]!.serialized)
+          .flatMap(({ _id }) =>
+            Object.entries(attachments[_id] ?? {})
+              // Filter ErrObjs at the individual attachment level
+              .map(([key, trellisCoiOrError]) => [
+                key,
+                "serialized" in trellisCoiOrError ||
+                trellisCoiOrError.results.serialized
+                  ? `Parsing Error: ${(
+                      trellisCoiOrError?.results?.serialized?.cause?.cause
+                        ?.information ??
+                      trellisCoiOrError?.msg ??
+                      ""
+                    )
+                      .replaceAll("!", "")
+                      .replaceAll(";", "; ")}`
+                  : "Success",
+              ]),
+          ),
       ) as unknown as Record<string, string>;
       const attachmentExtractionErrors = Object.fromEntries(
         supplierCois
@@ -1169,7 +1158,7 @@ export async function generateCoisReport(
               // Filter ErrObjs at the individual attachment level
               .filter(
                 ([_, trellisCoiOrError]) =>
-                  'serialized' in trellisCoiOrError ||
+                  "serialized" in trellisCoiOrError ||
                   trellisCoiOrError.results.serialized,
               )
               .map(([key, trellisCoiOrError]) => [
@@ -1182,11 +1171,11 @@ export async function generateCoisReport(
 
       const invalidHolder = Object.values(
         attachmentExtractionErrors || {},
-      ).some((value) => (value || '').includes('Holder'));
+      ).some((value) => (value || "").includes("Holder"));
 
       const thisCoiAttachments = Object.values(attachments[flCoi._id] ?? {})
         // Filter ErrObjs at the individual attachment level
-        .filter((value) => 'results' in value)
+        .filter((value) => "results" in value)
         .flatMap(
           ({ results }: ExtractPdfResult) =>
             Object.values(results) as TrellisCOI[],
@@ -1199,19 +1188,21 @@ export async function generateCoisReport(
       });
 
       const parsingError = Object.values(attachmentStatuses).some((status) =>
-        status.includes('Parsing Error'),
+        status.includes("Parsing Error"),
       );
 
-      excelData.push(generateAssessmentRow({
-        flCoi,
-        ...coiAssessment,
-        combinedTrellisCoi,
-        parsingError,
-        invalidHolder,
-        part: coisToReport.length <= 1 ? '' : (index+1).toLocaleString(),
-        additionalCoisConsidered,
-        attachmentStatuses,
-      }));
+      excelData.push(
+        generateAssessmentRow({
+          flCoi,
+          ...coiAssessment,
+          combinedTrellisCoi,
+          parsingError,
+          invalidHolder,
+          part: coisToReport.length <= 1 ? "" : (index + 1).toLocaleString(),
+          additionalCoisConsidered,
+          attachmentStatuses,
+        }),
+      );
     }
   }
 

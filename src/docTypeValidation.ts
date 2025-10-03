@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-import '@oada/pino-debug';
-import type { Moment } from 'moment';
-import debug from 'debug';
-import moment from 'moment';
+import "@oada/pino-debug";
+import debug from "debug";
+import type { Moment } from "moment";
+import moment from "moment";
 
-import type { FlObject } from './types.js';
-import { fromOadaType } from './conversions.js';
+import { fromOadaType } from "./conversions.js";
+import type { FlObject } from "./types.js";
 
-const info = debug('fl-sync:mirror-watch:info');
-const error = debug('fl-sync:mirror-watch:error');
+const info = debug("fl-sync:mirror-watch:info");
+const error = debug("fl-sync:mirror-watch:error");
 
 // TODO:
 //      3) Add in the overall expiration date into the array to be
@@ -35,7 +35,7 @@ const error = debug('fl-sync:mirror-watch:error');
 
 /**
  * validates documents that have not yet been approved
- * @param {*} trellisDoc
+ * @param {*} trellisDocument
  * @param {*} flMirror
  * @param {*} type
  * @returns
@@ -53,7 +53,7 @@ export async function validateResult(
       throw new Error(`Validation of FL Type ${flType} unsupported`);
     return validation[flType](trellisDocument, flMirror);
   } catch (error_: unknown) {
-    error({ error: error_ }, 'validateResult Errored');
+    error({ error: error_ }, "validateResult Errored");
     return {
       status: false,
       message: `validateResult Errored: ${(error_ as Error).message}`,
@@ -76,7 +76,7 @@ export async function validateResult(
   */
 
 const validation = {
-  '100g Nutritional Information'(trellisDocument: any, flMirror: FlObject) {
+  "100g Nutritional Information"(trellisDocument: any, flMirror: FlObject) {
     const trellisExpiration = moment(trellisDocument.expire_date).utcOffset(0);
     return validateExpiration(moment(trellisExpiration), flMirror);
   },
@@ -100,7 +100,7 @@ const validation = {
   'California Prop 65 Statement': (trellisDoc: any, flMirror: FlObject) => {
   },
   */
-  'Certificate of Insurance'(trellisDocument: any, flMirror: FlObject) {
+  "Certificate of Insurance"(trellisDocument: any, flMirror: FlObject) {
     const trellisDates: any[] = Object.values(trellisDocument.policies).map(
       (object: any) => moment(object.expire_date).utcOffset(0),
     );
@@ -189,15 +189,15 @@ function validateExpiration(
   trellisDates: Moment | Moment[],
   flMirror: FlObject,
 ) {
-  let message = '';
+  let message = "";
   let status = true;
-  const flExp = moment(flMirror.expirationDate).format('YYYY-MM-DD');
+  const flExp = moment(flMirror.expirationDate).format("YYYY-MM-DD");
   let minimumExp: string;
 
   if (trellisDates && Array.isArray(trellisDates)) {
     // Filter out the common bad date from target of 1900-12-30
     trellisDates = trellisDates.filter(
-      (index) => index.format('YYYY-MM-DD') !== '1900-12-30',
+      (index) => index.format("YYYY-MM-DD") !== "1900-12-30",
     );
 
     if (trellisDates.length > 0) {
@@ -207,10 +207,10 @@ function validateExpiration(
             previousExp < currentExp ? previousExp : currentExp,
           trellisDates[0]!,
         )
-        .format('YYYY-MM-DD');
-    } else throw new Error('Could not extract expiration dates from PDF.');
+        .format("YYYY-MM-DD");
+    } else throw new Error("Could not extract expiration dates from PDF.");
   } else {
-    minimumExp = trellisDates.format('YYYY-MM-DD');
+    minimumExp = trellisDates.format("YYYY-MM-DD");
   }
 
   const now = moment().utcOffset(0);

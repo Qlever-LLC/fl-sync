@@ -14,15 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type { ReportConfig } from '@oada/jobs';
+import type { ReportConfig } from "@oada/jobs";
 
 export const reportConfig: ReportConfig = {
   jobMappings: {
-    'Food Logiq Business ID': '/config/id',
-    'Food Logiq Business Name': '/config/type',
-    'Master Data Matches': '/result/matches',
+    "Food Logiq Business ID": "/config/id",
+    "Food Logiq Business Name": "/config/type",
+    "Master Data Matches": "/result/matches",
   },
   errorMappings: {
-    '': 'Assessment Failure',
+    "": "Assessment Failure",
   },
 };

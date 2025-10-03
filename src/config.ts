@@ -17,379 +17,379 @@
 
 /* eslint-disable unicorn/no-null */
 
-import 'dotenv/config';
+import "dotenv/config";
 
-import convict from 'convict';
+import convict from "convict";
 //@ts-expect-error no types or something?
-import { duration } from 'convict-format-with-moment';
-import { url } from 'convict-format-with-validator';
+import { duration } from "convict-format-with-moment";
+import { url } from "convict-format-with-validator";
 
 convict.addFormat(url);
 convict.addFormat(duration);
 
 const config = convict({
-  'service': {
+  service: {
     name: {
-      doc: 'Name of the service; used by jobs lib; helps configuring tests separately',
-      default: 'fl-sync',
-      env: 'SERVICE_NAME',
-      arg: 'service_name',
+      doc: "Name of the service; used by jobs lib; helps configuring tests separately",
+      default: "fl-sync",
+      env: "SERVICE_NAME",
+      arg: "service_name",
     },
   },
-  'tp-manager': {
-    doc: 'name of the service managing trading-partners',
-    default: 'test-trellis-data-manager',
-    env: 'TP_MANAGER_SERVICE',
-    arg: 'tp_manager_service',
+  "tp-manager": {
+    doc: "name of the service managing trading-partners",
+    default: "test-trellis-data-manager",
+    env: "TP_MANAGER_SERVICE",
+    arg: "tp_manager_service",
   },
-  'services': {
+  services: {
     mirrorWatch: {
-      doc: 'Enable/disable mirrorWatch subservice',
+      doc: "Enable/disable mirrorWatch subservice",
       format: Boolean,
       default: true,
-      env: 'MIRROR_WATCH_SERVICE',
-      arg: 'mirrorWatchService',
+      env: "MIRROR_WATCH_SERVICE",
+      arg: "mirrorWatchService",
     },
     master: {
-      doc: 'Enable/disable master data watcher subservice',
+      doc: "Enable/disable master data watcher subservice",
       format: Boolean,
       default: true,
-      env: 'MASTER_SERVICE',
-      arg: 'masterService',
+      env: "MASTER_SERVICE",
+      arg: "masterService",
     },
     incidents: {
-      doc: 'Enable/disable incidents MSSQL syncer subservice',
+      doc: "Enable/disable incidents MSSQL syncer subservice",
       format: Boolean,
       default: true,
-      env: 'INCIDENTS_SERVICE',
-      arg: 'incidentsService',
+      env: "INCIDENTS_SERVICE",
+      arg: "incidentsService",
     },
     polling: {
-      doc: 'Enable/disable Food LogiQ polling subservice',
+      doc: "Enable/disable Food LogiQ polling subservice",
       format: Boolean,
       default: true,
-      env: 'POLLING_SERVICE',
-      arg: 'pollingService',
+      env: "POLLING_SERVICE",
+      arg: "pollingService",
     },
     target: {
-      doc: 'Enable/disable target-watching subservice',
+      doc: "Enable/disable target-watching subservice",
       format: Boolean,
       default: true,
-      env: 'TARGET_SERVICE',
-      arg: 'targetServiceService',
+      env: "TARGET_SERVICE",
+      arg: "targetServiceService",
     },
     watchConfig: {
-      doc: 'Enable/disable subservice watching the configuration',
+      doc: "Enable/disable subservice watching the configuration",
       format: Boolean,
       default: true,
-      env: 'WATCH_CONFIG_SERVICE',
-      arg: 'watchConfigService',
+      env: "WATCH_CONFIG_SERVICE",
+      arg: "watchConfigService",
     },
   },
-  'skipQueueOnStartup': {
-    doc: 'Skip existing jobs queue on startup; useful for debugging',
+  skipQueueOnStartup: {
+    doc: "Skip existing jobs queue on startup; useful for debugging",
     default: false,
     format: Boolean,
-    env: 'SKIP_JOBS_QUEUE_STARTUP',
-    arg: 'skipQueueOnStartup',
+    env: "SKIP_JOBS_QUEUE_STARTUP",
+    arg: "skipQueueOnStartup",
   },
-  'delay': {
-    doc: 'amount to delay between pages of documents',
+  delay: {
+    doc: "amount to delay between pages of documents",
     default: 0,
     format: Number,
-    env: 'DELAY',
-    arg: 'delay',
+    env: "DELAY",
+    arg: "delay",
   },
-  'trellis': {
+  trellis: {
     domain: {
-      doc: 'OADA API domain',
+      doc: "OADA API domain",
       format: String,
-      default: 'proxy',
-      env: 'DOMAIN',
-      arg: 'domain',
+      default: "proxy",
+      env: "DOMAIN",
+      arg: "domain",
     },
     token: {
-      doc: 'OADA API token',
+      doc: "OADA API token",
       format: String,
-      default: 'god-proxy',
-      env: 'TOKEN',
-      arg: 'token',
+      default: "god-proxy",
+      env: "TOKEN",
+      arg: "token",
     },
     endpoints: {
-      'tps': {
-        doc: 'trading partner endpoint in trellis',
-        default: '/bookmarks/trellisfw/trading-partners/',
+      tps: {
+        doc: "trading partner endpoint in trellis",
+        default: "/bookmarks/trellisfw/trading-partners/",
       },
-      'utps': {
+      utps: {
         default:
-          '/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index',
-        doc: 'unidentified trading partner endpoint in trellis',
+          "/bookmarks/trellisfw/trading-partners/unidentified-trading-partners-index",
+        doc: "unidentified trading partner endpoint in trellis",
       },
-      'fl-bus': {
-        default: '/bookmarks/services/fl-sync/businesses',
-        doc: 'business mirror endpoint in trellis',
+      "fl-bus": {
+        default: "/bookmarks/services/fl-sync/businesses",
+        doc: "business mirror endpoint in trellis",
       },
     },
     justTps: {
       doc: `Don't retrieve TP resources, just mirror only the TPs themselves.`,
       format: Boolean,
       default: true,
-      env: 'JUST_TPS',
-      arg: 'justTPs',
+      env: "JUST_TPS",
+      arg: "justTPs",
     },
     concurrency: {
-      doc: 'OADA client concurrency',
+      doc: "OADA client concurrency",
       format: Number,
       default: 1,
-      env: 'CONCURRENCY',
-      arg: 'concurrency',
+      env: "CONCURRENCY",
+      arg: "concurrency",
     },
     handleIncompleteInterval: {
-      doc: 'On this regular interval, items from the process queue that failed at some point will be reprocessed',
+      doc: "On this regular interval, items from the process queue that failed at some point will be reprocessed",
       format: Number,
       default: 3_600_000,
-      env: 'HANDLE_INCOMPLETE_INTERVAL',
-      arg: 'handleIncompleteInterval',
+      env: "HANDLE_INCOMPLETE_INTERVAL",
+      arg: "handleIncompleteInterval",
     },
     reports: {
       docFrequency: {
-        doc: 'CRON frequency for reports to be generated.',
+        doc: "CRON frequency for reports to be generated.",
         format: String,
-        default: '0 0 0 * * 1',
-        env: 'DOC_REPORT_FREQ',
-        arg: 'docFrequency',
+        default: "0 0 0 * * 1",
+        env: "DOC_REPORT_FREQ",
+        arg: "docFrequency",
       },
       vendorFrequency: {
-        doc: 'CRON frequency for reports to be generated.',
+        doc: "CRON frequency for reports to be generated.",
         format: String,
-        default: '0 0 0 * * 2',
-        env: 'VENDOR_REPORT_FREQ',
-        arg: 'vendorFrequency',
+        default: "0 0 0 * * 2",
+        env: "VENDOR_REPORT_FREQ",
+        arg: "vendorFrequency",
       },
       email: {
-        doc: 'Email addresses to send reports to',
+        doc: "Email addresses to send reports to",
         format: String,
         default: null,
-        env: 'REPORT_EMAIL',
-        arg: 'reportEmail',
+        env: "REPORT_EMAIL",
+        arg: "reportEmail",
       },
       ccEmail: {
-        doc: 'Email address to cc reports to',
+        doc: "Email address to cc reports to",
         format: String,
         default: null,
-        env: 'REPORT_CC_EMAIL',
-        arg: 'reportCcEmail',
+        env: "REPORT_CC_EMAIL",
+        arg: "reportCcEmail",
       },
       replyToEmail: {
-        doc: 'reply to email listed for the report',
+        doc: "reply to email listed for the report",
         format: String,
         default: null,
-        env: 'REPORT_REPLYTO_EMAIL',
-        arg: 'reportReplyToEmail',
+        env: "REPORT_REPLYTO_EMAIL",
+        arg: "reportReplyToEmail",
       },
     },
   },
-  'foodlogiq': {
-    'interval': {
-      doc: 'polling interval',
+  foodlogiq: {
+    interval: {
+      doc: "polling interval",
       format: Number,
       default: 30,
-      env: 'INTERVAL',
-      arg: 'interval',
+      env: "INTERVAL",
+      arg: "interval",
     },
-    'domain': {
-      doc: 'food logiq api domain or base url',
-      default: `https://sandbox-api.foodlogiq.com`,
-      env: 'FL_DOMAIN',
+    domain: {
+      doc: "food logiq api domain or base url",
+      default: "https://sandbox-api.foodlogiq.com",
+      env: "FL_DOMAIN",
     },
-    'assessment-template': {
+    "assessment-template": {
       id: {
-        doc: 'template _id in food logiq',
-        default: '606cc945c8f60c000e53947f',
-        env: 'FL_COI_ASSESSMENT',
+        doc: "template _id in food logiq",
+        default: "606cc945c8f60c000e53947f",
+        env: "FL_COI_ASSESSMENT",
       },
       name: {
-        default: 'Certificate of Insurance (COI) Requirements',
-        doc: 'template name in food logiq',
-        env: 'FL_COI_ASSESSMENT_NAME',
+        default: "Certificate of Insurance (COI) Requirements",
+        doc: "template name in food logiq",
+        env: "FL_COI_ASSESSMENT_NAME",
       },
     },
-    'community': {
+    community: {
       id: {
-        doc: 'community _id in food logiq to be synced',
-        default: '5fff03e0458562000f4586e9',
-        env: 'FL_COMMUNITY',
+        doc: "community _id in food logiq to be synced",
+        default: "5fff03e0458562000f4586e9",
+        env: "FL_COMMUNITY",
       },
       name: {
-        doc: 'name of community in food logiq to be synced',
-        default: 'Smithfield Foods',
-        env: 'FL_COMMUNITY_NAME',
+        doc: "name of community in food logiq to be synced",
+        default: "Smithfield Foods",
+        env: "FL_COMMUNITY_NAME",
       },
       owner: {
         id: {
-          doc: 'community owner business _id',
-          default: '5acf7c2cfd7fa00001ce518d',
-          env: 'FL_OWNER',
+          doc: "community owner business _id",
+          default: "5acf7c2cfd7fa00001ce518d",
+          env: "FL_OWNER",
         },
         name: {
-          doc: 'community owner name',
-          default: 'Smithfield Foods',
-          env: 'FL_OWNER_NAME',
+          doc: "community owner name",
+          default: "Smithfield Foods",
+          env: "FL_OWNER_NAME",
         },
       },
     },
-    'testSupplier': {
+    testSupplier: {
       name: {
-        doc: 'Name of supplier used for testing',
-        default: 'TrellisTest',
-        env: 'FL_SUPPLIER_NAME',
+        doc: "Name of supplier used for testing",
+        default: "TrellisTest",
+        env: "FL_SUPPLIER_NAME",
       },
       id: {
-        doc: 'The _id of supplier used for testing',
-        default: '61f95cd2df6175000f371494',
+        doc: "The _id of supplier used for testing",
+        default: "61f95cd2df6175000f371494",
         // Default: "61c22e047953d4000ee0363f",
-        env: 'FL_SUPPLIER_ID',
+        env: "FL_SUPPLIER_ID",
       },
     },
-    'supportedTypes': {
-      doc: 'Array of supported FL document types',
+    supportedTypes: {
+      doc: "Array of supported FL document types",
       format: Array,
-      default: ['Certificate of Insurance'],
-      env: 'flTypes',
+      default: ["Certificate of Insurance"],
+      env: "flTypes",
     },
-    'token': {
-      doc: 'Food Logiq API token',
+    token: {
+      doc: "Food Logiq API token",
       format: String,
-      default: '-----',
-      env: 'FL_TOKEN',
+      default: "-----",
+      env: "FL_TOKEN",
     },
-    'trellisUser': {
-      doc: 'User ID used by Trellis automation',
+    trellisUser: {
+      doc: "User ID used by Trellis automation",
       format: String,
-      default: '5e27480dd85523000155f6db',
-      env: 'FL_TRELLIS_USER',
+      default: "5e27480dd85523000155f6db",
+      env: "FL_TRELLIS_USER",
     },
-    'capaTrellisUser': {
-      doc: 'User ID used by Trellis automation in /capa endpoints',
+    capaTrellisUser: {
+      doc: "User ID used by Trellis automation in /capa endpoints",
       format: String,
-      default: '604a4abed6ed0f000e8063c5',
-      env: 'CAPA_TRELLIS_USER',
+      default: "604a4abed6ed0f000e8063c5",
+      env: "CAPA_TRELLIS_USER",
     },
-    'force_write': {
-      doc: 'Force writes whether remote data already equals oada',
+    force_write: {
+      doc: "Force writes whether remote data already equals oada",
       format: Boolean,
       default: false,
-      env: 'FL_FORCE_WRITE',
+      env: "FL_FORCE_WRITE",
     },
   },
-  'incidents': {
+  incidents: {
     interval: {
-      doc: 'polling interval',
+      doc: "polling interval",
       format: Number,
       default: 28_800_000,
-      env: 'INCIDENTS_INTERVAL',
-      arg: 'incidentsInterval',
+      env: "INCIDENTS_INTERVAL",
+      arg: "incidentsInterval",
     },
     server: {
-      doc: 'Server name',
+      doc: "Server name",
       format: String,
-      default: 'localhost',
-      env: 'INCIDENTS_SERVER',
-      arg: 'incidentsServer',
+      default: "localhost",
+      env: "INCIDENTS_SERVER",
+      arg: "incidentsServer",
     },
     table: {
-      doc: 'table name',
+      doc: "table name",
       format: String,
       default: null,
-      env: 'INCIDENTS_TABLE',
-      arg: 'incidentsTable',
+      env: "INCIDENTS_TABLE",
+      arg: "incidentsTable",
     },
     database: {
-      doc: 'Database name',
+      doc: "Database name",
       format: String,
       default: null,
-      env: 'INCIDENTS_DB',
-      arg: 'incidentsDb',
+      env: "INCIDENTS_DB",
+      arg: "incidentsDb",
     },
     user: {
-      doc: 'User name',
+      doc: "User name",
       format: String,
       default: null,
-      env: 'INCIDENTS_USER',
-      arg: 'incidentsUser',
+      env: "INCIDENTS_USER",
+      arg: "incidentsUser",
     },
     password: {
-      doc: 'Password',
+      doc: "Password",
       format: String,
-      default: 'pass',
-      env: 'INCIDENTS_PASSWORD',
-      arg: 'incidentsPassword',
+      default: "pass",
+      env: "INCIDENTS_PASSWORD",
+      arg: "incidentsPassword",
     },
     port: {
-      doc: 'Port',
+      doc: "Port",
       format: Number,
       default: 1433,
-      env: 'INCIDENTS_PORT',
+      env: "INCIDENTS_PORT",
     },
   },
-  'slack': {
+  slack: {
     posturl: {
-      format: 'url',
+      format: "url",
       // Use a real slack webhook URL
-      default: 'https://localhost',
-      env: 'SLACK_WEBHOOK',
-      arg: 'slack-webhook',
+      default: "https://localhost",
+      env: "SLACK_WEBHOOK",
+      arg: "slack-webhook",
     },
   },
-  'timeouts': {
+  timeouts: {
     mirrorWatch: {
-      doc: 'Timeout duration for mirror handler jobs',
-      format: 'duration',
+      doc: "Timeout duration for mirror handler jobs",
+      format: "duration",
       // The types for duration suck
       default: 86_400_000 as unknown as number,
-      env: 'MIRROR_WATCH_TIMEOUT',
-      arg: 'mirror-watch-timeout',
+      env: "MIRROR_WATCH_TIMEOUT",
+      arg: "mirror-watch-timeout",
     },
   },
-  'lfdynamic': {
+  lfdynamic: {
     password: {
-      doc: 'password for accessing LFDynamic MSSQL Table',
+      doc: "password for accessing LFDynamic MSSQL Table",
       format: String,
-      default: '',
-      env: 'LFDYNAMIC_PASS',
-      arg: 'lfdynamic-pass',
+      default: "",
+      env: "LFDYNAMIC_PASS",
+      arg: "lfdynamic-pass",
     },
     port: {
-      doc: 'port for accessing LFDynamic',
+      doc: "port for accessing LFDynamic",
       format: Number,
       default: 0,
-      env: 'LFDYNAMIC_PORT',
-      arg: 'lfdynamic-DB',
+      env: "LFDYNAMIC_PORT",
+      arg: "lfdynamic-DB",
     },
     database: {
-      doc: 'Database for accessing LFDynamic',
+      doc: "Database for accessing LFDynamic",
       format: String,
-      default: '',
-      env: 'LFDYNAMIC_DB',
-      arg: 'lfdynamic-db',
+      default: "",
+      env: "LFDYNAMIC_DB",
+      arg: "lfdynamic-db",
     },
     user: {
-      doc: 'Username for accessing LFDynamic',
+      doc: "Username for accessing LFDynamic",
       format: String,
-      default: '',
-      env: 'LFDYNAMIC_USER',
-      arg: 'lfdynamic-user',
+      default: "",
+      env: "LFDYNAMIC_USER",
+      arg: "lfdynamic-user",
     },
     server: {
-      doc: 'Username for accessing LFDynamic',
+      doc: "Username for accessing LFDynamic",
       format: String,
-      default: '',
-      env: 'LFDYNAMIC_SERVER',
-      arg: 'lfdynamic-server',
+      default: "",
+      env: "LFDYNAMIC_SERVER",
+      arg: "lfdynamic-server",
     },
   },
 });
 
-config.validate({ allowed: 'warn' });
+config.validate({ allowed: "warn" });
 
 export default config;

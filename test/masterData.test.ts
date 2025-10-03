@@ -17,36 +17,32 @@
 
 /* eslint-disable unicorn/prevent-abbreviations, sonarjs/no-duplicate-string */
 
-import config from '../dist/config.js';
+import { setTimeout } from "node:timers/promises";
+import type { JsonObject, OADAClient } from "@oada/client";
+import { connect } from "@oada/client";
+import { doJob } from "@oada/client/jobs";
+import { parseAttachment, Service } from "@oada/jobs";
+import test from "ava";
+import debug from "debug";
+import ksuid from "ksuid";
+import config from "../dist/config.js";
 
-import test from 'ava';
+import { prepTpEmail } from "../dist/index.js";
+import { handleFlBusiness, mapTradingPartner } from "../dist/masterData.js";
+import { tpReportConfig, tpReportFilter } from "../dist/reportConfig.js";
+import { tree } from "../dist/tree.js";
+import type { FlBusiness } from "../dist/types.js";
 
-import { setTimeout } from 'node:timers/promises';
-
-import debug from 'debug';
-import ksuid from 'ksuid';
-
-import type { JsonObject, OADAClient } from '@oada/client';
-import { Service, parseAttachment } from '@oada/jobs';
-import { connect } from '@oada/client';
-import { doJob } from '@oada/client/jobs';
-
-import { handleFlBusiness, mapTradingPartner } from '../dist/masterData.js';
-import { tpReportConfig, tpReportFilter } from '../dist/reportConfig.js';
-import type { FlBusiness } from '../dist/mirrorWatch.js';
-import { prepTpEmail } from '../dist/index.js';
-import { tree } from '../dist/tree.js';
-
-const warn = debug('fl-sync:warn');
-const TOKEN = process.env.TOKEN ?? ''; // || config.get('trellis.token') || '';
-const DOMAIN = config.get('trellis.domain') || '';
-const TP_MANAGER_SERVICE = config.get('tp-manager');
-const SERVICE_NAME = config.get('service.name');
+const warn = debug("fl-sync:warn");
+const TOKEN = process.env.TOKEN ?? ""; // || config.get('trellis.token') || '';
+const DOMAIN = config.get("trellis.domain") || "";
+const TP_MANAGER_SERVICE = config.get("tp-manager");
+const SERVICE_NAME = config.get("service.name");
 const TEST_SERVICE_NAME = `test-${SERVICE_NAME}`;
 
-if (TEST_SERVICE_NAME && tree?.bookmarks?.services?.['fl-sync']) {
+if (TEST_SERVICE_NAME && tree?.bookmarks?.services?.["fl-sync"]) {
   tree.bookmarks.services[TEST_SERVICE_NAME] =
-    tree.bookmarks.services['fl-sync'];
+    tree.bookmarks.services["fl-sync"];
 }
 
 // Const pending = `${TEST_SERVICE_PATH}/jobs/pending`
@@ -67,14 +63,14 @@ test.before(async (t) => {
     oada,
   });
   svc.on(
-    'business-lookup',
-    config.get('timeouts.mirrorWatch'),
+    "business-lookup",
+    config.get("timeouts.mirrorWatch"),
     handleFlBusiness,
   );
   svc.addReport({
-    name: 'businesses-report',
+    name: "businesses-report",
     reportConfig: tpReportConfig,
-    frequency: `0 0 0 * * 1`,
+    frequency: "0 0 0 * * 1",
     email: (() => {}) as any,
   });
 
@@ -89,10 +85,10 @@ test.after(async () => {
 
 test.beforeEach(async () => {
   const { data: tps } = (await oada.get({
-    path: `/bookmarks/test/trading-partners`,
+    path: "/bookmarks/test/trading-partners",
   })) as { data: JsonObject };
 
-  const keys = Object.keys(tps).filter((k) => !k.startsWith('_'));
+  const keys = Object.keys(tps).filter((k) => !k.startsWith("_"));
   for await (const tp of keys) {
     await oada.delete({
       path: `/bookmarks/services/${TEST_SERVICE_NAME}/trading-partners/${tp}`,
@@ -100,27 +96,27 @@ test.beforeEach(async () => {
   }
 });
 
-test('If no TP exists, it should create one with a food logiq external id', async (t) => {
+test("If no TP exists, it should create one with a food logiq external id", async (t) => {
   const testFlBusiness = {
     business: {
-      _id: 'testid111111',
-      name: 'Test Business, LLC',
+      _id: "testid111111",
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
-      internalId: '',
+      email: "test@test.com",
+      phone: "777-777-7777",
+      internalId: "",
     },
   };
 
   const job = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
@@ -130,35 +126,35 @@ test('If no TP exists, it should create one with a food logiq external id', asyn
   t.assert(job?.result?.entry);
 });
 
-test('Should return an exact on sap externalId', async (t) => {
+test("Should return an exact on sap externalId", async (t) => {
   const testFlBusiness = {
     business: {
-      _id: 'testid111111',
-      name: 'Test Business, LLC',
+      _id: "testid111111",
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
-    internalId: 'ABC123',
+    internalId: "ABC123",
   };
 
   const jobA = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
   const jobB = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
@@ -167,38 +163,38 @@ test('Should return an exact on sap externalId', async (t) => {
   t.true(jobB.result?.exact);
   t.assert(jobB?.result?.entry);
   // @ts-expect-error object is of type unknown
-  t.true(jobB?.result?.entry.externalIds.includes('sap:ABC123'));
+  t.true(jobB?.result?.entry.externalIds.includes("sap:ABC123"));
 });
 
-test('Should return an exact match on foodlogiq externalId', async (t) => {
+test("Should return an exact match on foodlogiq externalId", async (t) => {
   const testFlBusiness = {
     business: {
-      _id: 'testid111111',
-      name: 'Test Business, LLC',
+      _id: "testid111111",
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
-    internalId: '',
+    internalId: "",
   };
 
   const jobA = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
   const jobB = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
@@ -207,40 +203,40 @@ test('Should return an exact match on foodlogiq externalId', async (t) => {
   t.true(jobB.result?.exact);
   t.assert(jobB?.result?.entry);
   // @ts-expect-error object is of type unknown
-  t.true(jobB?.result?.entry.externalIds.includes('foodlogiq:testid111111'));
+  t.true(jobB?.result?.entry.externalIds.includes("foodlogiq:testid111111"));
 });
 
-test('Should return the correct trading partner after updating the internalId', async (t) => {
+test("Should return the correct trading partner after updating the internalId", async (t) => {
   const testFlBusiness = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Business, LLC',
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
-    internalId: '',
+    internalId: "",
   };
 
   await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
   const internalIds = [ksuid.randomSync().string, ksuid.randomSync().string];
-  testFlBusiness.internalId = internalIds.join(',');
+  testFlBusiness.internalId = internalIds.join(",");
 
   const jobB = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
@@ -257,26 +253,26 @@ test('Should return the correct trading partner after updating the internalId', 
   );
 });
 
-test('Should return the correct trading partner if an already-used sapid is assigned to another FL business', async (t) => {
+test("Should return the correct trading partner if an already-used sapid is assigned to another FL business", async (t) => {
   const testFlBusiness = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Business, LLC',
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
     internalId: ksuid.randomSync().string,
   };
   await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
@@ -284,22 +280,22 @@ test('Should return the correct trading partner if an already-used sapid is assi
   const testFlBusinessTwo = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Biz, LLC',
+      name: "Test Biz, LLC",
       address: {
-        addressLineOne: '200 Test Ave',
-        city: 'Testing',
-        region: 'TN',
+        addressLineOne: "200 Test Ave",
+        city: "Testing",
+        region: "TN",
       },
-      email: 't@testing.com',
-      phone: '888-888-8888',
+      email: "t@testing.com",
+      phone: "888-888-8888",
     },
-    internalId: internalIds.join(','),
+    internalId: internalIds.join(","),
   };
   const jobB = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusinessTwo,
+      "fl-business": testFlBusinessTwo,
     },
   });
 
@@ -322,33 +318,33 @@ test('Should return the correct trading partner if an already-used sapid is assi
   );
 });
 
-test(`Should report on all jobs and filter report to just when the business is missing internalIds or a conflict in the data manager occurs`, async (t) => {
+test("Should report on all jobs and filter report to just when the business is missing internalIds or a conflict in the data manager occurs", async (t) => {
   t.timeout(600_000);
-  const serveName = 'fl-tp-test-service';
-  const reportName = 'test-tp-report';
+  const serveName = "fl-tp-test-service";
+  const reportName = "test-tp-report";
   await oada.delete({
     path: `/bookmarks/services/${serveName}`,
   });
   const serv = new Service({
-    name: 'fl-tp-test-service',
+    name: "fl-tp-test-service",
     oada,
   });
   serv.on(
-    'business-lookup',
-    config.get('timeouts.mirrorWatch'),
+    "business-lookup",
+    config.get("timeouts.mirrorWatch"),
     handleFlBusiness,
   );
   const dt = new Date();
   dt.setSeconds(dt.getSeconds() + 90);
   const offset = dt.getTimezoneOffset();
   const offsetDt = new Date(dt.getTime() - offset * 60 * 1000);
-  const date = offsetDt.toISOString().split('T')[0];
+  const date = offsetDt.toISOString().split("T")[0];
   serv.addReport({
     name: reportName,
     reportConfig: tpReportConfig,
     frequency: `${dt.getSeconds()} ${dt.getMinutes()} ${dt.getHours()} * * ${dt.getDay()}`,
     email: prepTpEmail,
-    type: 'business-lookup',
+    type: "business-lookup",
     filter: tpReportFilter,
   });
   await serv.start();
@@ -356,65 +352,65 @@ test(`Should report on all jobs and filter report to just when the business is m
   const testFlBusiness = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Business, LLC',
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
-    internalId: '', // Ksuid.randomSync().string,
+    internalId: "", // Ksuid.randomSync().string,
   };
   const jobA = (await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: serveName,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   })) as unknown as { [key: string]: any; _id: string };
 
   const testFlBusinessTwo = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Biz, LLC',
+      name: "Test Biz, LLC",
       address: {
-        addressLineOne: '200 Test Ave',
-        city: 'Testing',
-        region: 'TN',
+        addressLineOne: "200 Test Ave",
+        city: "Testing",
+        region: "TN",
       },
-      email: 't@testing.com',
-      phone: '888-888-8888',
+      email: "t@testing.com",
+      phone: "888-888-8888",
     },
     internalId: ksuid.randomSync().string,
   };
   const jobB = (await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: serveName,
     config: {
-      'fl-business': testFlBusinessTwo,
+      "fl-business": testFlBusinessTwo,
     },
   })) as unknown as { [key: string]: any; _id: string };
   const testFlBusinessThree = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Test, LLC',
+      name: "Test Test, LLC",
       address: {
-        addressLineOne: '300 Test Blvd',
-        city: 'Test City',
-        region: 'TN',
+        addressLineOne: "300 Test Blvd",
+        city: "Test City",
+        region: "TN",
       },
-      email: 'test@tests.biz',
-      phone: '222-222-2222',
+      email: "test@tests.biz",
+      phone: "222-222-2222",
     },
     internalId: `${testFlBusinessTwo.internalId},${ksuid.randomSync().string}`,
   };
   const jobC = (await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: serveName,
     config: {
-      'fl-business': testFlBusinessThree,
+      "fl-business": testFlBusinessThree,
     },
   })) as unknown as { [key: string]: any; _id: string };
 
@@ -424,21 +420,21 @@ test(`Should report on all jobs and filter report to just when the business is m
   })) as { data: any };
 
   const items = Object.fromEntries(
-    Object.entries(result).filter(([k, _]) => !k.startsWith('_')),
+    Object.entries(result).filter(([k, _]) => !k.startsWith("_")),
   );
 
   t.is(Object.keys(items).length, 2);
-  t.truthy(items[jobA._id.replace(/^resources\//, '')]);
-  t.falsy(items[jobB._id.replace(/^resources\//, '')]);
-  t.truthy(items[jobC._id.replace(/^resources\//, '')]);
+  t.truthy(items[jobA._id.replace(/^resources\//, "")]);
+  t.falsy(items[jobB._id.replace(/^resources\//, "")]);
+  t.truthy(items[jobC._id.replace(/^resources\//, "")]);
   // @ts-expect-error stuff
   const diff = ((dt - Date.now()) as unknown as number) + 3000;
   await setTimeout(diff);
   const { data: emailJobs } = (await oada.get({
-    path: `/bookmarks/services/abalonemail/jobs/pending`,
+    path: "/bookmarks/services/abalonemail/jobs/pending",
   })) as { data: any };
 
-  let keys = Object.keys(emailJobs).filter((k) => !k.startsWith('_'));
+  let keys = Object.keys(emailJobs).filter((k) => !k.startsWith("_"));
   keys = keys.sort();
   t.assert(keys.length);
   const key = keys.at(-1);
@@ -450,99 +446,99 @@ test(`Should report on all jobs and filter report to just when the business is m
   const objArr = parseAttachment(
     email?.config?.attachments[0].content,
   ) as any[];
-  t.true(objArr.some((obj) => obj['FL ID'] === testFlBusiness.business._id));
+  t.true(objArr.some((obj) => obj["FL ID"] === testFlBusiness.business._id));
   t.true(
-    objArr.some((obj) => obj['FL ID'] === testFlBusinessThree.business._id),
+    objArr.some((obj) => obj["FL ID"] === testFlBusinessThree.business._id),
   );
 });
 
 // Edge case that now should not come up...
-test.skip('Should return a new trading partner if the non-foodlogiq externalIds are already in use', async (t) => {
+test.skip("Should return a new trading partner if the non-foodlogiq externalIds are already in use", async (t) => {
   t.timeout(300_000);
   const testFlBusiness = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Business, LLC',
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
     internalId: ksuid.randomSync().string,
   };
   await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 
   const testFlBusinessTwo = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Biz, LLC',
+      name: "Test Biz, LLC",
       address: {
-        addressLineOne: '200 Test Ave',
-        city: 'Testing',
-        region: 'TN',
+        addressLineOne: "200 Test Ave",
+        city: "Testing",
+        region: "TN",
       },
-      email: 't@testing.com',
-      phone: '888-888-8888',
+      email: "t@testing.com",
+      phone: "888-888-8888",
     },
     internalId: ksuid.randomSync().string,
   };
   const jobB = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusinessTwo,
+      "fl-business": testFlBusinessTwo,
     },
   });
   const testFlBusinessThree = {
     business: {
       _id: `testid${ksuid.randomSync().string}`,
-      name: 'Test Business, LLC',
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
     internalId: ksuid.randomSync().string,
   };
   await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
     config: {
-      'fl-business': testFlBusiness,
+      "fl-business": testFlBusiness,
     },
   });
 });
 
 // Still needs tested. No longer needed in our workflow, but supported in general.
-test.skip('Merge should combine two trading-partners and get rid of one of them', async (t) => {
+test.skip("Merge should combine two trading-partners and get rid of one of them", async (t) => {
   const testFlBusiness = {
     business: {
-      _id: 'testid111111',
-      name: 'Test Business, LLC',
+      _id: "testid111111",
+      name: "Test Business, LLC",
       address: {
-        addressLineOne: '101 Test Street',
-        city: 'Testville',
-        region: 'IN',
+        addressLineOne: "101 Test Street",
+        city: "Testville",
+        region: "IN",
       },
-      email: 'test@test.com',
-      phone: '777-777-7777',
+      email: "test@test.com",
+      phone: "777-777-7777",
     },
   };
   // Create two businesses
   const fromJob = await doJob(oada, {
-    type: 'trading-partners-ensure',
+    type: "trading-partners-ensure",
     service: TP_MANAGER_SERVICE,
     config: {
       element: mapTradingPartner(testFlBusiness as unknown as FlBusiness),
@@ -553,29 +549,29 @@ test.skip('Merge should combine two trading-partners and get rid of one of them'
     // @ts-expect-error type is messed up
     path: `/${fromJob.result.entry.masterid}/bookmarks/trellisfw/documents/test/abc123`,
     data: {
-      foo: 'bar',
+      foo: "bar",
     },
     tree,
   });
 
   const toJob = await doJob(oada, {
-    type: 'trading-partners-ensure',
+    type: "trading-partners-ensure",
     service: TP_MANAGER_SERVICE,
     config: {
       element: {
-        name: 'TEST BUSINESS',
-        address: '101 Test St',
-        city: 'Testville',
-        state: 'IN',
-        email: 'someother@test.com',
-        phone: '777-777-7777',
-        externalIds: ['sap:efghij123098'],
+        name: "TEST BUSINESS",
+        address: "101 Test St",
+        city: "Testville",
+        state: "IN",
+        email: "someother@test.com",
+        phone: "777-777-7777",
+        externalIds: ["sap:efghij123098"],
       },
     },
   });
 
   await doJob(oada, {
-    type: 'trading-partners-merge',
+    type: "trading-partners-merge",
     service: TP_MANAGER_SERVICE,
     config: {
       // @ts-expect-error thing
@@ -586,9 +582,9 @@ test.skip('Merge should combine two trading-partners and get rid of one of them'
   });
 
   const job = await doJob(oada, {
-    type: 'business-lookup',
+    type: "business-lookup",
     service: TEST_SERVICE_NAME,
-    config: { 'fl-business': testFlBusiness },
+    config: { "fl-business": testFlBusiness },
   });
 
   // The from entity should no longer exist in the trading-partner list
@@ -596,7 +592,7 @@ test.skip('Merge should combine two trading-partners and get rid of one of them'
   t.assert(job?.result?.matches);
   t.assert(job?.result?.entry);
   // @ts-expect-error bar
-  t.true(job?.result?.entry.externalIds.includes('sap:efghij123098'));
+  t.true(job?.result?.entry.externalIds.includes("sap:efghij123098"));
   // @ts-expect-error bar
-  t.true(job?.result?.entry.externalIds.includes('foodlogiq:testid111111'));
+  t.true(job?.result?.entry.externalIds.includes("foodlogiq:testid111111"));
 });

@@ -17,81 +17,81 @@
 
 /* eslint-disable unicorn/no-null */
 
-import config from '../../dist/config.js';
+import config from "../../dist/config.js";
 
-const CO_ID = config.get('foodlogiq.community.owner.id');
-const CO_NAME = config.get('foodlogiq.community.owner.name');
-const COMMUNITY_ID = config.get('foodlogiq.community.id');
-const COMMUNITY_NAME = config.get('foodlogiq.community.name');
+const CO_ID = config.get("foodlogiq.community.owner.id");
+const CO_NAME = config.get("foodlogiq.community.owner.name");
+const COMMUNITY_ID = config.get("foodlogiq.community.id");
+const COMMUNITY_NAME = config.get("foodlogiq.community.name");
 
 export const coi = {
   products: [],
   locations: [],
-  contentType: 'document',
+  contentType: "document",
   shareRecipients: [
     {
       community: {
         business: {
           _id: CO_ID,
           name: CO_NAME,
-          heroURL: '',
+          heroURL: "",
           iconURL:
-            'https://flq-connect-production.s3.amazonaws.com/6094569c2985a700013e8a7d',
+            "https://flq-connect-production.s3.amazonaws.com/6094569c2985a700013e8a7d",
           address: {
-            addressLineOne: '401 North Church Street',
-            addressLineTwo: '',
-            addressLineThree: '',
-            city: 'Smithfield',
-            region: 'VA',
-            country: 'US',
-            postalCode: '23430',
+            addressLineOne: "401 North Church Street",
+            addressLineTwo: "",
+            addressLineThree: "",
+            city: "Smithfield",
+            region: "VA",
+            country: "US",
+            postalCode: "23430",
             latLng: {
               latitude: 36.990_408_7,
               longitude: -76.630_524_9,
             },
           },
-          website: 'http://www.smithfieldfoods.com/',
-          email: 'cpantaleo@smithfield.com',
-          phone: '(757) 365-3529',
+          website: "http://www.smithfieldfoods.com/",
+          email: "cpantaleo@smithfield.com",
+          phone: "(757) 365-3529",
         },
         address: {
-          addressLineOne: '',
-          addressLineTwo: '',
-          addressLineThree: '',
-          city: '',
-          region: '',
-          country: '',
-          postalCode: '',
+          addressLineOne: "",
+          addressLineTwo: "",
+          addressLineThree: "",
+          city: "",
+          region: "",
+          country: "",
+          postalCode: "",
           latLng: {
             latitude: 0,
             longitude: 0,
           },
         },
         _id: COMMUNITY_ID,
-        createdAt: '2021-03-04T20:44:22.823Z',
-        updatedAt: '2021-05-06T20:47:06.69Z',
+        createdAt: "2021-03-04T20:44:22.823Z",
+        updatedAt: "2021-05-06T20:47:06.69Z",
         name: COMMUNITY_NAME,
-        communityType: 'member',
+        communityType: "member",
         suppliersCanLink: false,
         supplierCanLinkLocations: false,
         suppliersCanLinkLocationsOfType: [],
-        email: 'implementation@foodlogiq.com',
-        website: '',
-        phone: '',
-        membershipType: 'Suppliers',
+        email: "implementation@foodlogiq.com",
+        website: "",
+        phone: "",
+        membershipType: "Suppliers",
         iconURL:
-          'https://flq-connect-production.s3.amazonaws.com/609455ca3c810e0001a08779',
+          "https://flq-connect-production.s3.amazonaws.com/609455ca3c810e0001a08779",
         heroURL:
-          'https://flq-connect-production.s3.amazonaws.com/60414295f6747a00017cd84c',
+          "https://flq-connect-production.s3.amazonaws.com/60414295f6747a00017cd84c",
         feedPosts: null,
         videoLinks: null,
         links: null,
-        replyToEmail: 'implementation@foodlogiq.com',
+        replyToEmail: "implementation@foodlogiq.com",
         welcomeMessage: {
-          modalTitle: 'Welcome',
-          bodyTitle: 'Welcome to Smithfield Foods’ Supplier Portal',
+          modalTitle: "Welcome",
+          bodyTitle: "Welcome to Smithfield Foods’ Supplier Portal",
           bodyMessage:
-            'Smithfield Foods has created this community for you to share information about your company, people, products, and food safety programs, and to provide a convenient location for us to communicate with our supplier partners like you.\nIf you have questions at any time about the program your supplier manager will act as your main contact.',
+            "Smithfield Foods has created this community for you to share information about your company, people, products, and food safety programs, and to provide a convenient location for us to communicate with our supplier partners like you.\nIf you have questions at any time about the program your supplier manager will act as your main contact.",
         },
         onboardingInstructions: {
           instructions:
@@ -99,44 +99,44 @@ export const coi = {
         },
       },
       type: {
-        _id: '60653e5e18706f0011074ec8',
-        createdAt: '2021-04-01T03:30:38.377Z',
-        updatedAt: '2021-06-06T21:51:03.079Z',
+        _id: "60653e5e18706f0011074ec8",
+        createdAt: "2021-04-01T03:30:38.377Z",
+        updatedAt: "2021-06-06T21:51:03.079Z",
         business: {
           _id: CO_ID,
           name: CO_NAME,
-          heroURL: '',
+          heroURL: "",
           iconURL:
-            'https://flq-connect-production.s3.amazonaws.com/6047bc14eaaf2e00014f4af1',
+            "https://flq-connect-production.s3.amazonaws.com/6047bc14eaaf2e00014f4af1",
           address: {
-            addressLineOne: '401 North Church Street',
-            addressLineTwo: '',
-            addressLineThree: '',
-            city: 'Smithfield',
-            region: 'VA',
-            country: 'US',
-            postalCode: '23430',
+            addressLineOne: "401 North Church Street",
+            addressLineTwo: "",
+            addressLineThree: "",
+            city: "Smithfield",
+            region: "VA",
+            country: "US",
+            postalCode: "23430",
             latLng: {
               latitude: 36.990_408_7,
               longitude: -76.630_524_9,
             },
           },
-          website: 'http://www.smithfieldfoods.com/',
-          email: 'cpantaleo@smithfield.com',
-          phone: '(757) 365-3529',
+          website: "http://www.smithfieldfoods.com/",
+          email: "cpantaleo@smithfield.com",
+          phone: "(757) 365-3529",
         },
-        name: 'Certificate of Insurance',
+        name: "Certificate of Insurance",
         template: {
-          S3Name: '60935ec3e8541c00121e8a1a',
-          fileName: 'Vendor Insurance Requirement Guide.pdf',
-          BucketName: 'flq-connect-production',
-          updatedAt: '2021-05-06T03:13:07.358Z',
+          S3Name: "60935ec3e8541c00121e8a1a",
+          fileName: "Vendor Insurance Requirement Guide.pdf",
+          BucketName: "flq-connect-production",
+          updatedAt: "2021-05-06T03:13:07.358Z",
         },
         attributes: [
           {
-            fieldType: 'date',
-            storedAs: 'effectiveDate',
-            commonName: 'Effective Date',
+            fieldType: "date",
+            storedAs: "effectiveDate",
+            commonName: "Effective Date",
             required: true,
             options: null,
             multiple: false,
@@ -147,9 +147,9 @@ export const coi = {
           },
         ],
         helpText:
-          'Please upload a Certificate of Insurance (COI) that meets the requirements listed in the Vendor Insurance Requirement Guide (refer to attachment).',
-        associateWith: '',
-        category: 'Legal',
+          "Please upload a Certificate of Insurance (COI) that meets the requirements listed in the Vendor Insurance Requirement Guide (refer to attachment).",
+        associateWith: "",
+        category: "Legal",
         defaultAttributes: {
           expirationDate: true,
         },
@@ -159,8 +159,8 @@ export const coi = {
         whoToNotify: {
           rolesToNotify: [
             {
-              _id: '6081f0f618706f000fc81896',
-              name: 'FSQA Compliance Manager',
+              _id: "6081f0f618706f000fc81896",
+              name: "FSQA Compliance Manager",
             },
           ],
           notifyBuyer: false,
@@ -170,34 +170,34 @@ export const coi = {
           administratorCanEdit: false,
           rolesCanEdit: [],
         },
-        requirement: '',
+        requirement: "",
         community: {
-          _id: '5fff03e0458562000f4586e9',
-          name: 'Smithfield Foods',
+          _id: "5fff03e0458562000f4586e9",
+          name: "Smithfield Foods",
           iconURL:
-            'https://flq-connect-production.s3.amazonaws.com/609455ca3c810e0001a08779',
-          replyToEmail: 'implementation@foodlogiq.com',
+            "https://flq-connect-production.s3.amazonaws.com/609455ca3c810e0001a08779",
+          replyToEmail: "implementation@foodlogiq.com",
         },
       },
       shareSpecificAttributes: {
-        effectiveDate: '2021-11-01T16:00:00.000Z',
+        effectiveDate: "2021-11-01T16:00:00.000Z",
       },
     },
   ],
-  name: 'test coi',
-  expirationDate: '2022-10-30T16:00:00.000Z',
+  name: "test coi",
+  expirationDate: "2022-10-30T16:00:00.000Z",
   attachments: [
     {
-      S3Name: '620037bc17e808000e3ceb82',
-      fileName: 'BDKFoods-COI-2022.pdf',
-      BucketName: 'fcmdev',
-      updatedAt: '2022-02-06T21:03:56.036043003Z',
+      S3Name: "620037bc17e808000e3ceb82",
+      fileName: "BDKFoods-COI-2022.pdf",
+      BucketName: "fcmdev",
+      updatedAt: "2022-02-06T21:03:56.036043003Z",
     },
     {
-      S3Name: '620039ec17e808000e3ceb83',
-      fileName: 'BDKFoods-COI-2022-ReducedCoverage.pdf',
-      BucketName: 'fcmdev',
-      updatedAt: '2022-02-06T21:13:16.736728817Z',
+      S3Name: "620039ec17e808000e3ceb83",
+      fileName: "BDKFoods-COI-2022-ReducedCoverage.pdf",
+      BucketName: "fcmdev",
+      updatedAt: "2022-02-06T21:13:16.736728817Z",
     },
   ],
 };
