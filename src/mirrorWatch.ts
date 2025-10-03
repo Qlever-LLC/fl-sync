@@ -1045,7 +1045,7 @@ async function constructCOIAssessment(
 
   const element = (policies.find(
     (policy) =>
-      typeof policy === 'object' && policy.type === `Employers' Liability`,
+      typeof policy === 'object' && policy.type === `Worker's Compensation Employee Liability`,
   ) ?? {}) as EmployersLiability;
   const employer = Number.parseInt(String(element.el_each_accident) || '0', 10);
 

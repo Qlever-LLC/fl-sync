@@ -16,16 +16,18 @@
  */
 
 import { 
-  //draftsToAwaitingApproval,
+  draftsToAwaitingApproval,
   gatherCoisReportData,
   generateCoisReport,
 } from "../assessments/coi.js";
 
 //const filename = 'cois-12-04-2024.json';
-const filename = 'CoiReportData.json';
+//const filename = `CoiReportData2025-04-17.json`;
+const filename = `CoiReportData2025-06-26.json`;
+//const filename = `CoiReportData${new Date().toISOString().split('T')[0]}.json`;
 const xlsxFilename = `cois-report-${new Date().toISOString()}.xlsx`;
 try {
-  //await draftsToAwaitingApproval();
+  await draftsToAwaitingApproval();
   const reportDataSave = await gatherCoisReportData(filename);
   await generateCoisReport(reportDataSave, xlsxFilename);
 } catch (err) {

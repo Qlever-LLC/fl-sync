@@ -19,15 +19,40 @@ import type { ErrorObject } from 'serialize-error';
 
 export interface TrellisCOI {
   _id: string;
+  holder?: {
+    name?: string;
+    location?: {
+      state?: string;
+      city?: string;
+      street_address?: string;
+      postal_code?: string;
+      country?: string;
+    } 
+  };
+  policies: Record<string, Policy>; 
+}
+
+export interface CombinedTrellisCOI {
+  _id: string;
+  holder?: {
+    name?: string;
+    location?: {
+      state?: string;
+      city?: string;
+      street_address?: string;
+      postal_code?: string;
+      country?: string;
+    } 
+  };
+  expire_date: string;
   policies: {
-    expire_date: string;
     cgl: GeneralLiability;
     al: AutoLiability;
-    el: EmployersLiability;
     ul: UmbrellaLiability;
-    wc: WorkersCompensation;
-  };
+    wcel: WorkersCompEmployersLiability; 
+  }
 }
+
 
 export interface GeneralLiability {
   'type': 'Commercial General Liability';
@@ -63,6 +88,17 @@ export interface WorkersCompensation {
   type: "Worker's Compensation";
   effective_date: string;
   expire_date: string;
+}
+
+export interface WorkersCompEmployersLiability {
+  type: "Worker's Compensation Employee Liability";
+  el_each_accident: number | string;
+  el_disease_employee: number | string;
+  el_disease_limit: number | string;
+  per_statute: string;
+  effective_date: string;
+  expire_date: string;
+  number: string;
 }
 
 export interface FlAssessment {
@@ -380,16 +416,18 @@ export interface ExcelRow {
 export type PolicyType =
   | 'Commercial General Liability'
   | 'Automobile Liability'
-  | `Employers' Liability`
+  //| `Employers' Liability`
   | 'Umbrella Liability'
-  | `Worker's Compensation`;
+  | `Worker's Compensation`
+  | `Worker's Compensation Employee Liability`;
 
 export type Policy =
   | GeneralLiability
   | AutoLiability
-  | EmployersLiability
+  //| EmployersLiability
   | UmbrellaLiability
-  | WorkersCompensation;
+  | WorkersCompensation
+  | WorkersCompEmployersLiability;
 
 export interface ErrObj {
   serialized?: ErrorObject;
@@ -451,6 +489,12 @@ export interface ReportDataSave {
 }
 */
 
+export interface HolderCheckResult {
+  holderString: string;
+  goodValues: TrellisCOI[];
+  pass: boolean;
+}
+
 export interface CoiAssessment {
   assessment: {
     passed: boolean,
@@ -464,5 +508,10 @@ export interface CoiAssessment {
   parsingError: boolean,
   invalidHolder?: boolean;
   limitResults?: Record<string, LimitResult>;
-  workersPassed?: boolean | '';
+  workersCheck: {
+    workersPerStatute: string;
+    workersExpired: boolean;
+    workersDateParseWarning: boolean | '';
+  };
+  holderCheck?: HolderCheckResult;
 }

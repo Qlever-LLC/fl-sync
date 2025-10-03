@@ -19,7 +19,8 @@ import type {
   AttachmentResources,
   AutoLiability,
   CoiAssessment,
-  EmployersLiability,
+  CombinedTrellisCOI,
+  WorkersCompEmployersLiability,
   ErrObj,
   ExcelRow,
   ExtractPdfResult,
@@ -28,6 +29,7 @@ import type {
   FlDocumentError,
   FlQuery,
   GeneralLiability,
+  HolderCheckResult,
   Limit,
   LimitResult,
   Policy,
@@ -36,7 +38,6 @@ import type {
   TargetJob,
   TrellisCOI,
   UmbrellaLiability,
-  WorkersCompensation,
 } from '../types.js';
 import { type AxiosRequestConfig, isAxiosError } from 'axios';
 import { type ErrorObject, serializeError } from 'serialize-error';
@@ -65,36 +66,37 @@ const warnFill = 'FFffff93';
 const actionFill = 'FFffffa6';
 
 const limits: Record<string, Limit> = {
-  '$.policies.cgl.each_occurrence': {
+  'General Liability Per Occurrence': {
     limit: 2_000_000,
     title:
       'General Liability\n(Per Occurrence)\n(Greater than or equal\nto 2000000)',
     name: 'General Liability',
     longname: 'General Liability (Per Occurrence)',
-    path: '$.policies.cgl.each_occurrence',
+    path: 'each_occurrence',
     type: 'cgl',
   },
-  '$.policies.cgl.general_aggregate': {
+  'General Liability Aggregate': {
     limit: 5_000_000,
     title: 'General Liability\n(Aggregate)\n(Greater than or equal\nto 5000000)',
     name: 'General Liability',
     longname: 'General Liability (Aggregate)',
-    path: '$.policies.cgl.general_aggregate',
+    path: 'general_aggregate',
     type: 'cgl',
   },
-  '$.policies.al.combined_single_limit': {
+  'Automobile Liability': {
     limit: 1_000_000,
     title: 'Automobile Liability\n(Greater than or equal\nto 1000000)',
     name: 'Automobile Liability',
-    path: '$.policies.al.combined_single_limit',
+    path: 'combined_single_limit',
     type: 'al',
   },
-  '$.policies.el.el_each_accident': {
+  'Employers Liability': {
     limit: 1_000_000,
     title: `Employer's Liability\n(Greater than or equal\nto 1000000)`,
-    name: `Employer's Liability`,
-    path: '$.policies.el.el_each_accident',
-    type: 'el',
+    longname: `Employer's Liability`,
+    name: `Worker's Compensation Employee Liability`,
+    path: 'el_each_accident',
+    type: 'wcel',
   },
 };
 
@@ -111,6 +113,7 @@ const coiReportColumns = {
   ...Object.fromEntries(Object.values(limits).map(({ title }) => [title, 20])),
   'Umbrella Liability': 15,
   'Workers Compensation\n(per Statutory Requirements)\n(Is equal to Yes)': 20,
+  'Holder Name': 30,
   'FoodLogiq Comments': 30,
   'Attachment Parsing Details': 30,
   'Additional FoodLogiq \nDocs Considered': 20,
@@ -283,25 +286,24 @@ async function extractPdfData(_id: string): Promise<ExtractPdfResult> {
  * - filters out improperly extracted dates resulting in dates with year 1900
  * - filters out expired policies
  */
-function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): TrellisCOI {
+function combineCois(mixedCois: Array<TrellisCOI | ErrorObject>): CombinedTrellisCOI {
   const cois: TrellisCOI[] = mixedCois.filter(
     (coi) => '_id' in coi,
   ) as TrellisCOI[];
 
   return {
     _id: cois.map((coi) => coi._id).join(';'),
-    policies: {
-      expire_date: policiesToExpirations(
-        cois.flatMap(coi => Object.values(coi?.policies || {}) as Policy[])
+    expire_date: policiesToExpirations(
+        cois.flatMap(coi => Object.values(coi?.policies || {}))
       ).sort((a: string, b: string) => 
         new Date(a).getTime() - new Date(b).getTime()
       )[0]!,
 
+    policies: {
       cgl: composePolicy(cois, 'Commercial General Liability') as GeneralLiability,
       al: composePolicy(cois, 'Automobile Liability') as AutoLiability,
-      el: composePolicy(cois, `Employers' Liability`) as EmployersLiability,
       ul: composePolicy(cois, 'Umbrella Liability') as UmbrellaLiability,
-      wc: composePolicy(cois, `Worker's Compensation`) as WorkersCompensation,
+      wcel: composePolicy(cois, `Worker's Compensation Employee Liability`) as WorkersCompEmployersLiability,
     },
   };
 }
@@ -320,27 +322,29 @@ function policiesToExpirations(policies: Policy[]) {
 // several policies of different types).
 // -filters out already-expired policies
 // -gives last expiration date if there were only expired policies
-// -should it handle uploading the same PDF twice?? i.e., idempotent merge on policy ID or something?
+// -handles uploading the same PDF twice, i.e., idempotent merge on policy ID
 function composePolicy(
   cois: TrellisCOI[],
   type: PolicyType,
 ): Policy | undefined {
-  let policies: Policy[] = cois
+  let policies = cois
     .flatMap((coi) => Object.values(coi.policies || {}))
-    .filter((p) => typeof p !== 'string') as Policy[];
+    .filter((p) => typeof p !== 'string');
 
   policies = policies.filter((p)=> p.type === type)
 
   const uniques = new Set<string>();
   const activePolicies = policies
+    // Filter dates first; policy numbers may not change each year
     .filter((p) => new Date(p.expire_date) > new Date() || hasBadDates([p.expire_date]))
+    // Filter by unique policy number 
     .filter((p) => {
       if ('number' in p) {
-        if (uniques.has(p.number as string)) {
+        if (uniques.has(p.number)) {
           return false
         }
 
-        uniques.add(p.number as string)
+        uniques.add(p.number)
       }
      
       return true;
@@ -353,6 +357,7 @@ function composePolicy(
 
   const combined: Policy = {} as unknown as Policy;
 
+  // If none of the policies are active, return the closest one
   if (Object.values(activePolicies).length === 0 && policies.length > 0) {
     for (const pol of policies) {
       combined.expire_date = minimumDate(combined.expire_date, pol.expire_date);
@@ -407,12 +412,28 @@ function composePolicy(
         break;
       }
 
-      case "Employers' Liability": {
-        (combined as EmployersLiability).el_each_accident = sum(
-          combined as EmployersLiability,
-          pol as EmployersLiability,
+      case "Worker's Compensation Employee Liability": {
+        (combined as WorkersCompEmployersLiability).el_each_accident = sum(
+          combined as WorkersCompEmployersLiability,
+          pol as WorkersCompEmployersLiability,
           'el_each_accident',
         );
+        (combined as WorkersCompEmployersLiability).el_disease_employee = sum(
+          combined as WorkersCompEmployersLiability,
+          pol as WorkersCompEmployersLiability,
+          'el_disease_employee',
+        );
+        (combined as WorkersCompEmployersLiability).el_disease_limit = sum(
+          combined as WorkersCompEmployersLiability,
+          pol as WorkersCompEmployersLiability,
+          'el_disease_limit',
+        );
+        (combined as WorkersCompEmployersLiability).per_statute =
+          ((combined as WorkersCompEmployersLiability).per_statute || '1') === '1'
+          && (pol as WorkersCompEmployersLiability).per_statute === '1' 
+          ? '1'
+          : '0';
+        
         break;
       }
 
@@ -436,13 +457,13 @@ function assessCoi({
 }: {
   flCoi: FlDocument | FlDocumentError;
   attachments: TrellisCOI[];
-  combinedTrellisCoi: TrellisCOI;
+  combinedTrellisCoi: CombinedTrellisCOI;
 }): CoiAssessment {
   let reasons: string[] = [];
 
   // First check for expirations using only this FL COI's attachments
   const { minExpiration, expiryPassed, expiryMismatch, flExpiration } =
-    checkExpirations(flCoi as FlDocument, attachments);
+    checkExpirations(flCoi as FlDocument, combinedTrellisCoi);
 
   // Check if the coverages are satisfactory
   const umbrella = Number.parseInt(
@@ -468,12 +489,15 @@ function assessCoi({
     parsingError,
     reasons,
   );
-  const { workersPassed } = workersCheck;
   reasons = workersCheck.reasons;
+
+  // Check Holder
+  const holderCheck = checkHolders(attachments);
+  if (!holderCheck.pass) reasons.push('Holder info does not meet requirements.');
 
   // Make overall assessment
   const assessment = {
-    passed: Boolean(limitsPassed && expiryPassed && workersPassed),
+    passed: Boolean(limitsPassed && expiryPassed && workersCheck.workersPerStatute && holderCheck.pass),
     dateParseWarning: Object.values(limitResults).some(({dateParseWarning}) => dateParseWarning),
     reasons: reasons.length > 0 ? reasons.join('\n') : '',
   };
@@ -486,7 +510,8 @@ function assessCoi({
     flExpiration,
     parsingError,
     limitResults,
-    workersPassed,
+    workersCheck,
+    holderCheck,
   };
 }
 
@@ -504,10 +529,11 @@ export function generateAssessmentRow({
   parsingError,
   invalidHolder,
   limitResults,
-  workersPassed,
+  workersCheck,
+  holderCheck,
 }: CoiAssessment & {
   flCoi: FlDocument | FlDocumentError;
-  combinedTrellisCoi: TrellisCOI;
+  combinedTrellisCoi: CombinedTrellisCOI;
   part: string;
   additionalCoisConsidered: string;
   attachmentStatuses: Record<string, string>;
@@ -532,15 +558,13 @@ export function generateAssessmentRow({
     'Recommended Action': {
       value: assessment.passed ?
         'Approve'
-        : parsingError || assessment.dateParseWarning ? 'Ignore' : 'Reject',
+        : parsingError || assessment.dateParseWarning ? 'Review' : 'Reject',
     },
 
     'ACTION SELECTION': {
-      value: assessment.passed ?
-        'Approve'
-        : '',
+      value: '',
       dropdown: {
-        formulae: '"Ignore,Approve,Reject"',
+        formulae: '"Ignore,Approve,Reject,Archive"',
       },
     },
 
@@ -582,7 +606,8 @@ export function generateAssessmentRow({
             : object.dateParseWarning
               ? { fill: warnFill }
               : // Do not highlight when there is a parsing error or no value (no unexpired policies)
-                parsingError || !object?.value
+                // @ts-expect-error
+                parsingError || (!(object?.value) && (object?.value !== 0))
                 ? {}
                 : { fill: fail }),
         },
@@ -594,8 +619,18 @@ export function generateAssessmentRow({
     },
 
     'Workers Compensation (per Statutory Requirements) (Is equal to Yes)': {
-      value: workersPassed ? 'Yes' : 'No',
-      ...(workersPassed ? {} : parsingError ? {} : { fill: fail }),
+      value: workersCheck.workersPerStatute,
+      ...(workersCheck.workersDateParseWarning
+        ? { fill: warnFill } 
+        : workersCheck.workersExpired
+          ? { fill: fail } 
+          : workersCheck.workersPerStatute.startsWith('No')
+            ? { fill: fail } : {}),
+    },
+
+    'Holder Name (s)': {
+      value: holderCheck?.holderString,
+      ...((parsingError || holderCheck?.pass) ? {} : { fill: fail }),
     },
 
     'Comments': gatherComments(flCoi as FlDocument),
@@ -610,9 +645,35 @@ export function generateAssessmentRow({
   } 
 }
 
-function checkExpirations(flCoi: FlDocument, attachments?: TrellisCOI[]) {
-  const allExpirations = (attachments ?? []).flatMap((c) =>
-    policiesToExpirations(Object.values(c?.policies ?? {}) as Policy[]),
+function checkHolders(cois: TrellisCOI[]): HolderCheckResult {
+
+  const holderString = cois.map((coi) => ([
+    coi.holder?.name,
+    coi.holder?.location?.street_address,
+    coi.holder?.location?.city,
+    coi.holder?.location?.state,
+    coi.holder?.location?.postal_code,
+    coi.holder?.location?.country,
+  ].filter(Boolean)))
+  .join('\n');
+
+  const goodValues = cois.filter((coi) => 
+    Boolean(
+      coi?.holder?.name
+      && coi?.holder?.location
+      && coi?.holder?.name.toLowerCase().includes('smithfield')
+      && coi?.holder?.location.state?.toLowerCase() === 'va'
+      && coi?.holder?.location.city?.toLowerCase() === 'smithfield'
+      && coi?.holder?.location?.street_address?.toLowerCase().includes('commerce')
+    )
+  );
+
+  return { holderString, goodValues, pass: goodValues.length > 0 };
+}
+
+function checkExpirations(flCoi: FlDocument, combinedTrellisCoi: TrellisCOI) {
+  const allExpirations = policiesToExpirations(
+    Object.values(combinedTrellisCoi?.policies ?? {})
   );
 
   const minExpiration = allExpirations.sort(
@@ -637,8 +698,11 @@ function checkExpirations(flCoi: FlDocument, attachments?: TrellisCOI[]) {
   return { flExpiration, expiryPassed, minExpiration, expiryMismatch };
 }
 
+/*
+*  Umbrella should only apply when there is an existing policy to begin with.
+*/
 function checkPolicyLimits(
-  coi: TrellisCOI | undefined,
+  coi: CombinedTrellisCOI | undefined,
   reasons: string[],
   umbrella: number,
 ): {
@@ -646,11 +710,13 @@ function checkPolicyLimits(
   reasons: string[];
 } {
   const limitResults = Object.fromEntries(
-    Object.entries(limits).map(([path, limit]) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      const value = (jp.query(coi ?? {}, path)[0] as string) ?? '';
+    Object.values(limits).map((limit) => {
+      const policy = coi?.policies?.[limit.type as 'wcel' | 'al' | 'cgl'];
+      // @ts-expect-error
+      const value = policy?.[limit.path];
 
-      if (value === '') {
+      // No policy found. Umbrella should not count in this case.
+      if (value === '' || value === undefined) {
         reasons.push(`No unexpired ${limit.name} policies found`);
         return [
           limit.title,
@@ -667,7 +733,7 @@ function checkPolicyLimits(
       const effValue = Number.parseInt(value ?? '0', 10) + umbrella;
 
       const expireDate =
-        coi?.policies?.[limit.type as 'el' | 'al' | 'cgl']?.expire_date;
+        coi?.policies?.[limit.type as 'wcel' | 'al' | 'cgl']?.expire_date;
 
       const expired = expireDate ? new Date(expireDate) < new Date() : true;
       const dateParseWarning = expireDate ? hasBadDates([expireDate]) : false;
@@ -685,9 +751,9 @@ function checkPolicyLimits(
         reasons.push(`Confirm Effective Dates for ${limit.name} policy.`)
       } else if (!pass && !Number.isNaN(effValue)) {
         reasons.push(
-          `Insufficient ${limit.longname ?? limit.name} coverage (${limit.limit} required). Coverage${
+          `Insufficient ${limit.longname ?? limit.name} coverage. ${limit.limit} is required. Coverage${
             umbrella > 0 ? ' including Umbrella policy' : ''
-          } is only ${effValue}`,
+          } is only ${effValue}.`,
         );
       }
 
@@ -710,33 +776,53 @@ function checkPolicyLimits(
 
   return {
     limitResults,
-    reasons,
+    reasons: [...new Set(reasons)], // Two types of General Liability are assessed, so will create a duplicate reason
   };
 }
 
+// Verify Worker's Compensation coverage
 function checkWorkersComp(
-  coi: TrellisCOI | undefined,
+  coi: CombinedTrellisCOI | undefined,
   parsingError: boolean,
   reasons: string[],
 ) {
-  // Verify Worker's Compensation coverage
-  const workersExists = coi?.policies?.wc?.expire_date;
-  if (!workersExists && !parsingError)
-    reasons.push(`Worker's Comp policy required.`);
-  let workersExpired;
-  if (workersExists) {
-    const workersExpireDate = coi.policies.wc.expire_date;
-    const workersExpireDateBad = hasBadDates([workersExpireDate]);
-    workersExpired = new Date(coi.policies.wc.expire_date) < new Date();
-    if (workersExpired && !workersExpireDateBad)
-      reasons.push(
-        `Worker's Comp policy is expired ${workersExpireDate.split('T')[0]}`,
-      );
+  
+  const wcelPolicies = ([coi?.policies?.wcel].filter(Boolean)) as WorkersCompEmployersLiability[];
+  //const wcelPolicies = Object.values(coi?.policies ?? [])
+  //  .filter(p => typeof p === 'object' && p.type === "Worker's Compensation Employee Liability");
+
+  let workersPerStatute = ''
+
+  if (wcelPolicies.length <= 0 && !parsingError) {
+    // This should already get flagged by the Employer's Liability coverage check
+//    reasons.push(`Worker's Comp policy required.`);
+  }
+
+  for (const p of wcelPolicies) {
+    workersPerStatute = p.per_statute === '1' ? 'Yes' : 'No';
+
+    if (hasBadDates([p.expire_date])) {
+      //reasons.push(`Worker's Comp policy ${p.number ? `${p.number} `: ''}had an improperly extracted expiration date.`);
+      workersPerStatute = `${workersPerStatute} (Confirm Effective Dates)`;
+      continue;
+    }
+    
+    if (new Date(p.expire_date) < new Date()) {
+      reasons.push(`Worker's Comp policy ${p.number ? `${p.number} `: ''}is expired.`);
+      workersPerStatute = `${p.per_statute} (Expired ${p.expire_date.split('T')[0]})`
+      continue;
+    }
+
+    if (p.per_statute !== '1') {
+      reasons.push(`Worker's Comp policy ${p.number ? `${p.number} `: ''}is missing per statute requirement.`);
+    }
   }
 
   return {
-    workersPassed: workersExists && !workersExpired,
+    workersPerStatute,
     reasons,
+    workersDateParseWarning: Object.values(wcelPolicies).some((p) => hasBadDates([p.expire_date])),
+    workersExpired: Object.values(wcelPolicies).some((p) => new Date(p.expire_date) < new Date()),
   };
 }
 
@@ -930,14 +1016,14 @@ export async function draftsToAwaitingApproval() {
  * The original setup in generateCoisReport used the attachments on a single FL doc; Instead, let's combine documents
  * across the trading partner to handle multiple FL docs.
  */
-export async function gatherCoisReportData(fname: string) {
+export async function gatherCoisReportData(outputFilename: string) {
   let flCois: ReportDataSave['flCois'] = {};
   let attachments: ReportDataSave['attachments'] = {};
 
   // Try to load what we can
-  if (existsSync(fname)) {
+  if (existsSync(outputFilename)) {
     // Load the saved JSON data
-    const json = readFileSync(fname, 'utf8');
+    const json = readFileSync(outputFilename, 'utf8');
     const obj = JSON.parse(json) as ReportDataSave;
     flCois = obj.flCois;
     attachments = obj.attachments;
@@ -998,10 +1084,10 @@ export async function gatherCoisReportData(fname: string) {
       attachments[coi._id] = await fetchAndExtractAttachments(coi);
     }
 
-    writeFileSync(fname, JSON.stringify({ attachments, flCois }));
+    writeFileSync(outputFilename, JSON.stringify({ attachments, flCois }));
   }
 
-  writeFileSync(fname, JSON.stringify({ flCois, attachments }));
+  writeFileSync(outputFilename, JSON.stringify({ flCois, attachments }));
   return { flCois, attachments };
 }
 
@@ -1129,5 +1215,6 @@ export async function generateCoisReport(
     }
   }
 
+  info(`Writing Excel file...${filename}`);
   await writeExcelFile(excelData, coiReportColumns, filename);
 }
