@@ -367,12 +367,14 @@ async function fetchAndSync({
 }) {
   try {
     const url = new URL(from);
-    url.searchParams.append("pageIndex", `${pageIndex}`);
+    url.searchParams.append('pageIndex', `${pageIndex}`);
+    log.trace(`fetchAndSync polling url ${url}`);
     const response = await fetch(url, {
       method: "get",
       headers: { Authorization: FL_TOKEN },
     });
     const data = (await response.json()) as any;
+    log.trace(`fetchAndSync fetch ${JSON.stringify(data, undefined, 2)}`);
 
     // Manually check for changes; Only update the resource if it has changed!
     await Bluebird.map(

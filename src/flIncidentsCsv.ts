@@ -69,14 +69,9 @@ export async function fetchIncidentsCsv({
     pageIndex: `${pageIndex}`,
   });
   const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?${parameters}`;
-  const response = await fetch(url, { headers: { Authentication: FL_TOKEN } });
-  const data = (await response.json()) as {
-    hasNextPage?: boolean;
-    pageItemCount: number;
-    totalItemCount: number;
-  };
-
-  const wb = xlsx.read(data, { type: "string", cellDates: true });
+  const response = await fetch(url, { headers: { Authorization: FL_TOKEN } });
+  // Read as binary to support CSV or XLSX payloads (SheetJS will sniff type)
+  const wb = xlsx.read(response.json, { type: "string", cellDates: true });
   const sheetname = wb.SheetNames[0];
   if (sheetname === undefined) return;
   const sheet = wb.Sheets[String(sheetname)];
@@ -85,20 +80,6 @@ export async function fetchIncidentsCsv({
 
   if (csvData.length > 0) {
     await syncToSql(csvData);
-  }
-
-  // Repeat for additional pages of FL results
-  if (data.hasNextPage && pageIndex < 1000) {
-    trace(
-      `Finished page ${pageIndex}. Item ${
-        data.pageItemCount * (pageIndex + 1)
-      }/${data.totalItemCount}`,
-    );
-    await fetchIncidentsCsv({
-      startTime,
-      endTime,
-      pageIndex: pageIndex + 1,
-    });
   }
 }
 
