@@ -700,7 +700,7 @@ __metadata:
     "@biomejs/biome": "npm:^2.2.5"
     "@oada/client": "npm:^6.0.0"
     "@oada/jobs": "npm:^5.0.0"
-    "@oada/lib-prom": "npm:^4.0.1"
+    "@oada/lib-prom": "npm:^4.0.2"
     "@oada/list-lib": "npm:6.1.0"
     "@oada/pino-debug": "npm:^4.0.1"
     "@oada/poll": "npm:^3.0.0"
