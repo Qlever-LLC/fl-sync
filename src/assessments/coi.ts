@@ -16,24 +16,24 @@
  */
 
 import "@oada/pino-debug";
-import { stat, readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { connect, type OADAClient } from "@oada/client";
 import { doJob } from "@oada/client/jobs";
-import ky, { HTTPError, Options as KyOptions } from "ky";
 import debug from "debug";
 import Excel from "exceljs";
 // @ts-expect-error jsonpath lacks types
 import jp from "jsonpath";
+// @ts-expect-error jsonpath lacks types
+import jp from "jsonpath";
 import JsZip from "jszip";
+import ky, { HTTPError, type Options as KyOptions } from "ky";
 import { type ErrorObject, serializeError } from "serialize-error";
-
 import config from "../config.js";
 import type {
   AttachmentResources,
   AutoLiability,
   CoiAssessment,
   CombinedTrellisCOI,
-  WorkersCompEmployersLiability,
   ErrObj,
   ExcelRow,
   ExtractPdfResult,
@@ -51,10 +51,9 @@ import type {
   TargetJob,
   TrellisCOI,
   UmbrellaLiability,
+  WorkersCompEmployersLiability,
 } from "../types.js";
 import { groupBy, minimumDate, sum } from "../utils.js";
-// @ts-expect-error jsonpath lacks types
-import jp from "jsonpath";
 
 const { domain, token } = config.get("trellis");
 const FL_TOKEN = config.get("foodlogiq.token");

@@ -367,7 +367,7 @@ async function fetchAndSync({
 }) {
   try {
     const url = new URL(from);
-    url.searchParams.append('pageIndex', `${pageIndex}`);
+    url.searchParams.append("pageIndex", `${pageIndex}`);
     log.trace(`fetchAndSync polling url ${url}`);
     const response = await fetch(url, {
       method: "get",

@@ -27,7 +27,7 @@ export interface TrellisCOI {
       street_address?: string;
       postal_code?: string;
       country?: string;
-    }
+    };
   };
   policies: Record<string, Policy>;
 }
@@ -42,7 +42,7 @@ export interface CombinedTrellisCOI {
       street_address?: string;
       postal_code?: string;
       country?: string;
-    }
+    };
   };
   expire_date: string;
   policies: {
@@ -50,9 +50,8 @@ export interface CombinedTrellisCOI {
     al: AutoLiability;
     ul: UmbrellaLiability;
     wcel: WorkersCompEmployersLiability;
-  }
+  };
 }
-
 
 export interface GeneralLiability {
   type: "Commercial General Liability";
@@ -414,10 +413,10 @@ export interface ExcelRow {
 }
 
 export type PolicyType =
-  | 'Commercial General Liability'
-  | 'Automobile Liability'
+  | "Commercial General Liability"
+  | "Automobile Liability"
   //| `Employers' Liability`
-  | 'Umbrella Liability'
+  | "Umbrella Liability"
   | `Worker's Compensation`
   | `Worker's Compensation Employee Liability`;
 
@@ -511,7 +510,7 @@ export interface CoiAssessment {
   workersCheck: {
     workersPerStatute: string;
     workersExpired: boolean;
-    workersDateParseWarning: boolean | '';
+    workersDateParseWarning: boolean | "";
   };
   holderCheck?: HolderCheckResult;
 }
