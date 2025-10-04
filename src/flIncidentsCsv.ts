@@ -51,35 +51,70 @@ export async function pollIncidents(lastPoll: Dayjs, end: Dayjs) {
 }
 
 /**
- * Fetch Incidents in csv format
- * @param {*} param0 pageIndex, type, date
+ * Fetch Incidents in CSV format for a time window.
+ * Note: The CSV endpoint returns all rows for the window in a single response; pageIndex has no effect and is not used.
  */
 export async function fetchIncidentsCsv({
   startTime,
   endTime,
-  pageIndex,
 }: {
   startTime: string;
   endTime: string;
-  pageIndex?: number;
 }) {
-  pageIndex ??= 0;
   const parameters = new URLSearchParams({
     updated: `${startTime}..${endTime}`,
-    pageIndex: `${pageIndex}`,
   });
   const url = `${FL_DOMAIN}/v2/businesses/${CO_ID}/incidents/csv?${parameters}`;
-  const response = await fetch(url, { headers: { Authorization: FL_TOKEN } });
-  // Read as binary to support CSV or XLSX payloads (SheetJS will sniff type)
-  const wb = xlsx.read(response.json, { type: "string", cellDates: true });
-  const sheetname = wb.SheetNames[0];
-  if (sheetname === undefined) return;
-  const sheet = wb.Sheets[String(sheetname)];
-  if (sheet === undefined) return;
-  const csvData = xlsx.utils.sheet_to_json(sheet);
 
-  if (csvData.length > 0) {
-    await syncToSql(csvData);
+  // Per-request timeout to avoid hangs
+  const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? "30000");
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(new Error("Request timed out")), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: FL_TOKEN },
+      signal: ac.signal,
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!response.ok) {
+      // Try to include a short excerpt from the body for diagnostics (text only)
+      let bodySnippet = "";
+      try {
+        if (contentType.includes("text")) {
+          const txt = await response.text();
+          bodySnippet = txt.slice(0, 200);
+        }
+      } catch {}
+      throw new Error(
+        `Incidents CSV fetch failed: HTTP ${response.status} ${response.statusText}; content-type=${contentType}; body=${bodySnippet}`,
+      );
+    }
+
+    // Use content-type to pick the best reader path
+    let wb: xlsx.WorkBook;
+    if (contentType.includes("text/csv")) {
+      const text = await response.text();
+      wb = xlsx.read(text, { type: "string", cellDates: true });
+    } else {
+      // Fallback to arrayBuffer for XLSX or unknown types; SheetJS will sniff
+      const ab = await response.arrayBuffer();
+      wb = xlsx.read(new Uint8Array(ab), { type: "array", cellDates: true });
+    }
+
+    const sheetname = wb.SheetNames[0];
+    if (sheetname === undefined) return;
+    const sheet = wb.Sheets[String(sheetname)];
+    if (sheet === undefined) return;
+    const csvData = xlsx.utils.sheet_to_json(sheet);
+
+    if (csvData.length > 0) {
+      await syncToSql(csvData);
+    }
+  } finally {
+    clearTimeout(to);
   }
 }
 
