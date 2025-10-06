@@ -202,7 +202,7 @@ export async function ensureTable() {
   );
 
   if (matches.length === 0) {
-    const tableColumns = Object.values(allColumns)
+    const tableColumns = uniqueColumns(allColumns)
       .map((c) => `[${c.name}] ${c.type} ${c.allowNull ? "NULL" : "NOT NULL"}`)
       .join(", ");
     // Comma before PRIMARY KEY and bracket the Id identifier
@@ -221,11 +221,13 @@ export async function ensureColumns() {
 
   // Query existing columns
   const cols = await sql.query`select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = ${tname}`;
-  const existing = new Set(cols.recordset.map((r: any) => r.COLUMN_NAME));
+  const existing = new Set(
+    cols.recordset.map((r: any) => String(r.COLUMN_NAME).toLowerCase()),
+  );
 
-  // Compute missing columns from our schema
-  const toAdd = Object.values(allColumns)
-    .filter((c) => !existing.has(String(c.name)))
+  // Compute missing columns from our schema (case-insensitive)
+  const toAdd = uniqueColumns(allColumns)
+    .filter((c) => !existing.has(String(c.name).toLowerCase()))
     .map((c) => `[${c.name}] ${c.type} NULL`); // add as NULL to avoid migration failures
 
   if (toAdd.length > 0) {
@@ -300,6 +302,9 @@ const alters: Record<keyof Row, keyof Row> = {
   "Affected Quantity": "quantityAffected (Quantity Affected/Affected Quantity)",
   "IMAGE OF SUPPLIER CASE LABEL":
     "images (Photo of Case Labels & Product/Photos or Documents)",
+  // Normalize duplicate header variants that differ only by casing/punctuation
+  "Still have the Product?": "Still have the product?",
+  "Still have the product": "Still have the product?",
 };
 
 // Handle schema changes over time (get csv output for whole history versus a small, recent window and results will vary a lot)
@@ -385,6 +390,19 @@ function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
 
     return obj;
   });
+}
+
+// Ensure unique, case-insensitive column definitions
+function uniqueColumns<T extends Record<keyof Row, Column>>(cols: T): Column[] {
+  const seen = new Set<string>();
+  const result: Column[] = [];
+  for (const c of Object.values(cols)) {
+    const key = String(c.name).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(c);
+  }
+  return result;
 }
 
 async function syncToSql(csvData: any) {
@@ -645,6 +663,11 @@ const allColumns: Record<keyof Row, Column> = {
   },
   "Still have the product?": {
     name: "Still have the product?",
+    type: "BIT",
+    allowNull: false,
+  },
+  "Still have the Product?": {
+    name: "Still have the Product?",
     type: "BIT",
     allowNull: false,
   },
@@ -1934,11 +1957,6 @@ const allColumns: Record<keyof Row, Column> = {
   },
   "Still have the Foreign Material?": {
     name: "Still have the Foreign Material?",
-    type: "BIT",
-    allowNull: true,
-  },
-  "Still have the Product?": {
-    name: "Still have the Product?",
     type: "BIT",
     allowNull: true,
   },
