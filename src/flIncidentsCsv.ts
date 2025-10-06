@@ -48,6 +48,7 @@ function getTableIdentifiers(raw: unknown): { full: string; name: string } {
   let s = String(raw ?? "").trim();
   if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
     // Fall back to default schema-qualified table
+    trace("No table configured, using default");
     return { full: `[${DEFAULT_SCHEMA}].[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE };
   }
 
@@ -423,8 +424,11 @@ async function syncToSql(csvData: any) {
   await sql.connect(sqlConfig);
 
   // Ensure table exists, then ensure it has all needed columns before upserting
+  trace("Ensuring table and columns");
   await ensureTable();
+  trace("Ensured table, ensuring columns");
   await ensureColumns();
+  trace("Ensured columns, starting upsert");
 
   const { full: tableFull } = getTableIdentifiers(table);
 
