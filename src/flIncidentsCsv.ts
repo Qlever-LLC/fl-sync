@@ -108,7 +108,8 @@ export async function fetchIncidentsCsv({
     if (sheetname === undefined) return;
     const sheet = wb.Sheets[String(sheetname)];
     if (sheet === undefined) return;
-    const csvData = xlsx.utils.sheet_to_json(sheet);
+
+    const csvData = normalizeCsvData(sheet);
 
     if (csvData.length > 0) {
       await syncToSql(csvData);
@@ -171,6 +172,29 @@ export async function ensureTable() {
     const response = await sql.query(query);
     trace(`Creating incidents table: ${query}`);
     return response;
+  }
+
+  return true;
+}
+
+export async function ensureColumns() {
+  // Determine bare table name for INFORMATION_SCHEMA lookup
+  const t = String(table);
+  const tname = t.includes(".") ? t.split(".").pop()! : t;
+
+  // Query existing columns
+  const cols = await sql.query`select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = ${tname}`;
+  const existing = new Set(cols.recordset.map((r: any) => r.COLUMN_NAME));
+
+  // Compute missing columns from our schema
+  const toAdd = Object.values(allColumns)
+    .filter((c) => !existing.has(String(c.name)))
+    .map((c) => `[${c.name}] ${c.type} NULL`); // add as NULL to avoid migration failures
+
+  if (toAdd.length > 0) {
+    const alter = `ALTER TABLE ${table} ${toAdd.map((a) => `ADD ${a}`).join(", ")}`;
+    trace(`Ensuring columns on ${table}: adding ${toAdd.length} column(s)`);
+    await sql.query(alter);
   }
 
   return true;
@@ -273,6 +297,57 @@ function handleSchemaChanges(row: Row) {
   return row;
 }
 
+// Helper: clean common Excel-protection wrappers from cell strings (e.g., ="0070800003129")
+function cleanCell(val: unknown): unknown {
+  if (typeof val !== "string") return val;
+  let s = val.trim();
+  // Pattern: ="value"
+  const m = s.match(/^=\s*"([^"]*)"\s*$/);
+  if (m) s = m[1] ?? "";
+  // Some CSVs may include leading single quote to prevent formula evaluation
+  if (s.startsWith("'")) s = s.slice(1);
+  return s;
+}
+
+// Normalize a worksheet into array of objects and merge duplicate GTIN columns into a single GTIN field
+function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
+  const rows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as unknown as any[][];
+
+  if (!rows || rows.length < 2) return [];
+
+  const headers = rows[0] as string[];
+  const dataRows = rows.slice(1);
+
+  return dataRows.map((row) => {
+    const obj: Record<string, unknown> = {};
+    let gtinSet = false;
+
+    for (let c = 0; c < headers.length; c++) {
+      const hRaw = headers[c];
+      const h = typeof hRaw === "string" ? hRaw.trim() : String(hRaw ?? "").trim();
+      if (!h) continue;
+      const v = cleanCell(row[c]);
+
+      if (h === "GTIN") {
+        // Use the first non-empty GTIN across duplicates
+        if (!gtinSet && v !== "" && v !== null && v !== undefined) {
+          obj["GTIN"] = v;
+          gtinSet = true;
+        }
+        continue;
+      }
+
+      obj[h] = v;
+    }
+
+    return obj;
+  });
+}
+
 async function syncToSql(csvData: any) {
   const sqlConfig = {
     server,
@@ -288,6 +363,9 @@ async function syncToSql(csvData: any) {
 
   // @ts-expect-error mssql docs show an await on connect...
   await sql.connect(sqlConfig);
+
+  // Ensure table has all needed columns before upserting
+  await ensureColumns();
 
   for await (const row of csvData) {
     let newRow = handleSchemaChanges(row);
@@ -1755,6 +1833,241 @@ const allColumns: Record<keyof Row, Column> = {
     type: "VARCHAR(max)",
     allowNull: true,
   },
+  "location (My Location Name/Location Name)": {
+    name: "location (My Location Name/Location Name)",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "location (My Location GLN/Location GLN)": {
+    name: "location (My Location GLN/Location GLN)",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  Community: {
+    name: "Community",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "incidentDate (Incident Date/Delivery Date)": {
+    name: "incidentDate (Incident Date/Delivery Date)",
+    type: "DATE",
+    allowNull: true,
+  },
+  "distributor (Shipment Originator/Receiver)": {
+    name: "distributor (Shipment Originator/Receiver)",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Product Name": {
+    name: "Product Name",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Product GTIN": {
+    name: "Product GTIN",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Product LOT": {
+    name: "Product LOT",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "sourceMembership (Supplier/Product Supplier)": {
+    name: "sourceMembership (Supplier/Product Supplier)",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Supplier Location": {
+    name: "Supplier Location",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Description of Incident": {
+    name: "Description of Incident",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Delivery Issue": {
+    name: "Delivery Issue",
+    type: "BIT",
+    allowNull: true,
+  },
+  "Still have the Foreign Material?": {
+    name: "Still have the Foreign Material?",
+    type: "BIT",
+    allowNull: true,
+  },
+  "Still have the Product?": {
+    name: "Still have the Product?",
+    type: "BIT",
+    allowNull: true,
+  },
+  "Found By": {
+    name: "Found By",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Product Type (Non-Meat Ingredients, Product Contact Packaging - Plastic, Product Contact Packaging - Non-Plastic, Wood Chips)": {
+    name: "Product Type (Non-Meat Ingredients, Product Contact Packaging - Plastic, Product Contact Packaging - Non-Plastic, Wood Chips)",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Incident Photos": {
+    name: "Incident Photos",
+    type: "BIT",
+    allowNull: true,
+  },
+  "Would you like to request a credit?": {
+    name: "Would you like to request a credit?",
+    type: "BIT",
+    allowNull: true,
+  },
+  "Vendor RMA": {
+    name: "Vendor RMA",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Total Credit Request Amount ($)": {
+    name: "Total Credit Request Amount ($)",
+    type: "DECIMAL(38, 2)",
+    allowNull: true,
+  },
+  "Original/Purchase PO": {
+    name: "Original/Purchase PO",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Date Received Original PO": {
+    name: "Date Received Original PO",
+    type: "DATE",
+    allowNull: true,
+  },
+  "Claim #": {
+    name: "Claim #",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Downtime Hours": {
+    name: "Downtime Hours",
+    type: "DECIMAL(38, 2)",
+    allowNull: true,
+  },
+  "Number of employees": {
+    name: "Number of employees",
+    type: "DECIMAL(38, 0)",
+    allowNull: true,
+  },
+  "Hourly Rate": {
+    name: "Hourly Rate",
+    type: "DECIMAL(38, 2)",
+    allowNull: true,
+  },
+  "Total Labor Cost": {
+    name: "Total Labor Cost",
+    type: "DECIMAL(38, 2)",
+    allowNull: true,
+  },
+  Pounds: {
+    name: "Pounds",
+    type: "DECIMAL(38, 2)",
+    allowNull: true,
+  },
+  "Price/lb": {
+    name: "Price/lb",
+    type: "DECIMAL(38, 2)",
+    allowNull: true,
+  },
+  "Total Product Loss": {
+    name: "Total Product Loss",
+    type: "DECIMAL(38, 2)",
+    allowNull: true,
+  },
+  "Attachments (if applicable)": {
+    name: "Attachments (if applicable)",
+    type: "BIT",
+    allowNull: true,
+  },
+  "Do you accept the claim as submitted?": {
+    name: "Do you accept the claim as submitted?",
+    type: "BIT",
+    allowNull: true,
+  },
+  "If no, please explain": {
+    name: "If no, please explain",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Root Cause/Corrective Action Response": {
+    name: "Root Cause/Corrective Action Response",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Corrective Action Response - Attachment": {
+    name: "Corrective Action Response - Attachment",
+    type: "BIT",
+    allowNull: true,
+  },
+  "If Additional Information is Needed, Please Provide Comments Here:": {
+    name: "If Additional Information is Needed, Please Provide Comments Here:",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Comments:": {
+    name: "Comments:",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Comments/Requests:": {
+    name: "Comments/Requests:",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Plant Production Date": {
+    name: "Plant Production Date",
+    type: "DATE",
+    allowNull: true,
+  },
+  "Producing Plant": {
+    name: "Producing Plant",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  GTIN: {
+    name: "GTIN",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Noted Defects": {
+    name: "Noted Defects",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Additional Description of Condition": {
+    name: "Additional Description of Condition",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Product Condition (Please Attach 2 Photos of Product on Pallets)": {
+    name: "Product Condition (Please Attach 2 Photos of Product on Pallets)",
+    type: "BIT",
+    allowNull: true,
+  },
+  "Inbound Issues Noted Defects": {
+    name: "Inbound Issues Noted Defects",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Corrective Action Performed": {
+    name: "Corrective Action Performed",
+    type: "VARCHAR(max)",
+    allowNull: true,
+  },
+  "Supporting Information": {
+    name: "Supporting Information",
+    type: "BIT",
+    allowNull: true,
+  },
 };
 
 interface Row {
@@ -2016,4 +2329,51 @@ interface Row {
   "Protein Type": string;
   "Do you have enough information to begin investigation of the incident as defined above?": boolean;
   "What information is still needed?": string;
+  "location (My Location Name/Location Name)": string;
+  "location (My Location GLN/Location GLN)": string;
+  Community: string;
+  "incidentDate (Incident Date/Delivery Date)": string;
+  "distributor (Shipment Originator/Receiver)": string;
+  "Product Name": string;
+  "Product GTIN": string;
+  "Product LOT": string;
+  "sourceMembership (Supplier/Product Supplier)": string;
+  "Supplier Location": string;
+  "Description of Incident": string;
+  "Delivery Issue": boolean;
+  "Still have the Foreign Material?": boolean;
+  "Still have the Product?": boolean;
+  "Found By": string;
+  "Product Type (Non-Meat Ingredients, Product Contact Packaging - Plastic, Product Contact Packaging - Non-Plastic, Wood Chips)": string;
+  "Incident Photos": boolean;
+  "Would you like to request a credit?": boolean;
+  "Vendor RMA": string;
+  "Total Credit Request Amount ($)": number;
+  "Original/Purchase PO": string;
+  "Date Received Original PO": string;
+  "Claim #": string;
+  "Downtime Hours": number;
+  "Number of employees": number;
+  "Hourly Rate": number;
+  "Total Labor Cost": number;
+  Pounds: number;
+  "Price/lb": number;
+  "Total Product Loss": number;
+  "Attachments (if applicable)": boolean;
+  "Do you accept the claim as submitted?": boolean;
+  "If no, please explain": string;
+  "Root Cause/Corrective Action Response": string;
+  "Corrective Action Response - Attachment": boolean;
+  "If Additional Information is Needed, Please Provide Comments Here:": string;
+  "Comments:": string;
+  "Comments/Requests:": string;
+  "Plant Production Date": string;
+  "Producing Plant": string;
+  GTIN: string;
+  "Noted Defects": string;
+  "Additional Description of Condition": string;
+  "Product Condition (Please Attach 2 Photos of Product on Pallets)": boolean;
+  "Inbound Issues Noted Defects": string;
+  "Corrective Action Performed": string;
+  "Supporting Information": boolean;
 }
