@@ -421,7 +421,8 @@ async function syncToSql(csvData: any) {
   // @ts-expect-error mssql docs show an await on connect...
   await sql.connect(sqlConfig);
 
-  // Ensure table has all needed columns before upserting
+  // Ensure table exists, then ensure it has all needed columns before upserting
+  await ensureTable();
   await ensureColumns();
 
   const { full: tableFull } = getTableIdentifiers(table);
