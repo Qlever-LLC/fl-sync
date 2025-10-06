@@ -48,7 +48,7 @@ function getTableIdentifiers(raw: unknown): { full: string; name: string } {
   let s = String(raw ?? "").trim();
   if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
     // Fall back to default schema-qualified table
-    trace("No table configured, using default");
+    info("No table configured, using default");
     return { full: `[${DEFAULT_SCHEMA}].[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE };
   }
 
@@ -134,6 +134,8 @@ export async function fetchIncidentsCsv({
       wb = xlsx.read(new Uint8Array(ab), { type: "array", cellDates: true });
     }
 
+    info({ SheetNames: wb.SheetNames }, "Workbook info");
+
     const sheetname = wb.SheetNames[0];
     if (sheetname === undefined) return;
     const sheet = wb.Sheets[String(sheetname)];
@@ -142,6 +144,7 @@ export async function fetchIncidentsCsv({
     const csvData = normalizeCsvData(sheet);
 
     if (csvData.length > 0) {
+      info({ rowCount: csvData.length }, "Fetched incidents CSV data");
       await syncToSql(csvData);
     }
   } catch (err: any) {
@@ -193,7 +196,7 @@ export async function startIncidents(connection: OADAClient) {
     }) as unknown as () => Promise<string>,
   });
 
-  trace(`Started foodlogiq-incidents poller. Polling interval: ${interval} ms`);
+  info(`Started foodlogiq-incidents poller. Polling interval: ${interval} ms`);
 }
 
 export async function ensureTable() {
@@ -209,7 +212,7 @@ export async function ensureTable() {
       .join(", ");
     // Comma before PRIMARY KEY and bracket the Id identifier
     const query = `CREATE TABLE ${tableFull} (${tableColumns}, PRIMARY KEY ([Id]))`;
-    trace(`Creating incidents table: ${query}`);
+    info(`Creating incidents table: ${query}`);
     const response = await sql.query(query);
     return response;
   }
@@ -235,8 +238,8 @@ export async function ensureColumns() {
   if (toAdd.length > 0) {
     // SQL Server syntax: one ADD followed by comma-separated column definitions
     const alter = `ALTER TABLE ${tableFull} ADD ${toAdd.join(", ")}`;
-    trace(`Ensuring columns on ${tableFull}: adding ${toAdd.length} column(s)`);
-    trace(`Executing: ${alter}`);
+    info(`Ensuring columns on ${tableFull}: adding ${toAdd.length} column(s)`);
+    info(`Executing: ${alter}`);
     await sql.query(alter);
   }
 
@@ -420,15 +423,16 @@ async function syncToSql(csvData: any) {
     },
   };
 
+  info("Connecting to SQL Server");
   // @ts-expect-error mssql docs show an await on connect...
   await sql.connect(sqlConfig);
 
   // Ensure table exists, then ensure it has all needed columns before upserting
-  trace("Ensuring table and columns");
+  info("Ensuring table and columns");
   await ensureTable();
-  trace("Ensured table, ensuring columns");
+  info("Ensured table, ensuring columns");
   await ensureColumns();
-  trace("Ensured columns, starting upsert");
+  info("Ensured columns, starting upsert");
 
   const { full: tableFull } = getTableIdentifiers(table);
 
@@ -436,7 +440,7 @@ async function syncToSql(csvData: any) {
     let newRow = handleSchemaChanges(row);
     newRow = handleTypes(newRow);
     newRow = ensureNotNull(newRow);
-    trace({ row, newRow }, "Input Row and new Row");
+    info({ row, newRow }, "Input Row and new Row");
 
     const columnKeys = Object.keys(allColumns).sort() as Array<keyof Row>;
 
@@ -469,7 +473,7 @@ async function syncToSql(csvData: any) {
       WHEN NOT MATCHED
         THEN INSERT (${cols})
 	VALUES (${values});`;
-    trace(`Query: ${query}`);
+    info(`Query: ${query}`);
     await request.query(query);
   }
 }
