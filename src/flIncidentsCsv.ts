@@ -39,6 +39,33 @@ const SQL_MAX_VALUE = 9_007_199_254_740_991;
 const info = debug("fl-sync-incidents:info");
 const trace = debug("fl-sync-incidents:trace");
 
+// Normalize the configured table identifier and extract the bare table name
+function getTableIdentifiers(raw: unknown): { full: string; name: string } {
+  // Default table name if not configured
+  const DEFAULT_TABLE = "incidents";
+
+  let s = String(raw ?? "").trim();
+  if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
+    // Fall back to default
+    return { full: `[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE };
+  }
+
+  // Remove surrounding brackets if present for robust splitting
+  const unbracket = (p: string) => p.replace(/^\[|\]$/g, "");
+
+  if (s.includes(".")) {
+    // Handle schema-qualified forms, possibly with brackets: dbo.table or [dbo].[table]
+    const parts = s.split(".").map((p) => unbracket(p.replace(/^\[(.*)\]$/, "$1")));
+    const schema = parts[0] ?? "dbo";
+    const name = parts[parts.length - 1] ?? DEFAULT_TABLE;
+    return { full: `[${schema}].[${name}]`, name };
+  }
+
+  // Bare table name, wrap in brackets for safety
+  const name = unbracket(s);
+  return { full: `[${name}]`, name };
+}
+
 export async function pollIncidents(lastPoll: Dayjs, end: Dayjs) {
   // Sync list of suppliers
   const startTime: string = (lastPoll || dayjs("20230801", "YYYYMMDD"))
@@ -69,7 +96,8 @@ export async function fetchIncidentsCsv({
   // Per-request timeout to avoid hangs
   const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? "30000");
   const ac = new AbortController();
-  const to = setTimeout(() => ac.abort(new Error("Request timed out")), REQUEST_TIMEOUT_MS);
+  // Abort without a custom reason to ensure downstream APIs throw AbortError consistently
+  const to = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
@@ -114,6 +142,14 @@ export async function fetchIncidentsCsv({
     if (csvData.length > 0) {
       await syncToSql(csvData);
     }
+  } catch (err: any) {
+    // Gracefully handle request abort/timeout
+    const isAbort = err?.name === "AbortError" || err?.code === "ABORT_ERR" || err?.message?.toLowerCase?.().includes("aborted");
+    if (isAbort || ac.signal.aborted) {
+      info(`Incidents CSV request timed out after ${REQUEST_TIMEOUT_MS} ms`);
+      return; // Do not throw; allow poll loop to continue
+    }
+    throw err;
   } finally {
     clearTimeout(to);
   }
@@ -159,18 +195,20 @@ export async function startIncidents(connection: OADAClient) {
 }
 
 export async function ensureTable() {
+  const { full: tableFull, name: tname } = getTableIdentifiers(table);
   const tables = await sql.query`select * from INFORMATION_SCHEMA.TABLES`;
   const matches = tables.recordset.filter(
-    (object: any) => object.TABLE_NAME === "incidents",
+    (object: any) => String(object.TABLE_NAME) === tname,
   );
 
   if (matches.length === 0) {
     const tableColumns = Object.values(allColumns)
       .map((c) => `[${c.name}] ${c.type} ${c.allowNull ? "NULL" : "NOT NULL"}`)
       .join(", ");
-    const query = `create table incidents (${tableColumns} PRIMARY KEY (Id))`;
-    const response = await sql.query(query);
+    // Comma before PRIMARY KEY and bracket the Id identifier
+    const query = `CREATE TABLE ${tableFull} (${tableColumns}, PRIMARY KEY ([Id]))`;
     trace(`Creating incidents table: ${query}`);
+    const response = await sql.query(query);
     return response;
   }
 
@@ -178,9 +216,8 @@ export async function ensureTable() {
 }
 
 export async function ensureColumns() {
-  // Determine bare table name for INFORMATION_SCHEMA lookup
-  const t = String(table);
-  const tname = t.includes(".") ? t.split(".").pop()! : t;
+  // Normalize table identifiers and determine bare table name for INFORMATION_SCHEMA lookup
+  const { full: tableFull, name: tname } = getTableIdentifiers(table);
 
   // Query existing columns
   const cols = await sql.query`select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = ${tname}`;
@@ -192,8 +229,10 @@ export async function ensureColumns() {
     .map((c) => `[${c.name}] ${c.type} NULL`); // add as NULL to avoid migration failures
 
   if (toAdd.length > 0) {
-    const alter = `ALTER TABLE ${table} ${toAdd.map((a) => `ADD ${a}`).join(", ")}`;
-    trace(`Ensuring columns on ${table}: adding ${toAdd.length} column(s)`);
+    // SQL Server syntax: one ADD followed by comma-separated column definitions
+    const alter = `ALTER TABLE ${tableFull} ADD ${toAdd.join(", ")}`;
+    trace(`Ensuring columns on ${tableFull}: adding ${toAdd.length} column(s)`);
+    trace(`Executing: ${alter}`);
     await sql.query(alter);
   }
 
