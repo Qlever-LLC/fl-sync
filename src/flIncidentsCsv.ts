@@ -424,6 +424,8 @@ async function syncToSql(csvData: any) {
   // Ensure table has all needed columns before upserting
   await ensureColumns();
 
+  const { full: tableFull } = getTableIdentifiers(table);
+
   for await (const row of csvData) {
     let newRow = handleSchemaChanges(row);
     newRow = handleTypes(newRow);
@@ -451,7 +453,7 @@ async function syncToSql(csvData: any) {
     const values = columnKeys.map((_, index) => `@val${index}`).join(",");
 
     const query = /* sql */ `MERGE
-    INTO ${table} WITH (HOLDLOCK) AS target
+    INTO ${tableFull} WITH (HOLDLOCK) AS target
       USING (SELECT ${selectString}) AS source
       (${cols})
       ON (target.[Id] = source.[Id])
