@@ -41,13 +41,14 @@ const trace = debug("fl-sync-incidents:trace");
 
 // Normalize the configured table identifier and extract the bare table name
 function getTableIdentifiers(raw: unknown): { full: string; name: string } {
-  // Default table name if not configured
+  // Defaults when not configured
+  const DEFAULT_SCHEMA = "dbo";
   const DEFAULT_TABLE = "incidents";
 
   let s = String(raw ?? "").trim();
   if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
-    // Fall back to default
-    return { full: `[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE };
+    // Fall back to default schema-qualified table
+    return { full: `[${DEFAULT_SCHEMA}].[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE };
   }
 
   // Remove surrounding brackets if present for robust splitting
@@ -56,14 +57,14 @@ function getTableIdentifiers(raw: unknown): { full: string; name: string } {
   if (s.includes(".")) {
     // Handle schema-qualified forms, possibly with brackets: dbo.table or [dbo].[table]
     const parts = s.split(".").map((p) => unbracket(p.replace(/^\[(.*)\]$/, "$1")));
-    const schema = parts[0] ?? "dbo";
-    const name = parts[parts.length - 1] ?? DEFAULT_TABLE;
+    const schema = parts[0] || DEFAULT_SCHEMA;
+    const name = parts[parts.length - 1] || DEFAULT_TABLE;
     return { full: `[${schema}].[${name}]`, name };
   }
 
-  // Bare table name, wrap in brackets for safety
+  // Bare table name -> default to dbo
   const name = unbracket(s);
-  return { full: `[${name}]`, name };
+  return { full: `[${DEFAULT_SCHEMA}].[${name}]`, name };
 }
 
 export async function pollIncidents(lastPoll: Dayjs, end: Dayjs) {
