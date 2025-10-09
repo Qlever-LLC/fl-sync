@@ -397,7 +397,7 @@ function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
 }
 
 // Ensure unique, case-insensitive column definitions
-function uniqueColumns<T extends Record<keyof Row, Column>>(cols: T): Column[] {
+function uniqueColumns<T extends Record<string, Column>>(cols: T): Column[] {
   const seen = new Set<string>();
   const result: Column[] = [];
   for (const c of Object.values(cols)) {
@@ -489,7 +489,8 @@ function handleTypes(newRow: Row) {
 
   return Object.fromEntries(
     columnKeys.map((key) => {
-      if (allColumns[key].type.includes("DATE")) {
+      const col = allColumns[key];
+      if (col?.type.includes("DATE")) {
         const value = newRow[key] as DayjsInput;
         if (dayjs.isDayjs(value)) {
           return [key, dayjs(value).toDate()];
@@ -508,7 +509,7 @@ function handleTypes(newRow: Row) {
         }
       }
 
-      if (allColumns[key].type === "BIT") {
+      if (col?.type === "BIT") {
         if (newRow[key] === true || newRow[key] === false) {
           return [key, newRow[key]];
         }
@@ -532,7 +533,7 @@ function handleTypes(newRow: Row) {
         }
       }
 
-      if (allColumns[key].type.includes("DECIMAL")) {
+      if (col?.type.includes("DECIMAL")) {
         if (!Number.isNaN(Number(newRow[key]))) {
           return [
             key,
@@ -560,7 +561,7 @@ function handleTypes(newRow: Row) {
       }
 
       if (
-        allColumns[key].type.includes("VARCHAR") &&
+        col?.type.includes("VARCHAR") &&
         typeof newRow[key] === "string"
       ) {
         return [key, newRow[key]];
@@ -607,7 +608,7 @@ interface Column {
 // 1) removed [CREDIT NOTE] as duplicate of [Credit Note]
 // 2) trimmed the really long potbelly column name that was > 128 characters
 // 3) set Id to VARCHAR(100)
-const allColumns: Record<keyof Row, Column> = {
+const allColumns: Record<string, Column> = {
   Id: { name: "Id", type: "VARCHAR(100)", allowNull: false },
   "Incident ID": {
     name: "Incident ID",
