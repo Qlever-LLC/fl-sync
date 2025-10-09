@@ -39,8 +39,8 @@ const SQL_MAX_VALUE = 9_007_199_254_740_991;
 const info = debug("fl-sync-incidents:info");
 const trace = debug("fl-sync-incidents:trace");
 
-// Normalize the configured table identifier and extract the bare table name
-function getTableIdentifiers(raw: unknown): { full: string; name: string } {
+// Normalize the configured table identifier and extract schema-qualified and bare names
+function getTableIdentifiers(raw: unknown): { full: string; name: string; schema: string } {
   // Defaults when not configured
   const DEFAULT_SCHEMA = "dbo";
   const DEFAULT_TABLE = "incidents";
@@ -48,8 +48,7 @@ function getTableIdentifiers(raw: unknown): { full: string; name: string } {
   let s = String(raw ?? "").trim();
   if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
     // Fall back to default schema-qualified table
-    info("No table configured, using default");
-    return { full: `[${DEFAULT_SCHEMA}].[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE };
+    return { full: `[${DEFAULT_SCHEMA}].[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE, schema: DEFAULT_SCHEMA };
   }
 
   // Remove surrounding brackets if present for robust splitting
@@ -60,12 +59,13 @@ function getTableIdentifiers(raw: unknown): { full: string; name: string } {
     const parts = s.split(".").map((p) => unbracket(p.replace(/^\[(.*)\]$/, "$1")));
     const schema = parts[0] || DEFAULT_SCHEMA;
     const name = parts[parts.length - 1] || DEFAULT_TABLE;
-    return { full: `[${schema}].[${name}]`, name };
+    return { full: `[${schema}].[${name}]`, name, schema };
   }
 
   // Bare table name -> default to dbo
   const name = unbracket(s);
-  return { full: `[${DEFAULT_SCHEMA}].[${name}]`, name };
+  const schema = DEFAULT_SCHEMA;
+  return { full: `[${schema}].[${name}]`, name, schema };
 }
 
 export async function pollIncidents(lastPoll: Dayjs, end: Dayjs) {
@@ -200,13 +200,12 @@ export async function startIncidents(connection: OADAClient) {
 }
 
 export async function ensureTable() {
-  const { full: tableFull, name: tname } = getTableIdentifiers(table);
-  const tables = await sql.query`select * from INFORMATION_SCHEMA.TABLES`;
-  const matches = tables.recordset.filter(
-    (object: any) => String(object.TABLE_NAME) === tname,
-  );
+  const { full: tableFull, name: tname, schema } = getTableIdentifiers(table);
+  // Check for existence in the intended schema only
+  const tables = await sql.query`select TABLE_SCHEMA, TABLE_NAME from INFORMATION_SCHEMA.TABLES where TABLE_NAME = ${tname} and TABLE_SCHEMA = ${schema}`;
+  const exists = tables.recordset.length > 0;
 
-  if (matches.length === 0) {
+  if (!exists) {
     const tableColumns = uniqueColumns(allColumns)
       .map((c) => `[${c.name}] ${c.type} ${c.allowNull ? "NULL" : "NOT NULL"}`)
       .join(", ");
@@ -222,10 +221,10 @@ export async function ensureTable() {
 
 export async function ensureColumns() {
   // Normalize table identifiers and determine bare table name for INFORMATION_SCHEMA lookup
-  const { full: tableFull, name: tname } = getTableIdentifiers(table);
+  const { full: tableFull, name: tname, schema } = getTableIdentifiers(table);
 
-  // Query existing columns
-  const cols = await sql.query`select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = ${tname}`;
+  // Query existing columns for the intended schema only
+  const cols = await sql.query`select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = ${tname} and TABLE_SCHEMA = ${schema}`;
   const existing = new Set(
     cols.recordset.map((r: any) => String(r.COLUMN_NAME).toLowerCase()),
   );
@@ -410,6 +409,13 @@ function uniqueColumns<T extends Record<keyof Row, Column>>(cols: T): Column[] {
   return result;
 }
 
+// Use a canonical, de-duplicated, sorted list of column keys throughout
+function getColumnKeys(): Array<keyof Row> {
+  return uniqueColumns(allColumns)
+    .map((c) => c.name)
+    .sort() as Array<keyof Row>;
+}
+
 async function syncToSql(csvData: any) {
   const sqlConfig = {
     server,
@@ -442,7 +448,7 @@ async function syncToSql(csvData: any) {
     newRow = ensureNotNull(newRow);
     info({ row, newRow }, "Input Row and new Row");
 
-    const columnKeys = Object.keys(allColumns).sort() as Array<keyof Row>;
+    const columnKeys = getColumnKeys();
 
     const request = new sql.Request();
 
@@ -479,9 +485,7 @@ async function syncToSql(csvData: any) {
 }
 
 function handleTypes(newRow: Row) {
-  const columnKeys = Object.keys(allColumns).sort() as Array<
-    keyof typeof allColumns
-  >;
+  const columnKeys = getColumnKeys();
 
   return Object.fromEntries(
     columnKeys.map((key) => {
@@ -569,7 +573,7 @@ function handleTypes(newRow: Row) {
 }
 
 function ensureNotNull(newRow: Row) {
-  const nonNulls = Object.values(allColumns).filter(
+  const nonNulls = uniqueColumns(allColumns).filter(
     (col) =>
       (newRow[col.name] === null || newRow[col.name] === undefined) &&
       !col.allowNull,
@@ -675,11 +679,6 @@ const allColumns: Record<keyof Row, Column> = {
   },
   "Still have the product?": {
     name: "Still have the product?",
-    type: "BIT",
-    allowNull: false,
-  },
-  "Still have the Product?": {
-    name: "Still have the Product?",
     type: "BIT",
     allowNull: false,
   },
