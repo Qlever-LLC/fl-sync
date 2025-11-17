@@ -25,6 +25,66 @@
       "remoteRoot": "/usr/src/app",
       "resolveSourceMapLocations": null,
       "port": "${input:port}"
+    },
+    // Launch the service with inspector enabled using the repo's yarn start script
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Service: Launch with Inspector (yarn start)",
+      "runtimeExecutable": "yarn",
+      "args": ["start"],
+      "env": {
+        // yarn start reads INSPECT to add node inspector flags
+        "INSPECT": "--inspect-brk=0.0.0.0:9229"
+      },
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ],
+      "skipFiles": ["<node_internals>/**"]
+    },
+    // Simple local attach to Node inspector on 9229
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach: Node 9229",
+      "port": 9229,
+      "restart": true,
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ],
+      "skipFiles": ["<node_internals>/**"]
+    },
+    // Debug the updated-vs-created AVA test (no coverage, single process)
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "AVA: updated-vs-created (no coverage)",
+      "runtimeExecutable": "yarn",
+      "args": [
+        "ava",
+        "-T", "60m",
+        "--serial",
+        "--no-worker-threads",
+        "--node-arguments=--inspect-brk --enable-source-maps",
+        "test/flIncidentsCsv.updated-vs-created.test.js"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ],
+      "skipFiles": ["<node_internals>/**"]
     }
   ],
   "inputs": [
