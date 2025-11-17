@@ -15,6 +15,14 @@
  * limitations under the License.
  */
 
+/*
+An important detail about the incidents CSV API endpoint:
+The data columns returned vary based on the time window requested. This
+is what lead to many of the mappings and handlers used to handle column
+name variations.
+
+*/
+
 import type { OADAClient } from "@oada/client";
 import { poll } from "@oada/poll";
 import dayjs, { type Dayjs } from "dayjs";
@@ -389,7 +397,16 @@ function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
         continue;
       }
 
-      obj[h] = v;
+      // General rule for duplicate headers: prefer the first non-empty value.
+      if (!(h in obj)) {
+        obj[h] = v;
+      } else {
+        const curr = obj[h];
+        const currEmpty = curr === "" || curr === null || curr === undefined;
+        const nextHasValue = v !== "" && v !== null && v !== undefined;
+        if (currEmpty && nextHasValue) obj[h] = v; // fill if we only had empty before
+        // otherwise, keep the earlier non-empty value
+      }
     }
 
     return obj;
@@ -397,7 +414,7 @@ function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
 }
 
 // Ensure unique, case-insensitive column definitions
-function uniqueColumns<T extends Record<string, Column>>(cols: T): Column[] {
+function uniqueColumns<T extends Record<keyof Row, Column>>(cols: T): Column[] {
   const seen = new Set<string>();
   const result: Column[] = [];
   for (const c of Object.values(cols)) {
@@ -407,13 +424,6 @@ function uniqueColumns<T extends Record<string, Column>>(cols: T): Column[] {
     result.push(c);
   }
   return result;
-}
-
-// Use a canonical, de-duplicated, sorted list of column keys throughout
-function getColumnKeys(): Array<keyof Row> {
-  return uniqueColumns(allColumns)
-    .map((c) => c.name)
-    .sort() as Array<keyof Row>;
 }
 
 async function syncToSql(csvData: any) {
@@ -448,7 +458,7 @@ async function syncToSql(csvData: any) {
     newRow = ensureNotNull(newRow);
     info({ row, newRow }, "Input Row and new Row");
 
-    const columnKeys = getColumnKeys();
+    const columnKeys = Object.keys(allColumns).sort() as Array<keyof Row>;
 
     const request = new sql.Request();
 
@@ -485,12 +495,13 @@ async function syncToSql(csvData: any) {
 }
 
 function handleTypes(newRow: Row) {
-  const columnKeys = getColumnKeys();
+  const columnKeys = Object.keys(allColumns).sort() as Array<
+    keyof typeof allColumns
+  >;
 
   return Object.fromEntries(
     columnKeys.map((key) => {
-      const col = allColumns[key];
-      if (col?.type.includes("DATE")) {
+      if (allColumns[key].type.includes("DATE")) {
         const value = newRow[key] as DayjsInput;
         if (dayjs.isDayjs(value)) {
           return [key, dayjs(value).toDate()];
@@ -509,7 +520,7 @@ function handleTypes(newRow: Row) {
         }
       }
 
-      if (col?.type === "BIT") {
+      if (allColumns[key].type === "BIT") {
         if (newRow[key] === true || newRow[key] === false) {
           return [key, newRow[key]];
         }
@@ -533,7 +544,7 @@ function handleTypes(newRow: Row) {
         }
       }
 
-      if (col?.type.includes("DECIMAL")) {
+      if (allColumns[key].type.includes("DECIMAL")) {
         if (!Number.isNaN(Number(newRow[key]))) {
           return [
             key,
@@ -561,7 +572,7 @@ function handleTypes(newRow: Row) {
       }
 
       if (
-        col?.type.includes("VARCHAR") &&
+        allColumns[key].type.includes("VARCHAR") &&
         typeof newRow[key] === "string"
       ) {
         return [key, newRow[key]];
@@ -574,7 +585,7 @@ function handleTypes(newRow: Row) {
 }
 
 function ensureNotNull(newRow: Row) {
-  const nonNulls = uniqueColumns(allColumns).filter(
+  const nonNulls = Object.values(allColumns).filter(
     (col) =>
       (newRow[col.name] === null || newRow[col.name] === undefined) &&
       !col.allowNull,
@@ -608,7 +619,7 @@ interface Column {
 // 1) removed [CREDIT NOTE] as duplicate of [Credit Note]
 // 2) trimmed the really long potbelly column name that was > 128 characters
 // 3) set Id to VARCHAR(100)
-const allColumns: Record<string, Column> = {
+const allColumns: Record<keyof Row, Column> = {
   Id: { name: "Id", type: "VARCHAR(100)", allowNull: false },
   "Incident ID": {
     name: "Incident ID",
@@ -680,6 +691,11 @@ const allColumns: Record<string, Column> = {
   },
   "Still have the product?": {
     name: "Still have the product?",
+    type: "BIT",
+    allowNull: false,
+  },
+  "Still have the Product?": {
+    name: "Still have the Product?",
     type: "BIT",
     allowNull: false,
   },
