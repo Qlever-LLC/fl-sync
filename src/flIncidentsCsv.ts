@@ -458,25 +458,27 @@ async function syncToSql(csvData: any) {
     newRow = ensureNotNull(newRow);
     info({ row, newRow }, "Input Row and new Row");
 
-    const columnKeys = Object.keys(allColumns).sort() as Array<keyof Row>;
+    const columnNames = uniqueColumns(allColumns)
+      .map((c) => c.name)
+      .sort() as Array<keyof Row>;
 
     const request = new sql.Request();
 
-    const selectString = columnKeys
+    const selectString = columnNames
       .map((key, index) => {
         request.input(`val${index}`, newRow[key]);
         return `@val${index} AS [${key}]`;
       })
       .join(",");
 
-    const setString = columnKeys
+    const setString = columnNames
       // .filter((key) => key !== 'Id')
       .map((key, index) => `[${key}] = @val${index}`)
       .join(",");
 
-    const cols = columnKeys.map((key) => `[${key}]`).join(",");
+    const cols = columnNames.map((key) => `[${key}]`).join(",");
 
-    const values = columnKeys.map((_, index) => `@val${index}`).join(",");
+    const values = columnNames.map((_, index) => `@val${index}`).join(",");
 
     const query = /* sql */ `MERGE
     INTO ${tableFull} WITH (HOLDLOCK) AS target
