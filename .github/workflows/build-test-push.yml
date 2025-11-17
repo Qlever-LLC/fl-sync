@@ -30,6 +30,7 @@ permissions:
   repository-projects: read
   statuses: read
   attestations: read
+  artifact-metadata: read
 
 on:
   push:
