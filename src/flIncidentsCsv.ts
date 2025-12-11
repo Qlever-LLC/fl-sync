@@ -26,9 +26,13 @@ name variations.
 import type { OADAClient } from "@oada/client";
 import { poll } from "@oada/poll";
 import dayjs, { type Dayjs } from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat.js";
 import debug from "debug";
 import sql from "mssql";
 import xlsx from "xlsx";
+import { promises as fs } from "node:fs";
+
+dayjs.extend(customParseFormat);
 
 // Load config first so it can set up env
 import config from "./config.js";
@@ -274,6 +278,13 @@ export async function ensureColumns() {
 function checkSlashThings(row: Row) {
   const pattern = / \((?:[^()/]+\/)+[^()/]+\)/;
 
+  // Normalize common token synonyms so sets match even if wording differs
+  const tokenSynonyms: Record<string, string> = {
+    "date of delivery": "delivery date",
+    date: "delivery date", // treat bare "Date" as the delivery date bucket
+  };
+  const normToken = (t: string) => tokenSynonyms[t.trim().toLowerCase()] ?? t.trim().toLowerCase();
+
   const matches = Object.keys(allColumns).filter(
     (key): key is keyof typeof allColumns => pattern.test(key),
   );
@@ -283,14 +294,22 @@ function checkSlashThings(row: Row) {
   );
   for (const key of keys) {
     const parts = key.split(" (");
-    const set = parts[1]!.replace(/\)$/, "").split("/").sort();
+    const set = parts[1]!
+      .replace(/\)$/, "")
+      .split("/")
+      .map(normToken)
+      .sort();
 
     for (const col of matches) {
       const cParts = col.split(" (");
-      const cSet = cParts[1]!.replace(/\)$/, "").split("/").sort();
-      const same = cSet.every((item, index) => set[index] === item);
+      const cSet = cParts[1]!
+        .replace(/\)$/, "")
+        .split("/")
+        .map(normToken)
+        .sort();
+      const same = cSet.length === set.length && cSet.every((item, index) => set[index] === item);
       if (same) {
-        // @ts-expect-error idk what this is
+        // @ts-expect-error dynamic indexing from CSV header
         row[col] = row[key];
         delete row[key];
       }
@@ -317,6 +336,12 @@ const alters: Record<keyof Row, keyof Row> = {
   // Normalize duplicate header variants that differ only by casing/punctuation
   "Still have the Product?": "Still have the product?",
   "Still have the product": "Still have the product?",
+  "incidentDate (Incident Date/Delivery Date/Date)":
+    "incidentDate (Incident Date/Date of Delivery/Delivery Date)",
+  // Distributor header variants
+  // Map 3-token variant including Smithfield Plant and Receiver to the canonical we persist
+  "distributor (Shipment Originator/Smithfield Plant/Receiver)":
+    "distributor (Shipment Originator/Receiver)",
 };
 
 // Handle schema changes over time (get csv output for whole history versus a small, recent window and results will vary a lot)
@@ -363,6 +388,35 @@ function cleanCell(val: unknown): unknown {
   // Some CSVs may include leading single quote to prevent formula evaluation
   if (s.startsWith("'")) s = s.slice(1);
   return s;
+}
+
+// Strict date parsing for diverse CSV formats
+function parseDateStrict(v: unknown): Date | undefined {
+  if (v instanceof Date) return v;
+  if (dayjs.isDayjs(v)) return (v as Dayjs).toDate();
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  if (!s) return undefined;
+  const formats = [
+    "YYYY-MM-DD",
+    "YYYY/MM/DD",
+    "MM/DD/YYYY",
+    "M/D/YYYY",
+    "MM-DD-YYYY",
+    "M-D-YYYY",
+    "MMM D, YYYY",
+    "MMMM D, YYYY",
+    "MMM D YYYY",
+    "MMMM D YYYY",
+    "MMMM D, YYYY h:mma",
+    "MMMM D YYYY h:mma",
+  ];
+  for (const f of formats) {
+    const d = dayjs(s, f, true);
+    if (d.isValid()) return d.toDate();
+  }
+  const iso = dayjs(s);
+  return iso.isValid() ? iso.toDate() : undefined;
 }
 
 // Normalize a worksheet into array of objects and merge duplicate GTIN columns into a single GTIN field
@@ -454,6 +508,7 @@ async function syncToSql(csvData: any) {
 
   for await (const row of csvData) {
     let newRow = handleSchemaChanges(row);
+    newRow = scrubBogusDateBleed(newRow);
     newRow = handleTypes(newRow);
     newRow = ensureNotNull(newRow);
     info({ row, newRow }, "Input Row and new Row");
@@ -505,21 +560,8 @@ function handleTypes(newRow: Row) {
     columnKeys.map((key) => {
       if (allColumns[key].type.includes("DATE")) {
         const value = newRow[key] as DayjsInput;
-        if (dayjs.isDayjs(value)) {
-          return [key, dayjs(value).toDate()];
-        }
-
-        if (dayjs(value, "MMM DD, YYYY", true).isValid()) {
-          return [key, dayjs(value, "MMM DD, YYYY").toDate()];
-        }
-
-        if (dayjs(value, "MMMM D, YYYY hh:mma", true).isValid()) {
-          return [key, dayjs(value, "MMMM D, YYYY hh:mma", true).toDate()];
-        }
-
-        if (dayjs(value, "YYYY-MM-DD", true).isValid()) {
-          return [key, dayjs(value, "YYYY-MM-DD", true).toDate()];
-        }
+        const d = parseDateStrict(value);
+        if (d) return [key, d];
       }
 
       if (allColumns[key].type === "BIT") {
@@ -586,6 +628,39 @@ function handleTypes(newRow: Row) {
   return newRow;
 }
 
+// Remove obvious bogus date values that appear in non-date columns due to upstream row misalignment/merged cell bleed
+function scrubBogusDateBleed(r: Row): Row {
+  const out = { ...r } as Row;
+  const created = parseDateStrict(r["Created At"]);
+  if (!created) return out;
+  const createdMs = created.getTime();
+
+  // Only include non-DATE, human text columns we’ve observed to get polluted
+  const suspicious: Array<keyof Row> = [
+    "Distributor Item Number",
+    "Restaurant Contact Name",
+    "Supplier Location",
+    "Producing Plant",
+    "Description",
+    "Review and Action Comments",
+  ];
+
+  for (const k of suspicious) {
+    const v = out[k] as unknown;
+    if (typeof v === "string" && v.trim()) {
+      const dv = parseDateStrict(v)?.getTime();
+      if (dv && dv === createdMs) {
+        // Likely an accidental backfill; clear it so typing/not-null logic handles it appropriately
+        // @ts-expect-error row is a mixed type record
+        out[k] = undefined;
+        trace({ column: String(k), clearedValue: v }, "Cleared bogus date in non-date column");
+      }
+    }
+  }
+
+  return out;
+}
+
 function ensureNotNull(newRow: Row) {
   const nonNulls = Object.values(allColumns).filter(
     (col) =>
@@ -603,6 +678,60 @@ function ensureNotNull(newRow: Row) {
       // @ts-expect-error these types confuse ts
       newRow[name] = 0;
     } else if (type === "DATE") {
+      // Targeted, semantically-aware fallbacks to preserve NOT NULL without misleading values
+      // 1) Last Updated At <- Created At
+      if (
+        name === ("Last Updated At" as keyof Row) &&
+        (newRow[name] === null || newRow[name] === undefined) &&
+        newRow["Created At"]
+      ) {
+        // @ts-expect-error these types confuse ts
+        newRow[name] = newRow["Created At"];
+        continue;
+      }
+
+      // 2) incidentDate: prefer other date-like fields, then (last resort) Created At
+      const incidentCanonical =
+        "incidentDate (Incident Date/Date of Delivery/Delivery Date)" as keyof Row;
+      if (name === incidentCanonical) {
+        const candidates: Array<keyof Row> = [
+          // another incidentDate variant that sometimes appears
+          "incidentDate (Incident Date/Delivery Date)" as keyof Row,
+          // business substitutes that often carry the delivery/incident timing
+          "Invoice Date / Delivery Date",
+          "Date Product Received",
+          "Date Received Original PO",
+          "Best By/Use By Date",
+          "Best By/Expiration Date",
+          "Best By Date",
+          "Plant Production Date",
+        ];
+        for (const c of candidates) {
+          if (newRow[c] !== null && newRow[c] !== undefined) {
+            // @ts-expect-error these types confuse ts
+            newRow[name] = newRow[c];
+            if (newRow[name]) {
+              info(
+                { fallbackFrom: String(c), incidentDate: newRow[name] },
+                "Filled incidentDate from fallback column",
+              );
+            }
+            break;
+          }
+        }
+        // Last resort to satisfy NOT NULL: use Created At if still missing
+        if (newRow[name] === null || newRow[name] === undefined) {
+          // @ts-expect-error these types confuse ts
+          newRow[name] = newRow["Created At"];
+          info(
+            { incidentDate: newRow[name] },
+            "incidentDate missing after parsing and normalization; defaulted to Created At",
+          );
+        }
+        continue;
+      }
+
+      // 3) Any other unexpected NOT NULL DATE -> Created At as a conservative default
       // @ts-expect-error these types confuse ts
       newRow[name] = newRow["Created At"];
     }
@@ -2463,4 +2592,66 @@ interface Row {
   "Inbound Issues Noted Defects": string;
   "Corrective Action Performed": string;
   "Supporting Information": boolean;
+}
+
+// Offline helper to process a local FL incidents export text/CSV file and emit a normalized CSV
+export async function processIncidentsFile(inputPath: string, outPath: string) {
+  const text = await fs.readFile(inputPath, "utf-8");
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in workbook");
+  const sheet = wb.Sheets[String(sheetname)];
+  if (!sheet) throw new Error("First sheet missing");
+
+  const csvData = normalizeCsvData(sheet);
+
+  const outRows: Record<string, unknown>[] = [];
+  const columnNames = uniqueColumns(allColumns)
+    .map((c) => c.name)
+    .sort() as Array<keyof Row>;
+
+  for (const row of csvData) {
+    let newRow = handleSchemaChanges(row);
+    newRow = scrubBogusDateBleed(newRow);
+    newRow = handleTypes(newRow);
+    newRow = ensureNotNull(newRow);
+
+    const outObj: Record<string, unknown> = {};
+    for (const key of columnNames) {
+      const v = newRow[key] as unknown;
+      const col = allColumns[key];
+      if (v === undefined || v === null) {
+        outObj[String(key)] = "";
+      } else if (col.type.includes("DATE")) {
+        // Normalize dates to YYYY-MM-DD
+        const d = v instanceof Date ? v : parseDateStrict(v);
+        outObj[String(key)] = d ? new Date(d).toISOString().slice(0, 10) : "";
+      } else if (col.type === "BIT") {
+        outObj[String(key)] = v ? 1 : 0;
+      } else {
+        outObj[String(key)] = v;
+      }
+    }
+    outRows.push(outObj);
+  }
+
+  const ws = xlsx.utils.json_to_sheet(outRows, { header: columnNames as string[] });
+  const outCsv = xlsx.utils.sheet_to_csv(ws);
+  await fs.writeFile(outPath, outCsv, "utf-8");
+}
+
+// Simple CLI for local processing: node dist/flIncidentsCsv.js process-local input output
+if (process.argv[2] === "process-local") {
+  const input = String(process.argv[3] ?? "");
+  const output = String(process.argv[4] ?? "incident-sql-dump-local.csv");
+  processIncidentsFile(input, output)
+    .then(() => {
+      // eslint-disable-next-line no-console
+      console.log(`Wrote ${output}`);
+    })
+    .catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error(e);
+      process.exitCode = 1;
+    });
 }
