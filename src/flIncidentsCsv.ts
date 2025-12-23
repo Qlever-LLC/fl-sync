@@ -31,8 +31,84 @@ import debug from "debug";
 import sql from "mssql";
 import xlsx from "xlsx";
 import { promises as fs } from "node:fs";
+import { readFileSync } from "node:fs";
 
 dayjs.extend(customParseFormat);
+
+// ----- SQL column whitelist (from existing SQL dump CSV) -----
+// Set SQL_COLUMNS_CSV to point at a representative SQL export whose headers are the
+// source of truth for existing columns. Default to a commonly named local file.
+const SQL_COLUMNS_CSV = process.env.SQL_COLUMNS_CSV ?? "./incident-sql-dump-2025-12-10.csv";
+let sqlColumnWhitelist: Set<string> | null = null;
+function getSqlColumnWhitelist(): Set<string> {
+  if (sqlColumnWhitelist) return sqlColumnWhitelist;
+  try {
+    const text = readFileSync(SQL_COLUMNS_CSV, "utf-8");
+    const wb = xlsx.read(text, { type: "string" });
+    const sheetname = wb.SheetNames[0];
+    if (!sheetname) throw new Error("no sheet");
+    const sheet = wb.Sheets[sheetname];
+    const rows = xlsx.utils.sheet_to_json(sheet as xlsx.WorkSheet, { header: 1, defval: "", raw: false }) as any[][];
+    const headers = (rows?.[0] as string[] | undefined) ?? [];
+    sqlColumnWhitelist = new Set(headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim())));
+  } catch {
+    // Fallback: allow all columns if the CSV isn’t present
+    sqlColumnWhitelist = new Set(Object.keys(allColumns).map(String));
+  }
+  return sqlColumnWhitelist!;
+}
+
+function isSqlColumn(name: string): boolean {
+  return getSqlColumnWhitelist().has(String(name));
+}
+
+function activeColumns(): Column[] {
+  return uniqueColumns(allColumns).filter((c) => isSqlColumn(String(c.name)));
+}
+
+function activeColumnNames(): Array<keyof Row> {
+  return activeColumns().map((c) => c.name).sort() as Array<keyof Row>;
+}
+
+// ----- User-approved mapping overrides (CSV-driven) -----
+const MAPPINGS_CSV = process.env.MAPPINGS_CSV ?? "./proposed-mappings-2025-12-20.csv";
+let userMappings: Array<{ from: string; to: string }> | null = null;
+function getUserMappings(): Array<{ from: string; to: string }> {
+  if (userMappings) return userMappings;
+  try {
+    const text = readFileSync(MAPPINGS_CSV, "utf-8");
+    const wb = xlsx.read(text, { type: "string" });
+    const sheetname = wb.SheetNames[0];
+    if (!sheetname) throw new Error("no sheet");
+    const sheet = wb.Sheets[sheetname] as xlsx.WorkSheet;
+    const json = xlsx.utils.sheet_to_json(sheet) as Array<{
+      From?: string;
+      To?: string;
+      Decision?: string | boolean | number;
+    }>;
+    const truthy = new Set(["true", "yes", "y", "1", "approved", "ok"]);
+    userMappings = json
+      .filter((r) => r.From && r.To && r.Decision !== undefined)
+      .filter((r) => truthy.has(String(r.Decision).trim().toLowerCase()))
+      .map((r) => ({ from: String(r.From).trim(), to: String(r.To).trim() }))
+      .filter((m) => isSqlColumn(m.to));
+  } catch {
+    userMappings = [];
+  }
+  return userMappings!;
+}
+
+function applyUserMappings(row: Row): Row {
+  const mappings = getUserMappings();
+  if (!mappings.length) return row;
+  for (const { from, to } of mappings) {
+    if ((row as any)[from] !== undefined && (row as any)[from] !== "") {
+      (row as any)[to] ??= (row as any)[from];
+      if (!noDelete.has(from as keyof Row)) delete (row as any)[from];
+    }
+  }
+  return row;
+}
 
 // Load config first so it can set up env
 import config from "./config.js";
@@ -218,7 +294,7 @@ export async function ensureTable() {
   const exists = tables.recordset.length > 0;
 
   if (!exists) {
-    const tableColumns = uniqueColumns(allColumns)
+    const tableColumns = activeColumns()
       .map((c) => `[${c.name}] ${c.type} ${c.allowNull ? "NULL" : "NOT NULL"}`)
       .join(", ");
     // Comma before PRIMARY KEY and bracket the Id identifier
@@ -241,8 +317,8 @@ export async function ensureColumns() {
     cols.recordset.map((r: any) => String(r.COLUMN_NAME).toLowerCase()),
   );
 
-  // Compute missing columns from our schema (case-insensitive)
-  const toAdd = uniqueColumns(allColumns)
+  // Compute missing columns from our active schema (case-insensitive)
+  const toAdd = activeColumns()
     .filter((c) => !existing.has(String(c.name).toLowerCase()))
     .map((c) => `[${c.name}] ${c.type} NULL`); // add as NULL to avoid migration failures
 
@@ -285,9 +361,8 @@ function checkSlashThings(row: Row) {
   };
   const normToken = (t: string) => tokenSynonyms[t.trim().toLowerCase()] ?? t.trim().toLowerCase();
 
-  const matches = Object.keys(allColumns).filter(
-    (key): key is keyof typeof allColumns => pattern.test(key),
-  );
+  const matches = (Object.keys(allColumns) as Array<keyof typeof allColumns>)
+    .filter((key) => pattern.test(key) && isSqlColumn(String(key)));
 
   const keys = Object.keys(row).filter(
     (key): key is keyof Row => !(key in allColumns) && pattern.test(key),
@@ -345,7 +420,145 @@ const alters: Record<keyof Row, keyof Row> = {
 };
 
 // Handle schema changes over time (get csv output for whole history versus a small, recent window and results will vary a lot)
+// Normalize parenthesized header variants by comparing token sets scoped per base name.
+// This avoids collapsing different base names that happen to share similar tokens.
+function normalizeParenVariantsScoped(row: Row) {
+  const pattern = / \((?:[^()/]+\/)+[^()/]+\)$/;
+
+  // Build registry of canonical columns from our schema grouped by base name
+  const registry: Record<string, Array<{ key: keyof Row; tokens: string[] }>> = {};
+  for (const k of activeColumnNames() as Array<keyof Row>) {
+    const name = String(k);
+    if (!pattern.test(name)) continue;
+    const base = name.split(" (")[0]!.trim().toLowerCase();
+    const toks = name
+      .slice(name.indexOf("(") + 1, -1)
+      .split("/")
+      .map((t) => t.trim().toLowerCase());
+    (registry[base] ??= []).push({ key: k, tokens: toks.sort() });
+  }
+
+  // Per-base token synonyms to relax comparisons safely
+  const perBaseSynonyms: Record<string, Record<string, string>> = {
+    incidentdate: {
+      "date of delivery": "delivery date",
+      date: "delivery date",
+    },
+    // add more if safe (e.g., location/distributor rarely need synonyms)
+  };
+
+  const norm = (base: string, t: string) =>
+    (perBaseSynonyms[base]?.[t.trim().toLowerCase()] ?? t.trim().toLowerCase());
+
+  for (const key of Object.keys(row)) {
+    if ((key as keyof Row) in allColumns) continue; // already canonical
+    if (!pattern.test(key)) continue;
+
+    const base = key.split(" (")[0]!.trim().toLowerCase();
+    const candidates = registry[base];
+    if (!candidates || candidates.length === 0) continue; // unknown base
+
+    const obsTokens = key
+      .slice(key.indexOf("(") + 1, -1)
+      .split("/")
+      .map((t) => norm(base, t))
+      .sort();
+
+    // Choose best candidate: exact set match > smallest superset > highest overlap
+    let best: { key: keyof Row; score: number; extra: number } | null = null;
+    for (const c of candidates) {
+      const canTokens = c.tokens.map((t) => norm(base, t));
+      const setObs = new Set(obsTokens);
+      const setCan = new Set(canTokens);
+
+      const exact =
+        obsTokens.length === canTokens.length &&
+        obsTokens.every((t, i) => t === canTokens.sort()[i]);
+      if (exact) {
+        best = { key: c.key, score: Number.POSITIVE_INFINITY, extra: 0 };
+        break;
+      }
+
+      // superset if candidate contains all observed tokens
+      const isSuperset = [...setObs].every((t) => setCan.has(t));
+      if (isSuperset) {
+        const extra = canTokens.length - obsTokens.length;
+        const score = obsTokens.length; // prefer minimal extra
+        if (!best || best.score < score || (best.score === score && extra < best.extra)) {
+          best = { key: c.key, score, extra };
+        }
+        continue;
+      }
+
+      // overlap score
+      const overlap = [...setObs].filter((t) => setCan.has(t)).length;
+      if (overlap > 0) {
+        if (!best || overlap > best.score) {
+          best = { key: c.key, score: overlap, extra: Number.POSITIVE_INFINITY };
+        }
+      }
+    }
+
+    if (best) {
+      // Move value if set and destination empty
+      const v = (row as any)[key];
+      if (v !== undefined && v !== "") {
+        if (isSqlColumn(String(best.key))) {
+          // assign to canonical destination if it exists in SQL
+          (row as any)[best.key] ??= v;
+        }
+        // If this is a distributor variant, also populate the consolidated Receiver column
+        if (base === "distributor") {
+          const receiverKey = "distributor (Shipment Originator/Receiver)" as keyof Row;
+          if (isSqlColumn(String(receiverKey))) {
+            // @ts-expect-error dynamic indexing
+            row[receiverKey] ??= v;
+          }
+        }
+        // If this is a location variant, also populate both long and short targets
+        if (base === "location") {
+          const tokenStr = String(key.slice(key.indexOf("(") + 1, -1)).toLowerCase();
+          const isGLN = tokenStr.includes("gln");
+          if (isGLN) {
+            const longGLN =
+              "location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)" as keyof Row;
+            const shortGLN = "location (My Location GLN/Location GLN)" as keyof Row;
+            if (isSqlColumn(String(longGLN))) {
+              // @ts-expect-error dynamic indexing
+              row[longGLN] ??= v;
+            }
+            if (isSqlColumn(String(shortGLN))) {
+              // @ts-expect-error dynamic indexing
+              row[shortGLN] ??= v;
+            }
+          } else {
+            const longName =
+              "location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)" as keyof Row;
+            const shortName = "location (My Location Name/Location Name)" as keyof Row;
+            if (isSqlColumn(String(longName))) {
+              // @ts-expect-error dynamic indexing
+              row[longName] ??= v;
+            }
+            if (isSqlColumn(String(shortName))) {
+              // @ts-expect-error dynamic indexing
+              row[shortName] ??= v;
+            }
+          }
+        }
+      }
+      // @ts-expect-error dynamic indexing
+      delete row[key];
+    }
+  }
+
+  return row;
+}
+
 function handleSchemaChanges(row: Row) {
+  row = checkSlashThings(row);
+  row = normalizeParenVariantsScoped(row);
+  row = applyUserMappings(row);
+
   if ("CREDIT NOTE" in row) {
     // @ts-expect-error these types confuse ts
     // eslint-disable-next-line sonarjs/no-duplicate-string
@@ -365,7 +578,7 @@ function handleSchemaChanges(row: Row) {
   row = checkSlashThings(row);
 
   for (const [oldKey, alter] of Object.entries(alters)) {
-    if (oldKey in row) {
+    if (oldKey in row && isSqlColumn(String(alter))) {
       const key = oldKey as keyof Row;
       // @ts-expect-error description
       row[alter] ??= row[oldKey];
@@ -373,6 +586,43 @@ function handleSchemaChanges(row: Row) {
         delete row[key];
       }
     }
+  }
+
+  // Identity-case duplication: ensure preferred targets also get populated
+  // Distributor: always also write to (Shipment Originator/Receiver)
+  const distReceiver = "distributor (Shipment Originator/Receiver)" as keyof Row;
+  for (const k of Object.keys(row) as Array<keyof Row>) {
+    if (String(k).startsWith("distributor (")) {
+      if (isSqlColumn(String(distReceiver))) {
+        // @ts-expect-error
+        row[distReceiver] ??= row[k];
+      }
+    }
+  }
+
+  // Location: duplicate into long+short for Name and GLN
+  const longName =
+    "location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)" as keyof Row;
+  const shortName = "location (My Location Name/Location Name)" as keyof Row;
+  const longGLN =
+    "location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)" as keyof Row;
+  const shortGLN = "location (My Location GLN/Location GLN)" as keyof Row;
+
+  if (shortName in row && isSqlColumn(String(longName))) {
+    // @ts-expect-error dynamic indexing
+    row[longName] ??= row[shortName];
+  }
+  if (longName in row && isSqlColumn(String(shortName))) {
+    // @ts-expect-error dynamic indexing
+    row[shortName] ??= row[longName];
+  }
+  if (shortGLN in row && isSqlColumn(String(longGLN))) {
+    // @ts-expect-error dynamic indexing
+    row[longGLN] ??= row[shortGLN];
+  }
+  if (longGLN in row && isSqlColumn(String(shortGLN))) {
+    // @ts-expect-error dynamic indexing
+    row[shortGLN] ??= row[longGLN];
   }
 
   return row;
@@ -513,9 +763,7 @@ async function syncToSql(csvData: any) {
     newRow = ensureNotNull(newRow);
     info({ row, newRow }, "Input Row and new Row");
 
-    const columnNames = uniqueColumns(allColumns)
-      .map((c) => c.name)
-      .sort() as Array<keyof Row>;
+    const columnNames = activeColumnNames();
 
     const request = new sql.Request();
 
@@ -552,9 +800,7 @@ async function syncToSql(csvData: any) {
 }
 
 function handleTypes(newRow: Row) {
-  const columnKeys = Object.keys(allColumns).sort() as Array<
-    keyof typeof allColumns
-  >;
+  const columnKeys = activeColumnNames() as Array<keyof typeof allColumns>;
 
   return Object.fromEntries(
     columnKeys.map((key) => {
@@ -2635,7 +2881,7 @@ export async function processIncidentsFile(inputPath: string, outPath: string) {
     outRows.push(outObj);
   }
 
-  const ws = xlsx.utils.json_to_sheet(outRows, { header: columnNames as string[] });
+  const ws = xlsx.utils.json_to_sheet(outRows, { header: (activeColumnNames() as string[]) });
   const outCsv = xlsx.utils.sheet_to_csv(ws);
   await fs.writeFile(outPath, outCsv, "utf-8");
 }
@@ -2654,4 +2900,300 @@ if (process.argv[2] === "process-local") {
       console.error(e);
       process.exitCode = 1;
     });
+}
+
+// CLI: explain-headers <input>
+export async function explainHeadersFile(inputPath: string) {
+  const text = await fs.readFile(inputPath, "utf-8");
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in workbook");
+  const sheet = wb.Sheets[String(sheetname)];
+  if (!sheet) throw new Error("First sheet missing");
+
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  if (!rows || rows.length < 1) throw new Error("No rows");
+  const headers = rows[0] as string[];
+
+  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+
+  const mapping: Array<{ from: string; to: string[] }> = [];
+  const targets = new Set(activeColumnNames().map(String));
+  for (const h of inputHeaders) {
+    if (!h) continue;
+    const testRow: any = {};
+    // Place a unique token per header
+    const token = `__tok__${Math.random().toString(36).slice(2)}`;
+    testRow[h] = token;
+    const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
+    // Candidate outputs are any keys in allColumns whose value equals token
+    const outs: string[] = [];
+    for (const k of activeColumnNames() as Array<keyof Row>) {
+      if ((after as any)[k] === token && targets.has(String(k))) outs.push(String(k));
+    }
+    // Skip identity (no change) unless there are additional outputs besides the same header
+    const changed = outs.filter((o) => o !== h);
+    if (changed.length > 0) {
+      mapping.push({ from: h, to: outs });
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(mapping, null, 2));
+}
+
+if (process.argv[2] === "explain-headers") {
+  const input = String(process.argv[3] ?? "");
+  explainHeadersFile(input).catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exitCode = 1;
+  });
+}
+
+// CLI: report-unmapped-input <input> -> prints CSV headers from input that map to no SQL column
+export async function reportUnmappedInputHeadersFile(inputPath: string) {
+  const text = await fs.readFile(inputPath, "utf-8");
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in workbook");
+  const sheet = wb.Sheets[String(sheetname)];
+  if (!sheet) throw new Error("First sheet missing");
+
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  if (!rows || rows.length < 1) throw new Error("No rows");
+  const headers = rows[0] as string[];
+  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+
+  const unmapped: string[] = [];
+  const targets = new Set(activeColumnNames().map(String));
+  for (const h of inputHeaders) {
+    if (!h) continue;
+    const testRow: any = {};
+    const token = `__tok__${Math.random().toString(36).slice(2)}`;
+    testRow[h] = token;
+    const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
+    let hit = false;
+    for (const k of activeColumnNames() as Array<keyof Row>) {
+      if ((after as any)[k] === token && targets.has(String(k))) {
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) unmapped.push(h);
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(unmapped, null, 2));
+}
+
+if (process.argv[2] === "report-unmapped-input") {
+  const input = String(process.argv[3] ?? "");
+  reportUnmappedInputHeadersFile(input).catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exitCode = 1;
+  });
+}
+
+// CLI: proposed-mappings-csv <input>
+// Emits From,To CSV for unmapped CSV headers with safe proposed targets that exist in SQL
+export async function proposedMappingsCsv(inputPath: string) {
+  const text = await fs.readFile(inputPath, "utf-8");
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in workbook");
+  const sheet = wb.Sheets[String(sheetname)];
+  if (!sheet) throw new Error("First sheet missing");
+
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  if (!rows || rows.length < 1) throw new Error("No rows");
+  const headers = rows[0] as string[];
+  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+
+  // Proposed map (only include targets that we know exist in SQL)
+  const M: Record<string, string> = {
+    "plant (Internal Supplier/Plant)": "Producing Plant",
+    "FSQA Final Review": "FSQA Manager Comments",
+    "Source of Claim": "Incident Type",
+    "Is there a complaint related to this claim?": "Customer Complaint Related",
+    "Claim Amount ($) Requested": "Total Credit Request Amount ($)",
+    "Claim Reason": "Reason for Request",
+    "Claim Comments": "Comments",
+    "Claim Documentation": "Supporting Document",
+    "Claim Reviewed": "Buyer Final Review",
+    "Is the related incident linked on the right side of the screen?": "Incident Acknowledged?",
+    "Buyer Claim Comments": "Buyer Final Review Comments",
+    "Information Needed": "Review and Action Comments",
+    "Acknowledge claim and begin processing": "Review and Action Comments",
+    "Claim Processing/Invoice #": "Invoice Number",
+    "Claim Final Review": "Buyer Final Review",
+    "Final Review Comments": "Buyer Final Review Comments",
+    Observation: "Incident Details",
+    "Corrective Action": "Corrective Action Performed",
+    "Evidence of Correction Action": "Evidence of Correction",
+    "Incident Category": "Complaint Type",
+    "Evidence of Non-compliance": "Review and Action Comments",
+    "Completion Date": "Due Date",
+    "Evidence of Corrective Action": "Evidence of Correction",
+    // Excluded because not present in SQL dump (per your constraint):
+    // "If no, please explain": "Comments",
+    // "If Additional Information is Needed, Please Provide Comments Here:": "Comments",
+  };
+
+  const targets = new Set(activeColumnNames().map(String));
+  const records: Array<{ From: string; To: string }> = [];
+  for (const from of Object.keys(M)) {
+    if (!inputHeaders.includes(from)) continue; // only include if present in this CSV
+    const to = M[from] ?? "";
+    if (!to || !targets.has(to)) continue; // honor SQL whitelist
+    records.push({ From: from, To: String(to) });
+  }
+
+  const ws = xlsx.utils.json_to_sheet(records, { header: ["From", "To"] });
+  const csv = xlsx.utils.sheet_to_csv(ws);
+  // eslint-disable-next-line no-console
+  console.log(csv);
+}
+
+if (process.argv[2] === "proposed-mappings-csv") {
+  const input = String(process.argv[3] ?? "");
+  proposedMappingsCsv(input).catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exitCode = 1;
+  });
+}
+
+// CLI: mapping-csv <input> -> CSV with From,To (To may contain multiple targets separated by " | ")
+export async function fullMappingCsv(inputPath: string) {
+  const text = await fs.readFile(inputPath, "utf-8");
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in workbook");
+  const sheet = wb.Sheets[String(sheetname)];
+  if (!sheet) throw new Error("First sheet missing");
+
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  if (!rows || rows.length < 1) throw new Error("No rows");
+  const headers = rows[0] as string[];
+  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+
+  const targets = new Set(activeColumnNames().map(String));
+  const records: Array<{ From: string; To: string }> = [];
+
+  for (const h of inputHeaders) {
+    if (!h) continue;
+    const testRow: any = {};
+    const token = `__tok__${Math.random().toString(36).slice(2)}`;
+    testRow[h] = token;
+    const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
+    const outs: string[] = [];
+    for (const k of activeColumnNames() as Array<keyof Row>) {
+      if ((after as any)[k] === token && targets.has(String(k))) outs.push(String(k));
+    }
+    records.push({ From: h, To: outs.join(" | ") });
+  }
+
+  const ws = xlsx.utils.json_to_sheet(records, { header: ["From", "To"] });
+  const csv = xlsx.utils.sheet_to_csv(ws);
+  // eslint-disable-next-line no-console
+  console.log(csv);
+}
+
+if (process.argv[2] === "mapping-csv") {
+  const input = String(process.argv[3] ?? "");
+  fullMappingCsv(input).catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exitCode = 1;
+  });
+}
+
+// CLI: report-unmapped <input> -> prints array of SQL column names that receive no value from input headers
+export async function reportUnmappedColumnsFile(inputPath: string) {
+  const text = await fs.readFile(inputPath, "utf-8");
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in workbook");
+  const sheet = wb.Sheets[String(sheetname)];
+  if (!sheet) throw new Error("First sheet missing");
+
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  if (!rows || rows.length < 1) throw new Error("No rows");
+  const headers = rows[0] as string[];
+  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+
+  const covered = new Set<string>();
+  const targets = new Set(activeColumnNames().map(String));
+  for (const h of inputHeaders) {
+    if (!h) continue;
+    const testRow: any = {};
+    const token = `__tok__${Math.random().toString(36).slice(2)}`;
+    testRow[h] = token;
+    const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
+    for (const k of activeColumnNames() as Array<keyof Row>) {
+      if ((after as any)[k] === token && targets.has(String(k))) covered.add(String(k));
+    }
+  }
+
+  const all = new Set(activeColumnNames().map(String));
+  const unmapped = [...all].filter((k) => !covered.has(k)).sort((a, b) => a.localeCompare(b));
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(unmapped, null, 2));
+}
+
+if (process.argv[2] === "report-unmapped") {
+  const input = String(process.argv[3] ?? "");
+  reportUnmappedColumnsFile(input).catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exitCode = 1;
+  });
+}
+
+// CSV output variant
+export async function reportUnmappedColumnsCsvFile(inputPath: string) {
+  const text = await fs.readFile(inputPath, "utf-8");
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in workbook");
+  const sheet = wb.Sheets[String(sheetname)];
+  if (!sheet) throw new Error("First sheet missing");
+
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  if (!rows || rows.length < 1) throw new Error("No rows");
+  const headers = rows[0] as string[];
+  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+
+  const covered = new Set<string>();
+  const targets = new Set(activeColumnNames().map(String));
+  for (const h of inputHeaders) {
+    if (!h) continue;
+    const testRow: any = {};
+    const token = `__tok__${Math.random().toString(36).slice(2)}`;
+    testRow[h] = token;
+    const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
+    for (const k of activeColumnNames() as Array<keyof Row>) {
+      if ((after as any)[k] === token && targets.has(String(k))) covered.add(String(k));
+    }
+  }
+
+  const records = activeColumns()
+    .filter((c) => !covered.has(String(c.name)))
+    .map((c) => ({ Column: String(c.name), Type: c.type, Required: c.allowNull ? "false" : "true" }));
+
+  const ws = xlsx.utils.json_to_sheet(records, { header: ["Column", "Type", "Required"] });
+  const csv = xlsx.utils.sheet_to_csv(ws);
+  // eslint-disable-next-line no-console
+  console.log(csv);
+}
+
+if (process.argv[2] === "report-unmapped-csv") {
+  const input = String(process.argv[3] ?? "");
+  reportUnmappedColumnsCsvFile(input).catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error(e);
+    process.exitCode = 1;
+  });
 }
