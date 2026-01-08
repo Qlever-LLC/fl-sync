@@ -774,9 +774,18 @@ async function syncToSql(csvData: any) {
       })
       .join(",");
 
+    // Build an UPDATE SET clause that preserves existing values when the incoming value is NULL/undefined.
+    // For VARCHAR columns, also avoid overwriting with empty-string by using NULLIF(@val, '').
     const setString = columnNames
       // .filter((key) => key !== 'Id')
-      .map((key, index) => `[${key}] = @val${index}`)
+      .map((key, index) => {
+        const colType = allColumns[key].type;
+        const isVarchar = /VARCHAR/i.test(colType);
+        const rhs = isVarchar
+          ? `COALESCE(NULLIF(@val${index}, ''), target.[${key}])`
+          : `COALESCE(@val${index}, target.[${key}])`;
+        return `[${key}] = ${rhs}`;
+      })
       .join(",");
 
     const cols = columnNames.map((key) => `[${key}]`).join(",");
