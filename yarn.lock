@@ -728,6 +728,7 @@ __metadata:
     convict-format-with-moment: "npm:^6.2.0"
     convict-format-with-validator: "npm:^6.2.0"
     cron: "npm:^4.3.3"
+    csv-parse: "npm:^6.1.0"
     csvjson: "npm:^5.1.0"
     date-fns: "npm:^4.1.0"
     dayjs: "npm:^1.11.18"
@@ -2174,6 +2175,13 @@ __metadata:
   version: 0.0.2
   resolution: "crypt@npm:0.0.2"
   checksum: 10/2c72768de3d28278c7c9ffd81a298b26f87ecdfe94415084f339e6632f089b43fe039f2c93f612bcb5ffe447238373d93b2e8c90894cba6cfb0ac7a74616f8b9
+  languageName: node
+  linkType: hard
+
+"csv-parse@npm:^6.1.0":
+  version: 6.1.0
+  resolution: "csv-parse@npm:6.1.0"
+  checksum: 10/607d92611435fdfb7631242644a2582bfb218fad8c6c6d6416db31647c2e63a3110f16c9837de6baaa3edf318212765cfc6e72d672d99690fd7f565d6c93d6f4
   languageName: node
   linkType: hard
 

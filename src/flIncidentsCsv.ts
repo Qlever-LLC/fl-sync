@@ -21,6 +21,10 @@ The data columns returned vary based on the time window requested. This
 is what lead to many of the mappings and handlers used to handle column
 name variations.
 
+Its also important to mention that the .Id for a given incident likely
+change as the incident is updated; that is, for a given 'Incident ID',
+Id is not stable over time.
+
 */
 
 import type { OADAClient } from "@oada/client";
@@ -554,7 +558,7 @@ function normalizeParenVariantsScoped(row: Row) {
   return row;
 }
 
-function handleSchemaChanges(row: Row) {
+export function handleSchemaChanges(row: Row) {
   row = checkSlashThings(row);
   row = normalizeParenVariantsScoped(row);
   row = applyUserMappings(row);
@@ -609,8 +613,15 @@ function handleSchemaChanges(row: Row) {
   const shortGLN = "location (My Location GLN/Location GLN)" as keyof Row;
 
   if (shortName in row && isSqlColumn(String(longName))) {
-    // @ts-expect-error dynamic indexing
-    row[longName] ??= row[shortName];
+    //row[longName] ??= row[shortName]; enforce derivation of shortName before defaulting
+    if (
+      row[shortName] !== undefined &&
+      row[shortName] !== null &&
+      String(row[shortName]).trim() !== ""
+    ) {
+      // @ts-expect-error dynamic indexing
+      row[longName] = row[shortName];
+    }
   }
   if (longName in row && isSqlColumn(String(shortName))) {
     // @ts-expect-error dynamic indexing
@@ -670,7 +681,7 @@ function parseDateStrict(v: unknown): Date | undefined {
 }
 
 // Normalize a worksheet into array of objects and merge duplicate GTIN columns into a single GTIN field
-function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
+export function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
   const rows = xlsx.utils.sheet_to_json(sheet, {
     header: 1,
     defval: "",
@@ -808,7 +819,7 @@ async function syncToSql(csvData: any) {
   }
 }
 
-function handleTypes(newRow: Row) {
+export function handleTypes(newRow: Row) {
   const columnKeys = activeColumnNames() as Array<keyof typeof allColumns>;
 
   return Object.fromEntries(
@@ -916,7 +927,7 @@ function scrubBogusDateBleed(r: Row): Row {
   return out;
 }
 
-function ensureNotNull(newRow: Row) {
+export function ensureNotNull(newRow: Row) {
   const nonNulls = Object.values(allColumns).filter(
     (col) =>
       (newRow[col.name] === null || newRow[col.name] === undefined) &&
@@ -927,8 +938,10 @@ function ensureNotNull(newRow: Row) {
       // @ts-expect-error these types confuse ts
       newRow[name] = false;
     } else if (type.includes("VARCHAR")) {
-      // @ts-expect-error these types confuse ts
-      newRow[name] = "";
+      if (newRow[name] === undefined) {
+        // leave undefined so MERGE preserves target value
+        continue;
+      }
     } else if (type.includes("DECIMAL")) {
       // @ts-expect-error these types confuse ts
       newRow[name] = 0;
@@ -2541,7 +2554,7 @@ const allColumns: Record<keyof Row, Column> = {
   },
 };
 
-interface Row {
+export interface Row {
   Id: string;
   "Incident ID": string;
   "Incident Type": string;
@@ -3206,3 +3219,4 @@ if (process.argv[2] === "report-unmapped-csv") {
     process.exitCode = 1;
   });
 }
+
