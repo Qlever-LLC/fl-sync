@@ -778,9 +778,22 @@ async function syncToSql(csvData: any) {
 
     const request = new sql.Request();
 
+    // Guard: never send NULL/undefined to NOT NULL columns. Apply typed defaults if needed.
+    const paramValues = columnNames.map((key) => {
+      const col = allColumns[key];
+      let v = newRow[key];
+      if ((v === null || v === undefined) && !col.allowNull) {
+        if (col.type === "BIT") v = false;
+        else if (col.type.includes("VARCHAR")) v = "";
+        else if (col.type.includes("DECIMAL")) v = 0;
+        else if (col.type.includes("DATE")) v = newRow["Created At"]; // aligns with ensureNotNull semantics
+      }
+      return v;
+    });
+
     const selectString = columnNames
       .map((key, index) => {
-        request.input(`val${index}`, newRow[key]);
+        request.input(`val${index}`, paramValues[index]);
         return `@val${index} AS [${key}]`;
       })
       .join(",");
