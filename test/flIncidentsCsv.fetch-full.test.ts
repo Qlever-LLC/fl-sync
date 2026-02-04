@@ -22,41 +22,44 @@ import sql from "mssql";
 
 // Use the project's config (compiled) so env-driven values are honored
 import config from "../dist/config.js";
-const FL_TOKEN = config.get("foodlogiq.token");
-const FL_DOMAIN = config.get("foodlogiq.domain");
-const CO_ID = config.get("foodlogiq.community.owner.id");
 
-// If required env/config is missing, skip rather than failing
+// Convict's deep config typing can overwhelm TS in tests; use an untyped view.
+const cfg = config as any;
+const FL_TOKEN = cfg.get("foodlogiq.token");
+const FL_DOMAIN = cfg.get("foodlogiq.domain");
+const CO_ID = cfg.get("foodlogiq.community.owner.id");
+
 if (!FL_TOKEN || !FL_DOMAIN || !CO_ID) {
-  test.skip("fetch full payload test skipped: missing FL config (FL_TOKEN/FL_DOMAIN/CO_ID)");
+  test.skip("flIncidentsCsv fetch full payload (skipped: missing FL config)", (t) => {
+    t.pass();
+  });
+} else {
+  // Dynamically import after reading config
+  const { fetchIncidentsCsv } = await import("../dist/flIncidentsCsv.js");
+
+  // Stub MSSQL so no real DB activity occurs
+  class NoopRequest {
+    input() {
+      return this;
+    }
+    async query() {
+      return { rowsAffected: [0] } as any;
+    }
+  }
+  sql.connect = (async () => undefined) as any;
+  sql.Request = NoopRequest as any;
+
+  // Narrow window by default to keep runtime reasonable but still "full payload" from API
+  const endTime = "";
+  const startTime = "2024-04-14T00:00:00.000Z..";
+
+  test("flIncidentsCsv fetches real payload and parses with xlsx without DB writes", async (t) => {
+    t.timeout(10 * 60_000); // up to 10 minutes for network + parsing
+
+    // Run the fetch + parse path; DB calls are no-ops
+    await fetchIncidentsCsv({ startTime, endTime });
+
+    // If we reached here without throwing, the fetch + xlsx parse path worked.
+    t.pass();
+  });
 }
-
-// Dynamically import after reading config
-const { fetchIncidentsCsv } = await import("../dist/flIncidentsCsv.js");
-
-// Stub MSSQL so no real DB activity occurs
-class NoopRequest {
-  input() { return this; }
-  async query() { return { rowsAffected: [0] } as any; }
-}
-// @ts-expect-error override for test
-sql.connect = async () => undefined as any;
-// @ts-expect-error override for test
-sql.Request = NoopRequest as any;
-
-// Helper to ISO string
-function iso(d: Date) { return d.toISOString(); }
-
-// Narrow window by default to keep runtime reasonable but still "full payload" from API
-const endTime = '';
-const startTime = '2024-04-14T00:00:00.000Z..'
-
-test("flIncidentsCsv fetches real payload and parses with xlsx without DB writes", async (t) => {
-  t.timeout(10 * 60_000); // up to 10 minutes for network + parsing
-
-  // Run the fetch + parse path; DB calls are no-ops
-  await fetchIncidentsCsv({ startTime, endTime });
-
-  // If we reached here without throwing, the fetch + xlsx parse path worked.
-  t.pass();
-});

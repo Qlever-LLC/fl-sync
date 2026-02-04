@@ -27,6 +27,7 @@ Id is not stable over time.
 
 */
 
+import { promises as fs, readFileSync } from "node:fs";
 import type { OADAClient } from "@oada/client";
 import { poll } from "@oada/poll";
 import dayjs, { type Dayjs } from "dayjs";
@@ -34,15 +35,14 @@ import customParseFormat from "dayjs/plugin/customParseFormat.js";
 import debug from "debug";
 import sql from "mssql";
 import xlsx from "xlsx";
-import { promises as fs } from "node:fs";
-import { readFileSync } from "node:fs";
 
 dayjs.extend(customParseFormat);
 
 // ----- SQL column whitelist (from existing SQL dump CSV) -----
 // Set SQL_COLUMNS_CSV to point at a representative SQL export whose headers are the
 // source of truth for existing columns. Default to a commonly named local file.
-const SQL_COLUMNS_CSV = process.env.SQL_COLUMNS_CSV ?? "./incident-sql-dump-2025-12-10.csv";
+const SQL_COLUMNS_CSV =
+  process.env.SQL_COLUMNS_CSV ?? "./incident-sql-dump-2025-12-10.csv";
 let sqlColumnWhitelist: Set<string> | null = null;
 function getSqlColumnWhitelist(): Set<string> {
   if (sqlColumnWhitelist) return sqlColumnWhitelist;
@@ -52,9 +52,17 @@ function getSqlColumnWhitelist(): Set<string> {
     const sheetname = wb.SheetNames[0];
     if (!sheetname) throw new Error("no sheet");
     const sheet = wb.Sheets[sheetname];
-    const rows = xlsx.utils.sheet_to_json(sheet as xlsx.WorkSheet, { header: 1, defval: "", raw: false }) as any[][];
+    const rows = xlsx.utils.sheet_to_json(sheet as xlsx.WorkSheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+    }) as any[][];
     const headers = (rows?.[0] as string[] | undefined) ?? [];
-    sqlColumnWhitelist = new Set(headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim())));
+    sqlColumnWhitelist = new Set(
+      headers.map((h) =>
+        typeof h === "string" ? h.trim() : String(h ?? "").trim(),
+      ),
+    );
   } catch {
     // Fallback: allow all columns if the CSV isn’t present
     sqlColumnWhitelist = new Set(Object.keys(allColumns).map(String));
@@ -71,11 +79,14 @@ function activeColumns(): Column[] {
 }
 
 function activeColumnNames(): Array<keyof Row> {
-  return activeColumns().map((c) => c.name).sort() as Array<keyof Row>;
+  return activeColumns()
+    .map((c) => c.name)
+    .sort() as Array<keyof Row>;
 }
 
 // ----- User-approved mapping overrides (CSV-driven) -----
-const MAPPINGS_CSV = process.env.MAPPINGS_CSV ?? "./proposed-mappings-2025-12-20.csv";
+const MAPPINGS_CSV =
+  process.env.MAPPINGS_CSV ?? "./proposed-mappings-2025-12-20.csv";
 let userMappings: Array<{ from: string; to: string }> | null = null;
 function getUserMappings(): Array<{ from: string; to: string }> {
   if (userMappings) return userMappings;
@@ -132,15 +143,23 @@ const info = debug("fl-sync-incidents:info");
 const trace = debug("fl-sync-incidents:trace");
 
 // Normalize the configured table identifier and extract schema-qualified and bare names
-function getTableIdentifiers(raw: unknown): { full: string; name: string; schema: string } {
+function getTableIdentifiers(raw: unknown): {
+  full: string;
+  name: string;
+  schema: string;
+} {
   // Defaults when not configured
   const DEFAULT_SCHEMA = "dbo";
   const DEFAULT_TABLE = "incidents";
 
-  let s = String(raw ?? "").trim();
+  const s = String(raw ?? "").trim();
   if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
     // Fall back to default schema-qualified table
-    return { full: `[${DEFAULT_SCHEMA}].[${DEFAULT_TABLE}]`, name: DEFAULT_TABLE, schema: DEFAULT_SCHEMA };
+    return {
+      full: `[${DEFAULT_SCHEMA}].[${DEFAULT_TABLE}]`,
+      name: DEFAULT_TABLE,
+      schema: DEFAULT_SCHEMA,
+    };
   }
 
   // Remove surrounding brackets if present for robust splitting
@@ -148,7 +167,9 @@ function getTableIdentifiers(raw: unknown): { full: string; name: string; schema
 
   if (s.includes(".")) {
     // Handle schema-qualified forms, possibly with brackets: dbo.table or [dbo].[table]
-    const parts = s.split(".").map((p) => unbracket(p.replace(/^\[(.*)\]$/, "$1")));
+    const parts = s
+      .split(".")
+      .map((p) => unbracket(p.replace(/^\[(.*)\]$/, "$1")));
     const schema = parts[0] || DEFAULT_SCHEMA;
     const name = parts[parts.length - 1] || DEFAULT_TABLE;
     return { full: `[${schema}].[${name}]`, name, schema };
@@ -241,7 +262,10 @@ export async function fetchIncidentsCsv({
     }
   } catch (err: any) {
     // Gracefully handle request abort/timeout
-    const isAbort = err?.name === "AbortError" || err?.code === "ABORT_ERR" || err?.message?.toLowerCase?.().includes("aborted");
+    const isAbort =
+      err?.name === "AbortError" ||
+      err?.code === "ABORT_ERR" ||
+      err?.message?.toLowerCase?.().includes("aborted");
     if (isAbort || ac.signal.aborted) {
       info(`Incidents CSV request timed out after ${REQUEST_TIMEOUT_MS} ms`);
       return; // Do not throw; allow poll loop to continue
@@ -294,7 +318,8 @@ export async function startIncidents(connection: OADAClient) {
 export async function ensureTable() {
   const { full: tableFull, name: tname, schema } = getTableIdentifiers(table);
   // Check for existence in the intended schema only
-  const tables = await sql.query`select TABLE_SCHEMA, TABLE_NAME from INFORMATION_SCHEMA.TABLES where TABLE_NAME = ${tname} and TABLE_SCHEMA = ${schema}`;
+  const tables =
+    await sql.query`select TABLE_SCHEMA, TABLE_NAME from INFORMATION_SCHEMA.TABLES where TABLE_NAME = ${tname} and TABLE_SCHEMA = ${schema}`;
   const exists = tables.recordset.length > 0;
 
   if (!exists) {
@@ -316,7 +341,8 @@ export async function ensureColumns() {
   const { full: tableFull, name: tname, schema } = getTableIdentifiers(table);
 
   // Query existing columns for the intended schema only
-  const cols = await sql.query`select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = ${tname} and TABLE_SCHEMA = ${schema}`;
+  const cols =
+    await sql.query`select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = ${tname} and TABLE_SCHEMA = ${schema}`;
   const existing = new Set(
     cols.recordset.map((r: any) => String(r.COLUMN_NAME).toLowerCase()),
   );
@@ -363,21 +389,19 @@ function checkSlashThings(row: Row) {
     "date of delivery": "delivery date",
     date: "delivery date", // treat bare "Date" as the delivery date bucket
   };
-  const normToken = (t: string) => tokenSynonyms[t.trim().toLowerCase()] ?? t.trim().toLowerCase();
+  const normToken = (t: string) =>
+    tokenSynonyms[t.trim().toLowerCase()] ?? t.trim().toLowerCase();
 
-  const matches = (Object.keys(allColumns) as Array<keyof typeof allColumns>)
-    .filter((key) => pattern.test(key) && isSqlColumn(String(key)));
+  const matches = (
+    Object.keys(allColumns) as Array<keyof typeof allColumns>
+  ).filter((key) => pattern.test(key) && isSqlColumn(String(key)));
 
   const keys = Object.keys(row).filter(
     (key): key is keyof Row => !(key in allColumns) && pattern.test(key),
   );
   for (const key of keys) {
     const parts = key.split(" (");
-    const set = parts[1]!
-      .replace(/\)$/, "")
-      .split("/")
-      .map(normToken)
-      .sort();
+    const set = parts[1]!.replace(/\)$/, "").split("/").map(normToken).sort();
 
     for (const col of matches) {
       const cParts = col.split(" (");
@@ -386,7 +410,9 @@ function checkSlashThings(row: Row) {
         .split("/")
         .map(normToken)
         .sort();
-      const same = cSet.length === set.length && cSet.every((item, index) => set[index] === item);
+      const same =
+        cSet.length === set.length &&
+        cSet.every((item, index) => set[index] === item);
       if (same) {
         // @ts-expect-error dynamic indexing from CSV header
         row[col] = row[key];
@@ -430,7 +456,10 @@ function normalizeParenVariantsScoped(row: Row) {
   const pattern = / \((?:[^()/]+\/)+[^()/]+\)$/;
 
   // Build registry of canonical columns from our schema grouped by base name
-  const registry: Record<string, Array<{ key: keyof Row; tokens: string[] }>> = {};
+  const registry: Record<
+    string,
+    Array<{ key: keyof Row; tokens: string[] }>
+  > = {};
   for (const k of activeColumnNames() as Array<keyof Row>) {
     const name = String(k);
     if (!pattern.test(name)) continue;
@@ -452,7 +481,7 @@ function normalizeParenVariantsScoped(row: Row) {
   };
 
   const norm = (base: string, t: string) =>
-    (perBaseSynonyms[base]?.[t.trim().toLowerCase()] ?? t.trim().toLowerCase());
+    perBaseSynonyms[base]?.[t.trim().toLowerCase()] ?? t.trim().toLowerCase();
 
   for (const key of Object.keys(row)) {
     if ((key as keyof Row) in allColumns) continue; // already canonical
@@ -488,7 +517,11 @@ function normalizeParenVariantsScoped(row: Row) {
       if (isSuperset) {
         const extra = canTokens.length - obsTokens.length;
         const score = obsTokens.length; // prefer minimal extra
-        if (!best || best.score < score || (best.score === score && extra < best.extra)) {
+        if (
+          !best ||
+          best.score < score ||
+          (best.score === score && extra < best.extra)
+        ) {
           best = { key: c.key, score, extra };
         }
         continue;
@@ -498,7 +531,11 @@ function normalizeParenVariantsScoped(row: Row) {
       const overlap = [...setObs].filter((t) => setCan.has(t)).length;
       if (overlap > 0) {
         if (!best || overlap > best.score) {
-          best = { key: c.key, score: overlap, extra: Number.POSITIVE_INFINITY };
+          best = {
+            key: c.key,
+            score: overlap,
+            extra: Number.POSITIVE_INFINITY,
+          };
         }
       }
     }
@@ -513,7 +550,8 @@ function normalizeParenVariantsScoped(row: Row) {
         }
         // If this is a distributor variant, also populate the consolidated Receiver column
         if (base === "distributor") {
-          const receiverKey = "distributor (Shipment Originator/Receiver)" as keyof Row;
+          const receiverKey =
+            "distributor (Shipment Originator/Receiver)" as keyof Row;
           if (isSqlColumn(String(receiverKey))) {
             // @ts-expect-error dynamic indexing
             row[receiverKey] ??= v;
@@ -521,12 +559,15 @@ function normalizeParenVariantsScoped(row: Row) {
         }
         // If this is a location variant, also populate both long and short targets
         if (base === "location") {
-          const tokenStr = String(key.slice(key.indexOf("(") + 1, -1)).toLowerCase();
+          const tokenStr = String(
+            key.slice(key.indexOf("(") + 1, -1),
+          ).toLowerCase();
           const isGLN = tokenStr.includes("gln");
           if (isGLN) {
             const longGLN =
               "location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)" as keyof Row;
-            const shortGLN = "location (My Location GLN/Location GLN)" as keyof Row;
+            const shortGLN =
+              "location (My Location GLN/Location GLN)" as keyof Row;
             if (isSqlColumn(String(longGLN))) {
               // @ts-expect-error dynamic indexing
               row[longGLN] ??= v;
@@ -538,7 +579,8 @@ function normalizeParenVariantsScoped(row: Row) {
           } else {
             const longName =
               "location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)" as keyof Row;
-            const shortName = "location (My Location Name/Location Name)" as keyof Row;
+            const shortName =
+              "location (My Location Name/Location Name)" as keyof Row;
             if (isSqlColumn(String(longName))) {
               // @ts-expect-error dynamic indexing
               row[longName] ??= v;
@@ -559,6 +601,7 @@ function normalizeParenVariantsScoped(row: Row) {
 }
 
 export function handleSchemaChanges(row: Row) {
+  row = applyKnownHeaderAliases(row);
   row = checkSlashThings(row);
   row = normalizeParenVariantsScoped(row);
   row = applyUserMappings(row);
@@ -594,7 +637,8 @@ export function handleSchemaChanges(row: Row) {
 
   // Identity-case duplication: ensure preferred targets also get populated
   // Distributor: always also write to (Shipment Originator/Receiver)
-  const distReceiver = "distributor (Shipment Originator/Receiver)" as keyof Row;
+  const distReceiver =
+    "distributor (Shipment Originator/Receiver)" as keyof Row;
   for (const k of Object.keys(row) as Array<keyof Row>) {
     if (String(k).startsWith("distributor (")) {
       if (isSqlColumn(String(distReceiver))) {
@@ -635,6 +679,60 @@ export function handleSchemaChanges(row: Row) {
     // @ts-expect-error dynamic indexing
     row[shortGLN] ??= row[longGLN];
   }
+
+  return row;
+}
+
+// Map known FoodLogiQ header variants (esp. short-window exports) into the
+// canonical column names we persist to SQL.
+function applyKnownHeaderAliases(row: Row): Row {
+  const r = row as unknown as Record<string, unknown>;
+
+  const isEmpty = (v: unknown) =>
+    v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+
+  const setIfEmpty = (dest: string, value: unknown) => {
+    if (isEmpty(value)) return;
+    if (isEmpty(r[dest])) r[dest] = value;
+  };
+
+  const moveIfEmpty = (src: string, dests: string[]) => {
+    const v = r[src];
+    if (isEmpty(v)) return;
+    for (const d of dests) setIfEmpty(d, v);
+    if (!noDelete.has(src as keyof Row)) delete r[src];
+  };
+
+  // Canonical SQL-persisted columns
+  const LONG_NAME =
+    "location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)";
+  const LONG_GLN =
+    "location (Location GLN/Shop Name GLN/Restaurant Reporting Complaint GLN/My Location GLN)";
+  const SHORT_NAME = "location (My Location Name/Location Name)";
+  const SHORT_GLN = "location (My Location GLN/Location GLN)";
+  const DIST_PERSIST =
+    "distributor (Distribution Center/Distributor/Shipment Originator/Smithfield Plant)";
+  const INCIDENT_DATE_CANON =
+    "incidentDate (Incident Date/Date of Delivery/Delivery Date)";
+
+  // Short-window exports (flat headers)
+  moveIfEmpty("My Location Name", [SHORT_NAME, LONG_NAME]);
+  moveIfEmpty("My Location GLN", [SHORT_GLN, LONG_GLN]);
+  moveIfEmpty("Shipment Originator", [DIST_PERSIST]);
+  moveIfEmpty("Incident Date", [INCIDENT_DATE_CANON]);
+
+  // Other observed flat variants
+  moveIfEmpty("Location Name", [SHORT_NAME, LONG_NAME]);
+  moveIfEmpty("Location GLN", [SHORT_GLN, LONG_GLN]);
+
+  // Long-window exports (paren variants) should already normalize via
+  // normalizeParenVariantsScoped + the location/distributor duplication logic,
+  // but keep these deterministic if upstream changes token ordering.
+  moveIfEmpty("location (My Location Name/Location Name)", [LONG_NAME]);
+  moveIfEmpty("location (My Location GLN/Location GLN)", [LONG_GLN]);
+  moveIfEmpty("distributor (Shipment Originator/Smithfield Plant/Receiver)", [
+    DIST_PERSIST,
+  ]);
 
   return row;
 }
@@ -699,7 +797,8 @@ export function normalizeCsvData(sheet: xlsx.WorkSheet): any[] {
 
     for (let c = 0; c < headers.length; c++) {
       const hRaw = headers[c];
-      const h = typeof hRaw === "string" ? hRaw.trim() : String(hRaw ?? "").trim();
+      const h =
+        typeof hRaw === "string" ? hRaw.trim() : String(hRaw ?? "").trim();
       if (!h) continue;
       const v = cleanCell(row[c]);
 
@@ -932,7 +1031,10 @@ function scrubBogusDateBleed(r: Row): Row {
         // Likely an accidental backfill; clear it so typing/not-null logic handles it appropriately
         // @ts-expect-error row is a mixed type record
         out[k] = undefined;
-        trace({ column: String(k), clearedValue: v }, "Cleared bogus date in non-date column");
+        trace(
+          { column: String(k), clearedValue: v },
+          "Cleared bogus date in non-date column",
+        );
       }
     }
   }
@@ -952,8 +1054,6 @@ export function ensureNotNull(newRow: Row) {
       newRow[name] = false;
     } else if (type.includes("VARCHAR")) {
       if (newRow[name] === undefined) {
-        // leave undefined so MERGE preserves target value
-        continue;
       }
     } else if (type.includes("DECIMAL")) {
       // @ts-expect-error these types confuse ts
@@ -2405,11 +2505,12 @@ const allColumns: Record<keyof Row, Column> = {
     type: "VARCHAR(max)",
     allowNull: true,
   },
-  "Product Type (Non-Meat Ingredients, Product Contact Packaging - Plastic, Product Contact Packaging - Non-Plastic, Wood Chips)": {
-    name: "Product Type (Non-Meat Ingredients, Product Contact Packaging - Plastic, Product Contact Packaging - Non-Plastic, Wood Chips)",
-    type: "VARCHAR(max)",
-    allowNull: true,
-  },
+  "Product Type (Non-Meat Ingredients, Product Contact Packaging - Plastic, Product Contact Packaging - Non-Plastic, Wood Chips)":
+    {
+      name: "Product Type (Non-Meat Ingredients, Product Contact Packaging - Plastic, Product Contact Packaging - Non-Plastic, Wood Chips)",
+      type: "VARCHAR(max)",
+      allowNull: true,
+    },
   "Incident Photos": {
     name: "Incident Photos",
     type: "BIT",
@@ -2916,7 +3017,9 @@ export async function processIncidentsFile(inputPath: string, outPath: string) {
     outRows.push(outObj);
   }
 
-  const ws = xlsx.utils.json_to_sheet(outRows, { header: (activeColumnNames() as string[]) });
+  const ws = xlsx.utils.json_to_sheet(outRows, {
+    header: activeColumnNames() as string[],
+  });
   const outCsv = xlsx.utils.sheet_to_csv(ws);
   await fs.writeFile(outPath, outCsv, "utf-8");
 }
@@ -2946,11 +3049,17 @@ export async function explainHeadersFile(inputPath: string) {
   const sheet = wb.Sheets[String(sheetname)];
   if (!sheet) throw new Error("First sheet missing");
 
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  const rows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as any[][];
   if (!rows || rows.length < 1) throw new Error("No rows");
   const headers = rows[0] as string[];
 
-  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+  const inputHeaders = headers.map((h) =>
+    typeof h === "string" ? h.trim() : String(h ?? "").trim(),
+  );
 
   const mapping: Array<{ from: string; to: string[] }> = [];
   const targets = new Set(activeColumnNames().map(String));
@@ -2964,7 +3073,8 @@ export async function explainHeadersFile(inputPath: string) {
     // Candidate outputs are any keys in allColumns whose value equals token
     const outs: string[] = [];
     for (const k of activeColumnNames() as Array<keyof Row>) {
-      if ((after as any)[k] === token && targets.has(String(k))) outs.push(String(k));
+      if ((after as any)[k] === token && targets.has(String(k)))
+        outs.push(String(k));
     }
     // Skip identity (no change) unless there are additional outputs besides the same header
     const changed = outs.filter((o) => o !== h);
@@ -2995,10 +3105,16 @@ export async function reportUnmappedInputHeadersFile(inputPath: string) {
   const sheet = wb.Sheets[String(sheetname)];
   if (!sheet) throw new Error("First sheet missing");
 
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  const rows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as any[][];
   if (!rows || rows.length < 1) throw new Error("No rows");
   const headers = rows[0] as string[];
-  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+  const inputHeaders = headers.map((h) =>
+    typeof h === "string" ? h.trim() : String(h ?? "").trim(),
+  );
 
   const unmapped: string[] = [];
   const targets = new Set(activeColumnNames().map(String));
@@ -3041,10 +3157,16 @@ export async function proposedMappingsCsv(inputPath: string) {
   const sheet = wb.Sheets[String(sheetname)];
   if (!sheet) throw new Error("First sheet missing");
 
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  const rows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as any[][];
   if (!rows || rows.length < 1) throw new Error("No rows");
   const headers = rows[0] as string[];
-  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+  const inputHeaders = headers.map((h) =>
+    typeof h === "string" ? h.trim() : String(h ?? "").trim(),
+  );
 
   // Proposed map (only include targets that we know exist in SQL)
   const M: Record<string, string> = {
@@ -3057,7 +3179,8 @@ export async function proposedMappingsCsv(inputPath: string) {
     "Claim Comments": "Comments",
     "Claim Documentation": "Supporting Document",
     "Claim Reviewed": "Buyer Final Review",
-    "Is the related incident linked on the right side of the screen?": "Incident Acknowledged?",
+    "Is the related incident linked on the right side of the screen?":
+      "Incident Acknowledged?",
     "Buyer Claim Comments": "Buyer Final Review Comments",
     "Information Needed": "Review and Action Comments",
     "Acknowledge claim and begin processing": "Review and Action Comments",
@@ -3109,10 +3232,16 @@ export async function fullMappingCsv(inputPath: string) {
   const sheet = wb.Sheets[String(sheetname)];
   if (!sheet) throw new Error("First sheet missing");
 
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  const rows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as any[][];
   if (!rows || rows.length < 1) throw new Error("No rows");
   const headers = rows[0] as string[];
-  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+  const inputHeaders = headers.map((h) =>
+    typeof h === "string" ? h.trim() : String(h ?? "").trim(),
+  );
 
   const targets = new Set(activeColumnNames().map(String));
   const records: Array<{ From: string; To: string }> = [];
@@ -3125,7 +3254,8 @@ export async function fullMappingCsv(inputPath: string) {
     const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
     const outs: string[] = [];
     for (const k of activeColumnNames() as Array<keyof Row>) {
-      if ((after as any)[k] === token && targets.has(String(k))) outs.push(String(k));
+      if ((after as any)[k] === token && targets.has(String(k)))
+        outs.push(String(k));
     }
     records.push({ From: h, To: outs.join(" | ") });
   }
@@ -3154,10 +3284,16 @@ export async function reportUnmappedColumnsFile(inputPath: string) {
   const sheet = wb.Sheets[String(sheetname)];
   if (!sheet) throw new Error("First sheet missing");
 
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  const rows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as any[][];
   if (!rows || rows.length < 1) throw new Error("No rows");
   const headers = rows[0] as string[];
-  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+  const inputHeaders = headers.map((h) =>
+    typeof h === "string" ? h.trim() : String(h ?? "").trim(),
+  );
 
   const covered = new Set<string>();
   const targets = new Set(activeColumnNames().map(String));
@@ -3168,12 +3304,15 @@ export async function reportUnmappedColumnsFile(inputPath: string) {
     testRow[h] = token;
     const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
     for (const k of activeColumnNames() as Array<keyof Row>) {
-      if ((after as any)[k] === token && targets.has(String(k))) covered.add(String(k));
+      if ((after as any)[k] === token && targets.has(String(k)))
+        covered.add(String(k));
     }
   }
 
   const all = new Set(activeColumnNames().map(String));
-  const unmapped = [...all].filter((k) => !covered.has(k)).sort((a, b) => a.localeCompare(b));
+  const unmapped = [...all]
+    .filter((k) => !covered.has(k))
+    .sort((a, b) => a.localeCompare(b));
   // eslint-disable-next-line no-console
   console.log(JSON.stringify(unmapped, null, 2));
 }
@@ -3196,10 +3335,16 @@ export async function reportUnmappedColumnsCsvFile(inputPath: string) {
   const sheet = wb.Sheets[String(sheetname)];
   if (!sheet) throw new Error("First sheet missing");
 
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as any[][];
+  const rows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as any[][];
   if (!rows || rows.length < 1) throw new Error("No rows");
   const headers = rows[0] as string[];
-  const inputHeaders = headers.map((h) => (typeof h === "string" ? h.trim() : String(h ?? "").trim()));
+  const inputHeaders = headers.map((h) =>
+    typeof h === "string" ? h.trim() : String(h ?? "").trim(),
+  );
 
   const covered = new Set<string>();
   const targets = new Set(activeColumnNames().map(String));
@@ -3210,15 +3355,22 @@ export async function reportUnmappedColumnsCsvFile(inputPath: string) {
     testRow[h] = token;
     const after = handleSchemaChanges({ ...(testRow as Row) } as Row);
     for (const k of activeColumnNames() as Array<keyof Row>) {
-      if ((after as any)[k] === token && targets.has(String(k))) covered.add(String(k));
+      if ((after as any)[k] === token && targets.has(String(k)))
+        covered.add(String(k));
     }
   }
 
   const records = activeColumns()
     .filter((c) => !covered.has(String(c.name)))
-    .map((c) => ({ Column: String(c.name), Type: c.type, Required: c.allowNull ? "false" : "true" }));
+    .map((c) => ({
+      Column: String(c.name),
+      Type: c.type,
+      Required: c.allowNull ? "false" : "true",
+    }));
 
-  const ws = xlsx.utils.json_to_sheet(records, { header: ["Column", "Type", "Required"] });
+  const ws = xlsx.utils.json_to_sheet(records, {
+    header: ["Column", "Type", "Required"],
+  });
   const csv = xlsx.utils.sheet_to_csv(ws);
   // eslint-disable-next-line no-console
   console.log(csv);
@@ -3232,4 +3384,3 @@ if (process.argv[2] === "report-unmapped-csv") {
     process.exitCode = 1;
   });
 }
-

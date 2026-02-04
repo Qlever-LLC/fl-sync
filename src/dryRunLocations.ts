@@ -1,38 +1,38 @@
-import xlsx from "xlsx";
 import { promises as fs } from "node:fs";
-
+import xlsx from "xlsx";
+import type { Row } from "./flIncidentsCsv.js";
 import {
-  normalizeCsvData,
+  ensureNotNull,
   handleSchemaChanges,
   handleTypes,
-  ensureNotNull,
+  normalizeCsvData,
 } from "./flIncidentsCsv.js"; // adjust path if needed
 
-import type { Row } from "./flIncidentsCsv.js";
-
-const SHORT =
-  "location (My Location Name/Location Name)" as const;
+const SHORT = "location (My Location Name/Location Name)" as const;
 const LONG =
   "location (Location Name/Shop Name Name/Restaurant Reporting Complaint Name/My Location Name)" as const;
 
 async function dryRunFullLocations(
   incomingCsv: string,
   sqlCsv: string,
-  outCsv: string
+  outCsv: string,
 ) {
   const sqlState = await loadSqlSnapshot(sqlCsv);
-  console.log({sqlState})
+  console.log({ sqlState });
 
+  // Match production parsing: use SheetJS + normalizeCsvData
   const incomingText = await fs.readFile(incomingCsv, "utf-8");
-  const incomingRows : Row[] = parse(incomingText, {
-    columns: true,
-    skip_empty_lines: true,
-  });
+  const wb = xlsx.read(incomingText, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in incoming CSV workbook");
+  const sheet = wb.Sheets[sheetname];
+  if (!sheet) throw new Error("Missing sheet in incoming CSV workbook");
+  const incomingRows = normalizeCsvData(sheet) as Row[];
 
   const out: Record<string, unknown>[] = [];
 
   for (const row of incomingRows) {
-    const id = row['Incident ID'];
+    const id = row["Incident ID"];
 
     const afterSchema = handleSchemaChanges({ ...row } as Row);
     const afterTypes = handleTypes({ ...afterSchema } as Row);
@@ -40,19 +40,13 @@ async function dryRunFullLocations(
 
     const sql = sqlState.get(id);
 
-    console.log('sql.short', id, sql, sql?.short)
+    console.log("sql.short", id, sql, sql?.short);
     const short_before = sql?.short ?? null;
     const long_before = sql?.long ?? null;
 
-    const short_after = mergeVarchar(
-      afterDefaults[SHORT],
-      short_before
-    );
+    const short_after = mergeVarchar(afterDefaults[SHORT], short_before);
 
-    const long_after = mergeVarchar(
-      afterDefaults[LONG],
-      long_before
-    );
+    const long_after = mergeVarchar(afterDefaults[LONG], long_before);
 
     out.push({
       Id: id,
@@ -60,8 +54,8 @@ async function dryRunFullLocations(
       //the csv writer will probably change js null to "", so let's be
       //more explicit and change null to "null" first. do it here so
       //that the _would_change outputs below are not affected.
-      short_sql_before: short_before === null ? 'null' : short_before,
-      long_sql_before: long_before === null ? 'null' : long_before,
+      short_sql_before: short_before === null ? "null" : short_before,
+      long_sql_before: long_before === null ? "null" : long_before,
 
       short_incoming: afterDefaults[SHORT],
       long_incoming: afterDefaults[LONG],
@@ -74,7 +68,6 @@ async function dryRunFullLocations(
     });
   }
 
-  const xlsx = await import("xlsx");
   const ws = xlsx.utils.json_to_sheet(out);
   const csv = xlsx.utils.sheet_to_csv(ws);
   await fs.writeFile(outCsv, csv, "utf-8");
@@ -96,7 +89,6 @@ function normalizeSqlVarchar(v: unknown): string | null {
 
   return s;
 }
-
 
 /*
 async function dryRunLocations(
@@ -145,8 +137,6 @@ async function dryRunLocations(
 }
 */
 
-import { parse } from "csv-parse/sync";
-
 type SqlRow = {
   Id: string;
   short: string | null;
@@ -154,15 +144,25 @@ type SqlRow = {
 };
 
 async function loadSqlSnapshot(path: string): Promise<Map<string, SqlRow>> {
+  // The SQL dump headers sometimes contain embedded quotes; use SheetJS for robust CSV parsing.
   const text = await fs.readFile(path, "utf-8");
-  const records : Row[] = parse(text, { columns: true, skip_empty_lines: true });
+  const wb = xlsx.read(text, { type: "string", cellDates: true });
+  const sheetname = wb.SheetNames[0];
+  if (!sheetname) throw new Error("No sheet in SQL snapshot workbook");
+  const sheet = wb.Sheets[sheetname];
+  if (!sheet) throw new Error("Missing sheet in SQL snapshot workbook");
+  const records = xlsx.utils.sheet_to_json(sheet, {
+    defval: "",
+    raw: false,
+  }) as Array<Record<string, unknown>>;
 
   const map = new Map<string, SqlRow>();
 
   for (const r of records) {
-    console.log({short: r[SHORT], long: r[LONG]})
-    map.set(r['Incident ID'], {
-      Id: r['Incident ID'],
+    const incidentId = String(r["Incident ID"] ?? "").trim();
+    if (!incidentId) continue;
+    map.set(incidentId, {
+      Id: incidentId,
       short: normalizeSqlVarchar(r[SHORT]),
       long: normalizeSqlVarchar(r[LONG]),
     });
@@ -173,7 +173,7 @@ async function loadSqlSnapshot(path: string): Promise<Map<string, SqlRow>> {
 
 function mergeVarchar(
   incoming: string | undefined,
-  existing: string | null
+  existing: string | null,
 ): string | null {
   // NULLIF(@val, '')
   if (incoming === undefined || incoming === "") {
@@ -184,7 +184,7 @@ function mergeVarchar(
 
 function mergeLikeSql(
   incoming: string | undefined,
-  existing: string | null | undefined
+  existing: string | null | undefined,
 ): string | null | undefined {
   // NULLIF(@incoming, '')
   if (incoming === undefined) return existing;

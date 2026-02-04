@@ -20,7 +20,7 @@
 import { setTimeout } from "node:timers/promises";
 import type { JsonObject, OADAClient } from "@oada/client";
 import { connect } from "@oada/client";
-import type { Job, Logger } from "@oada/jobs";
+import type { Job } from "@oada/jobs";
 import { ListWatch } from "@oada/list-lib";
 import type { TreeKey } from "@oada/types/oada/tree/v1.js";
 import test from "ava";
@@ -32,12 +32,16 @@ import { mostRecentKsuid } from "../dist/report.js";
 import { tree } from "../dist/tree.js";
 import type { JobConfig } from "../dist/types.js";
 
+type Logger = unknown;
+
 // Import {makeTargetJob, sendUpdate} from './dummyTarget.js'
 const TOKEN = process.env.TOKEN ?? ""; // || config.get('trellis.token') || '';
-const DOMAIN = config.get("trellis.domain") || "";
-const SERVICE_NAME = config.get("service.name") as unknown as TreeKey;
+// Convict's deep config typing can overwhelm TS in tests; use an untyped view.
+const cfg = config as any;
+const DOMAIN = cfg.get("trellis.domain") || "";
+const SERVICE_NAME = cfg.get("service.name") as unknown as TreeKey;
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
-const CO_ID = config.get("foodlogiq.community.owner.id");
+const CO_ID = cfg.get("foodlogiq.community.owner.id");
 
 if (SERVICE_NAME && tree?.bookmarks?.services?.["fl-sync"]) {
   tree.bookmarks.services[SERVICE_NAME] = tree.bookmarks.services["fl-sync"];
@@ -126,7 +130,7 @@ test("A job that is started should be resumed on restart of the service", async 
     name: "test coi",
     link: `https://sandbox.foodlogiq.com/businesses/${CO_ID}/documents/detail/634dc117bf1d87000fc4b7ef`,
   };
-  const jobId = await postJob(oada, jobConf, "awaiting-review");
+  const jobId = await (postJob as any)(oada, jobConf, "awaiting-review");
   const jobKey = jobId.replace(/^resources\//, "");
 
   const path = `/${jobId}`;
@@ -142,7 +146,7 @@ test("A job that is started should be resumed on restart of the service", async 
   void handleDocumentJob(job as unknown as Job, {
     oada,
     jobId: jobKey,
-    log: undefined as unknown as Logger,
+    log: undefined as any,
   });
 
   await setTimeout(30_000);
