@@ -70,7 +70,8 @@
       "runtimeExecutable": "yarn",
       "args": [
         "ava",
-        "-T", "60m",
+        "-T",
+        "60m",
         "--serial",
         "--no-worker-threads",
         "--node-arguments=--inspect-brk --enable-source-maps",
