@@ -86,6 +86,41 @@ let TOKEN;
 let CONNECTION: OADAClient;
 const log = pino({ base: { service: SERVICE_NAME } });
 
+async function readFoodLogiqJson(response: Response, url: string) {
+  const body = await response.text();
+  const contentType = response.headers.get("content-type");
+
+  if (!response.ok) {
+    log.error(
+      {
+        status: response.status,
+        statusText: response.statusText,
+        contentType,
+        url,
+        body: body.replaceAll(/\s+/g, " ").slice(0, 500),
+      },
+      "FoodLogiQ returned an unsuccessful response",
+    );
+    return;
+  }
+
+  try {
+    return JSON.parse(body) as any;
+  } catch (cError: unknown) {
+    log.error(
+      {
+        err: cError,
+        status: response.status,
+        statusText: response.statusText,
+        contentType,
+        url,
+        body: body.replaceAll(/\s+/g, " ").slice(0, 500),
+      },
+      "FoodLogiQ returned non-JSON response",
+    );
+  }
+}
+
 async function handleConfigChanges(changes: AsyncIterable<Readonly<Change>>) {
   for await (const change of changes) {
     try {
@@ -247,7 +282,8 @@ export async function fetchCommunityResources({
     method: "get",
     headers: { Authorization: FL_TOKEN },
   });
-  const data = (await response.json()) as any;
+  const data = await readFoodLogiqJson(response, url);
+  if (!data || !Array.isArray(data.pageItems)) return;
   const delay = 0;
 
   // Manually check for changes; Only update the resource if it has changed!
@@ -373,7 +409,8 @@ async function fetchAndSync({
       method: "get",
       headers: { Authorization: FL_TOKEN },
     });
-    const data = (await response.json()) as any;
+    const data = await readFoodLogiqJson(response, url.href);
+    if (!data || !Array.isArray(data.pageItems)) return;
     log.trace(`fetchAndSync fetch ${JSON.stringify(data, undefined, 2)}`);
 
     // Manually check for changes; Only update the resource if it has changed!
