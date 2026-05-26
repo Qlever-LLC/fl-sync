@@ -1127,6 +1127,7 @@ async function handleScrapedResult(
       mirrorid,
       masterid,
       bname,
+      status,
     } = configData as unknown as JobConfig;
 
     // 3. Fetch and validate the fl-mirror against the result
@@ -1280,6 +1281,17 @@ async function handleScrapedResult(
       log.trace(
         `[job ${docJobId}] Skipping assessment for result of type [${flType}] [${type}].`,
       );
+      await postUpdate(
+        CONNECTION,
+        docJobId,
+        `Document validation completed. No assessment required for ${flType}. Finishing document...`,
+        "in-progress",
+      );
+      if (status !== "Approved") {
+        await approveFlDocument(flId, docJobId, log);
+      }
+
+      await finishDocument(docJobId, flId, masterid, "Approved", log);
     }
   } catch (cError: unknown) {
     log.error(cError);
