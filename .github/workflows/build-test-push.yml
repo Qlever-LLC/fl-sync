@@ -26,7 +26,6 @@ jobs:
     permissions: write-all
     uses: qlever-llc/workflows/.github/workflows/build-and-publish-package.yml@master
     secrets:
-      inherit: true
       npm_token: ${{ secrets.NPM_AUTH_TOKEN }}
     with:
       # Remove this line if your tests don't need an OADA instance
@@ -40,7 +39,6 @@ jobs:
     permissions: write-all
     uses: qlever-llc/workflows/.github/workflows/build-and-push-service.yml@master
     secrets:
-      inherit: true
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub_repo: ${{ secrets.DOCKER_REPO }}
       snyk_org: ${{ secrets.SNYK_ORG }}
