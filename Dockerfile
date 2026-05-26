@@ -20,6 +20,8 @@ ARG DIR=/usr/src/app/
 FROM node:${NODE_VER} AS base
 ARG DIR
 
+RUN corepack enable
+
 # Install needed packages
 RUN apk add --no-cache \
   dumb-init

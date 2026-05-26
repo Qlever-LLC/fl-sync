@@ -46,8 +46,8 @@ const docsTree = {
       },
     },
   },
-} as const satisfies Tree;
-export const tree: Tree = {
+} as unknown as Tree;
+export const tree = {
   bookmarks: {
     _type: "application/vnd.oada.bookmarks.1+json",
     _rev: 0,
@@ -173,6 +173,6 @@ export const tree: Tree = {
       shared: docsTree,
     },
   },
-};
+} as unknown as Tree;
 
 export default tree;
