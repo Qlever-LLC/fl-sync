@@ -548,26 +548,6 @@ export async function initialize({
       log.debug("Started fl-sync config handler.");
     }
 
-    // Some queued jobs may depend on the poller to complete, so start it now.
-    if (polling === undefined || polling) {
-      poll({
-        connection: CONNECTION,
-        basePath: SERVICE_PATH,
-        pollOnStartup: true,
-        pollFunc: pollFl,
-        interval: INTERVAL_MS,
-        name: "food-logiq-poll",
-        async getTime() {
-          const { headers } = await fetch(`${FL_DOMAIN}/businesses`, {
-            method: "head",
-            headers: { Authorization: FL_TOKEN },
-          });
-          return headers.get("Date")!;
-        },
-      });
-      log.debug("Started fl-sync poller.");
-    }
-
     // Create the service
     if (mirrorWatch === undefined || mirrorWatch) {
       const svc = new Service({
@@ -614,6 +594,27 @@ export async function initialize({
 
       // Start the things watching to create jobs
       const p = startJobCreator(CONNECTION, log);
+
+      // Start the poller after the job service and mirror watches are attached;
+      // otherwise pollOnStartup can update mirrors before document changes are observed.
+      if (polling === undefined || polling) {
+        poll({
+          connection: CONNECTION,
+          basePath: SERVICE_PATH,
+          pollOnStartup: true,
+          pollFunc: pollFl,
+          interval: INTERVAL_MS,
+          name: "food-logiq-poll",
+          async getTime() {
+            const { headers } = await fetch(`${FL_DOMAIN}/businesses`, {
+              method: "head",
+              headers: { Authorization: FL_TOKEN },
+            });
+            return headers.get("Date")!;
+          },
+        });
+        log.debug("Started fl-sync poller.");
+      }
 
       // Catch errors
       try {
