@@ -1286,22 +1286,18 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
       onNewList: AssumeState.Handled,
     });
 
-    /** TODO: Re-add this after list-lib/client/oada is fixed to dedupe the initial add/change that occurs
-     * This occurs because tree PUT ensures the path first with empty resources, then writes the data, which triggers a change.
-     * The add also comes in with the same or an unpredictable rev because item is fetched after the onAdd is triggered,
-     * thus the _rev won't be the rev at the time it was added.
-     * It'll be the _rev when it was fetched.
-     *
     docsWatch.on(ChangeType.ItemAdded, async ({item, pointer}) => {
       const it = (await item) as JsonObject;
       if (it['food-logiq-mirror']) {
-        queueDocumentJob(it, pointer);
+        log.trace(`ListWatch ItemAdded triggered document queue for ${pointer}`);
+        queueDocumentJob(it, pointer, log);
       }
     });
-    */
+
     docsWatch.on(ChangeType.ItemChanged, async ({ change, item, pointer }) => {
       const ch = await change;
       if (ch.body?.["food-logiq-mirror"]) {
+        log.trace(`ListWatch ItemChanged triggered document queue for ${pointer}`);
         queueDocumentJob((await item) as JsonObject, pointer, log);
       }
     });
