@@ -1760,6 +1760,16 @@ async function queueDocumentJob(
   }
 }
 
+export async function queueMirroredDocumentJob(
+  conn: OADAClient,
+  fullData: JsonObject,
+  path: string,
+  log: Logger,
+) {
+  setConnection(conn);
+  await queueDocumentJob(fullData, path, log);
+}
+
 export function isObj(thing: any): thing is JsonObject {
   return (
     typeof thing === "object" &&

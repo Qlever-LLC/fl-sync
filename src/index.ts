@@ -27,6 +27,7 @@ import type { Change, JsonObject, OADAClient } from "@oada/client";
 import {
   handleAssessmentJob,
   handleDocumentJob,
+  queueMirroredDocumentJob,
   startJobCreator,
 } from "./mirrorWatch.js";
 import {
@@ -234,6 +235,16 @@ export async function handleItem(
       log.debug(
         `Document synced to mirror: type:${type} _id:${item._id} bid:${bid}`,
       );
+      if (type === "documents") {
+        const conn = CONNECTION || oada;
+        const { data } = (await conn.get({ path })) as { data: JsonObject };
+        await queueMirroredDocumentJob(
+          conn,
+          data,
+          `/${bid}/${type}/${item._id}`,
+          log,
+        );
+      }
     }
 
     return true;
