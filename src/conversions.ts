@@ -32,6 +32,7 @@ export function fromOadaType(type: string) {
 export async function flToTrellis(flDocument: FlObject) {
   const flDocumentType = flDocument.shareSource.type
     .name as keyof typeof conversions;
+  const conversion = fromName(flDocumentType) ?? conversions.Unidentified;
   const document: any = {};
 
   for (const key of Object.keys(shareSpecificAttributes).filter(
@@ -95,8 +96,8 @@ export async function flToTrellis(flDocument: FlObject) {
 
   return {
     document,
-    docType: fromName(flDocumentType).type,
-    urlName: fromName(flDocumentType).urlName,
+    docType: conversion.type,
+    urlName: conversion.urlName,
   };
 }
 

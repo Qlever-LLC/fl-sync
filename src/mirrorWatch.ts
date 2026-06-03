@@ -129,12 +129,7 @@ const fTypes = {
   "Business License": { assessments: false },
   COA: { assessments: false },
   "California Prop 65 Statement": { assessments: false },
-  /*'Certificate of Insurance': {
-    assessments: {
-      'Certificate of Insurance (COI) Requirements': ASSESSMENT_TEMPLATE_ID,
-    },
-  },
-  */
+  "Certificate of Insurance": { assessments: false },
   "Co-Pack Confidentiality Agreement Form": { assessments: false },
   "Co-Packer FSQA Questionnaire (GFSI Certified)": { assessments: false },
   "Co-Packer FSQA Questionnaire (Non-GFSI Certified)": { assessments: false },
@@ -263,14 +258,11 @@ async function handleTargetStatus(
           `[job ${docJobId}] Target job ${targetJob._id} errored. reject: ${reject}; fl-sync job error ${jobError}`,
         );
 
-        // @ts-expect-error
-        if (reject && rejectable[indexConfig.type])
-          await rejectFlDocument(
-            docJob.config.key,
-            docJobId,
-            log,
-            errorMessage,
+        if (reject) {
+          log.warn(
+            `[job ${docJobId}] Target failure was rejectable, but automatic rejection is disabled.`,
           );
+        }
         if (jobError)
           endJob(docJobId, log, new JobError(errorMessage, jobError));
       }
@@ -280,39 +272,6 @@ async function handleTargetStatus(
       endJob(docJobId, log, new JobError(errorMessage, "target-other"));
   }
 }
-
-/**
- * Approves fl document associated with an assessment
- * @param {*} documentId
- */
-async function approveFlDocument(
-  documentId: string,
-  jobId: string,
-  log: Logger,
-) {
-  log.debug(`[job ${jobId}] Approving associated FL Doc ${documentId}`);
-  try {
-    await fetch(
-      `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
-      {
-        method: "put",
-        headers: { Authorization: FL_TOKEN },
-        body: JSON.stringify({
-          status: "Approved",
-          comment: "",
-          visibleForSupplier: false,
-        }),
-      },
-    );
-  } catch (error_: unknown) {
-    throw new Error("Approval request failed", { cause: error_ });
-  }
-
-  await CONNECTION.put({
-    path: `/${jobId}`,
-    data: { "foodlogiq-result-status": "Approved" },
-  });
-} // ApproveFlDoc
 
 /**
  * handles queued assessment-type jobs.
@@ -752,6 +711,13 @@ export const handleDocumentJob: WorkerFunction = async (
 
     if (!item || !isObj(item)) throw new Error("Bad FlObject");
 
+    if (!masterid) {
+      const message = `Missing trading partner masterid for FoodLogiQ business [${bid}] document [${key}].`;
+      log.error(`[job ${jobId}] ${message}`);
+      await postUpdate(oada, jobId, message, "missing-masterid");
+      throw new JobError(message, "missing-masterid");
+    }
+
     // Save the document job
     return await new Promise(async (resolve, reject) => {
       flSyncJobs.set(jobId, {
@@ -781,20 +747,9 @@ export const handleDocumentJob: WorkerFunction = async (
           [multipleFilesErrorMessage, attachmentsErrorMessage].includes(message)
         ) {
           log.error(JobError, "error type");
-          if (indexConfig["allow-rejection"] !== false) {
-            try {
-              // @ts-expect-error
-              if (flType && rejectable[flType])
-                await rejectFlDocument(item!._id, jobId, log, message);
-            } catch (error: unknown) {
-              log.warn(
-                error,
-                `Caught in rejectFlDocument, likely because this document id:${
-                  item!._id
-                } no longer exists in FL.`,
-              );
-            }
-          }
+          log.warn(
+            `[job ${jobId}] Automatic rejection is disabled. Leaving FoodLogiQ document ${item!._id} unchanged.`,
+          );
           // Now let it continue below and throw; no promise gets made, but the job is failed now
         }
 
@@ -821,20 +776,9 @@ export const handleDocumentJob: WorkerFunction = async (
           },
         },
       });
-      if (indexConfig["allow-rejection"] !== false) {
-        try {
-          // @ts-expect-error
-          if (flType && rejectable[flType])
-            await rejectFlDocument(item!._id, jobId, log, message);
-        } catch (error: unknown) {
-          log.warn(
-            error,
-            `Caught in rejectFlDocument, likely because this document id:${
-              item!._id
-            } no longer exists in FL.`,
-          );
-        }
-      }
+      log.warn(
+        `[job ${jobId}] Automatic rejection is disabled. Leaving FoodLogiQ document ${item!._id} unchanged.`,
+      );
       // Now let it continue below and throw; no promise gets made, but the job is failed now
     }
 
@@ -960,6 +904,15 @@ async function finishDocument(
       log.trace("Laserfiche sync job completed");
     } catch (err: unknown) {
       log.error(err, `Error during move to bookmarks`);
+      endJob(
+        docJobId,
+        log,
+        new JobError(
+          err instanceof Error ? err.message : "Laserfiche sync handoff failed",
+          "lf-sync",
+        ),
+      );
+      return;
     }
 
     endJob(docJobId, log);
@@ -1154,25 +1107,18 @@ async function handleScrapedResult(
       } as any,
     });
 
-    // 4a. Validation failed, fail and reject things.
+    // 4a. Validation failed. Record it, but do not update FoodLogiQ status.
     if (!validationResult?.status) {
       await postUpdate(
         CONNECTION,
         docJobId,
-        `Trellis-extracted PDF data does not match FoodLogiQ form data; Rejected FL Doc ${flId}: ${validationResult.message}`,
+        `Trellis-extracted PDF data does not match FoodLogiQ form data for FL Doc ${flId}: ${validationResult.message}`,
         "in-progress",
       );
-      if (
-        validationResult.message &&
-        !validationResult?.message.includes(
-          "Could not extract expiration dates",
-        ) && // @ts-expect-error todo
-        rejectable[type]
-      ) {
-        log.trace(
-          `[job ${docJobId}] Document type ${type} was rejectable. Rejecting`,
-        );
-        await rejectFlDocument(flId, docJobId, log, validationResult?.message);
+
+      if (status === "Approved") {
+        await finishDocument(docJobId, flId, masterid, "Approved", log);
+        return;
       }
 
       endJob(
@@ -1284,77 +1230,22 @@ async function handleScrapedResult(
       await postUpdate(
         CONNECTION,
         docJobId,
-        `Document validation completed. No assessment required for ${flType}. Finishing document...`,
+        `Document validation completed. No assessment required for ${flType}.`,
         "in-progress",
       );
-      if (status !== "Approved") {
-        await approveFlDocument(flId, docJobId, log);
+
+      if (status === "Approved") {
+        await finishDocument(docJobId, flId, masterid, "Approved", log);
+        return;
       }
 
-      await finishDocument(docJobId, flId, masterid, "Approved", log);
+      endJob(docJobId, log);
     }
   } catch (cError: unknown) {
     log.error(cError);
     throw cError as Error;
   }
 } // HandleScrapedResult
-
-/**
- * rejects fl document
- */
-async function rejectFlDocument(
-  documentId: string,
-  jobId: string,
-  log: Logger,
-  message?: string,
-) {
-  log.trace(`[job ${jobId}] Rejecting FL document [${documentId}]. ${message}`);
-
-  // Extra check prior to rejection.
-  const response = await fetch(
-    `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}`,
-    {
-      method: "get",
-      headers: { Authorization: FL_TOKEN },
-    },
-  );
-  const doc = (await response.json()) as any;
-  if (doc?.shareSource?.approvalInfo?.status === "Approved") {
-    await postUpdate(
-      CONNECTION,
-      jobId,
-      "Job was going to be rejected but was already approved",
-      "in-progress",
-    );
-    await CONNECTION.put({
-      path: `/${jobId}`,
-      data: {
-        "foodlogiq-result-status": "Approved",
-      },
-    });
-
-    return;
-  }
-
-  await fetch(
-    `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${documentId}/approvalStatus`,
-    {
-      method: "put",
-      headers: { Authorization: FL_TOKEN },
-      body: JSON.stringify({
-        status: "Rejected",
-        comment: `${message} Please correct and resubmit or reach out to the Smithfield FSQA team`,
-        visibleForSupplier: true,
-      }),
-    },
-  );
-  await CONNECTION.put({
-    path: `/${jobId}`,
-    data: {
-      "foodlogiq-result-status": "Rejected",
-    },
-  });
-} // RejectFlDoc
 
 function isFLItem(item: unknown) {
   return isObj(item) && isObj(item["food-logiq-mirror"]);
@@ -1588,8 +1479,6 @@ async function queueAssessmentJob(
         // Approved (by anyone). Clean up and remove after approval
         endJob(item._id, log);
         assessmentToFlId.delete(item._id);
-        // Approve any linked jobs
-        await approveFlDocument(flDocumentId, docJobId, log);
         // TODO: remove this when/if FL is able to retrieve changes after approval updates
         await finishDocument(docJobId, flDocumentId, masterid, status, log);
 
@@ -1611,7 +1500,6 @@ async function queueAssessmentJob(
           log.warn(
             `[job ${docJobId}] Assessment ${item._id} failed logic, but cannot override approval. Calling finishDoc.`,
           );
-          await approveFlDocument(flDocumentId, docJobId, log);
           // TODO: remove this when/if FL is able to retrieve changes after approval updates
           await finishDocument(
             docJobId,
@@ -1621,10 +1509,6 @@ async function queueAssessmentJob(
             log,
           );
         } else {
-          if (reasons) {
-            await rejectFlDocument(flDocumentId, docJobId, log, message);
-          }
-
           endJob(
             docJobId,
             log,
@@ -1731,6 +1615,30 @@ async function queueDocumentJob(
       return;
     }
 
+    const documentType = pointer.has(item, "/shareSource/type/name")
+      ? pointer.get(item, "/shareSource/type/name")
+      : undefined;
+    const status = item?.shareSource?.approvalInfo?.status;
+    if (!documentType) {
+      log.trace(
+        `Document [${item._id}] did not have a document type. Ignoring.`,
+      );
+      return;
+    }
+
+    if (!flTypes.has(documentType) && status !== "Approved") {
+      log.trace(
+        `Document [${item._id}] was of unsupported type [${documentType}] and status [${status}]. Ignoring.`,
+      );
+      return;
+    }
+
+    if (!flTypes.has(documentType)) {
+      log.warn(
+        `Approved document [${item._id}] was of unsupported type [${documentType}]. Queueing as unidentified so it can continue to Laserfiche.`,
+      );
+    }
+
     const { data: bus } = (await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${bid}`,
     })) as { data: JsonObject };
@@ -1749,23 +1657,12 @@ async function queueDocumentJob(
       masterid = result?.masterid;
     }
 
-    // TODO: Determine how to report this skipping due to no trading-partner.
-    if (!masterid) return;
-    log.trace(
-      `Found trading partner masterid [${masterid}] for FL business ${bid}`,
-    );
-
-    const documentType = pointer.has(item, "/shareSource/type/name")
-      ? pointer.get(item, "/shareSource/type/name")
-      : undefined;
-    if (!documentType || !flTypes.has(documentType)) {
+    if (masterid) {
       log.trace(
-        `Document [${item._id}] was of type [${documentType}]. Ignoring.`,
+        `Found trading partner masterid [${masterid}] for FL business ${bid}`,
       );
-      return;
     }
 
-    const status = item?.shareSource?.approvalInfo?.status;
     const approvalUser = item?.shareSource?.approvalInfo?.setBy?._id;
     log.trace(
       `approvalInfo user: ${approvalUser} (${
@@ -1805,12 +1702,20 @@ async function queueDocumentJob(
       date: item.versionInfo.createdAt,
       bid: bid!,
       _rev: fullData._rev as number,
-      masterid,
+      masterid: masterid ?? "",
       mirrorid: fullData._id as string,
       bname: item.shareSource.sourceBusiness.name,
       name: item.name,
       link: `https://connect.foodlogiq.com/businesses/${CO_ID}/documents/detail/${item._id}`,
     };
+
+    if (!masterid) {
+      log.error(
+        `Missing trading partner masterid for FoodLogiQ business [${bid}] document [${item._id}]. Queueing diagnostic document-mirrored job.`,
+      );
+      await postJob(CONNECTION, jobConfig, status, log);
+      return;
+    }
 
     if (status === "Awaiting Approval") {
       // A. Create new job and link into jobs list and fl doc meta
@@ -1828,7 +1733,15 @@ async function queueDocumentJob(
       const flSyncJobMatches = Array.from(flSyncJobs.entries()).filter(
         ([_, v]) => v.itemId === item._id,
       );
-      if (!flSyncJobMatches) return;
+      if (flSyncJobMatches.length === 0 && status === "Approved") {
+        log.warn(
+          `Approved document ${item._id} had no active document-mirrored job. Queueing approved reprocess job.`,
+        );
+        jobConfig["allow-rejection"] = false;
+        await postJob(CONNECTION, jobConfig, status, log);
+        return;
+      }
+
       for await (const [docJobId, docJob] of flSyncJobMatches) {
         await finishDocument(docJobId, item._id, masterid, status, log);
       }
