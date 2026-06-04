@@ -184,7 +184,9 @@ async function handleTargetStatus(
   const { status } = targetJob;
   const docJobId = docJob.oadaId;
   const { masterid, key } = docJob.config;
-  if (docJob && docJob.config["allow-rejection"] === false) {
+  const approvedMustContinue =
+    docJob.config["allow-rejection"] === false || docJob.config.status === "Approved";
+  if (docJob && approvedMustContinue) {
     log.trace(
       `[job ${docJobId}] Target finished with status ${status} on already-approved doc.`,
     );
@@ -200,19 +202,13 @@ async function handleTargetStatus(
     }
 
     if (status === "failure") {
-      // If failure, target can't extract it so we're stuck without a result. Fail the job
-      // and call finishDoc.
-
-      // TODO: Configure whether or not to continue to usher things through to
-      // LF-Sync
+      // Approved documents still need to reach Laserfiche even when extraction fails.
       await postUpdate(
         CONNECTION,
         docJobId,
         "Target extraction failed",
         "in-progress",
       );
-      // TODO: Probably shouldn't be ending the job in failure here. I'd say if we
-      // are calling finish job as approved, its a success (despite issues)
       return finishDocument(docJobId, key, masterid, "Approved", log);
     }
   }
@@ -900,7 +896,7 @@ async function finishDocument(
         path: `/${masterid}/shared/trellisfw/documents/${type}/${key}`,
       });
 
-      await syncToLf(CONNECTION, masterid, _id);
+      await syncToLf(CONNECTION, masterid, _id, docJobId);
       log.trace("Laserfiche sync job completed");
     } catch (err: unknown) {
       log.error(err, `Error during move to bookmarks`);
@@ -1782,8 +1778,13 @@ function setConnection(conn: OADAClient) {
   CONNECTION = conn;
 }
 
-async function syncToLf(oada: OADAClient, tradingPartner: string, doc: string) {
-  return doJob(oada, {
+async function syncToLf(
+  oada: OADAClient,
+  tradingPartner: string,
+  doc: string,
+  docJobId: string,
+) {
+  const lfJob = {
     service: "lf-sync",
     type: "sync-doc",
     config: {
@@ -1792,5 +1793,38 @@ async function syncToLf(oada: OADAClient, tradingPartner: string, doc: string) {
         _id: doc,
       },
     },
+  };
+  const request = new JobsRequest({ oada, job: lfJob });
+  let lfJobId = "";
+
+  const completed = new Promise<TargetJob>((resolve, reject) => {
+    request.on(JobEventType.Status, async ({ job: jobChange }: any) => {
+      const index = (await jobChange) as TargetJob;
+      if (index.status === "success") {
+        resolve(index);
+        return;
+      }
+
+      if (index.status === "failure") {
+        const resultMessage = index.result?.message;
+        const message =
+          typeof resultMessage === "string"
+            ? resultMessage
+            : `lf-sync job ${index._id ?? lfJobId} failed without a message`;
+        const error = new Error(message) as Error & { lfSyncJobId?: string };
+        error.lfSyncJobId = index._id ?? lfJobId;
+        reject(error);
+      }
+    });
   });
+
+  const { _id } = await request.start();
+  lfJobId = _id;
+  await CONNECTION.put({
+    path: `/${docJobId}`,
+    data: {
+      lfSyncJob: { _id: lfJobId },
+    },
+  });
+  return completed;
 }
