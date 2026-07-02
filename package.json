@@ -1,10 +1,13 @@
 {
   "name": "@qlever-llc/fl-sync",
-  "version": "2.1.13",
+  "version": "2.1.14",
   "description": "A Trellis microservice to sync Food Logiq data to a Trellis cloud",
   "main": "dist/index.ts",
   "scripts": {
     "build": "tsc -b",
+    "coi:ui:dev": "vite --config apps/coi-review/vite.config.ts",
+    "coi:ui:build": "vite build --config apps/coi-review/vite.config.ts",
+    "coi:ui:preview": "vite preview --config apps/coi-review/vite.config.ts",
     "watch": "tsc -b --watch",
     "watch:test": "tsc -b --watch test",
     "start": "node ${INSPECT:-} --enable-source-maps dist/index.js",
@@ -93,6 +96,7 @@
   "devDependencies": {
     "@ava/typescript": "^7.0.0",
     "@biomejs/biome": "^2.4.15",
+    "@sveltejs/vite-plugin-svelte": "^6.2.2",
     "@tsconfig/node22": "^22.0.5",
     "@types/bluebird": "^3.5.42",
     "@types/convict": "^6.1.6",
@@ -110,7 +114,9 @@
     "c8": "^11.0.0",
     "chai": "^6.2.2",
     "chai-as-promised": "^8.0.2",
-    "typescript": "6.0.3"
+    "svelte": "^5.45.2",
+    "typescript": "6.0.3",
+    "vite": "^7.3.0"
   },
   "resolutions": {
     "@oada/types": "^4.1.1",

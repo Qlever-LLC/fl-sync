@@ -93,6 +93,7 @@ const targetErrors = {
 const multipleFilesErrorMessage =
   "Multiple files attached. Please upload a single PDF per Food LogiQ document.";
 const attachmentsErrorMessage = "Failed to retreive attachments";
+const finalTargetStatuses = new Set(["success", "failure"]);
 
 // Let targetErrorTypes = {"multi-COI": "multi-coi"}
 const flSyncJobs = new Map(); // Map of fl-sync jobs
@@ -269,6 +270,79 @@ async function handleTargetStatus(
   }
 }
 
+async function handleAttachmentTargetStatus({
+  targetJob,
+  docJob,
+  attachmentKey,
+  log,
+}: {
+  targetJob: TargetJob;
+  docJob: FlSyncJob;
+  attachmentKey: string;
+  log: Logger;
+}) {
+  const docJobId = docJob.oadaId;
+  const { status } = targetJob;
+  if (!finalTargetStatuses.has(status)) return;
+
+  const trackedJob = flSyncJobs.get(docJobId);
+  if (!trackedJob) {
+    log.warn("Promise for flSyncJobs %s not found.", docJobId);
+    return;
+  }
+
+  const targetJobsByAttachment = trackedJob.targetJobsByAttachment ?? {};
+  targetJobsByAttachment[attachmentKey] = {
+    ...targetJobsByAttachment[attachmentKey],
+    _id: targetJob._id,
+    status,
+  };
+  trackedJob.targetJobsByAttachment = targetJobsByAttachment;
+
+  await CONNECTION.put({
+    path: `/${docJobId}/config/target-jobs/${attachmentKey}`,
+    data: {
+      _id: targetJob._id,
+      status,
+    },
+  });
+
+  const expectedTargetJobCount = trackedJob.expectedTargetJobCount ?? Object.keys(targetJobsByAttachment).length;
+  const targetJobEntries = Object.entries(targetJobsByAttachment) as Array<[
+    string,
+    { _id?: string; status?: string },
+  ]>;
+  const finalTargetJobEntries = targetJobEntries.filter(([, attachmentJob]) => finalTargetStatuses.has(String(attachmentJob.status)));
+
+  log.trace(
+    `[job ${docJobId}] Target job ${targetJob._id} for attachment ${attachmentKey} finished with ${status}. ${finalTargetJobEntries.length}/${expectedTargetJobCount} attachment target jobs complete.`,
+  );
+
+  if (trackedJob.targetJobsComplete || finalTargetJobEntries.length < expectedTargetJobCount) return;
+
+  trackedJob.targetJobsComplete = true;
+  const successfulTargetEntry = targetJobEntries.find(([, attachmentJob]) => attachmentJob.status === "success");
+
+  if (successfulTargetEntry?.[1]._id) {
+    const [, successfulTargetJob] = successfulTargetEntry;
+    trackedJob.targetJobId = successfulTargetJob._id;
+    const { data: successfulTargetJobData } = (await CONNECTION.get({
+      path: `/${successfulTargetJob._id}`,
+    })) as unknown as { data: TargetJob };
+
+    await postUpdate(
+      CONNECTION,
+      docJobId,
+      `Target extraction completed for ${finalTargetJobEntries.filter(([, attachmentJob]) => attachmentJob.status === "success").length} of ${expectedTargetJobCount} attachment(s). Handling successful extraction evidence.`,
+      "in-progress",
+    );
+
+    return await handleTargetStatus(successfulTargetJobData, docJob, log);
+  }
+
+  return await handleTargetStatus(targetJob, docJob, log);
+}
+
 /**
  * handles queued assessment-type jobs.
  * Assessments should be treated as separate from the documents as much as possible.
@@ -430,7 +504,7 @@ export async function postTpDocument({
 
   const zip = await new JSZip().loadAsync(zipFile);
 
-  const files = Object.keys(zip.files);
+  const files = Object.keys(zip.files).filter((file) => !zip.files[file]?.dir);
 
   if (files.length !== 1 && noMultiFile.has(type)) {
     log.warn(`Multiple files not allowed for doc type ${type}`);
@@ -491,92 +565,114 @@ export async function postTpDocument({
   })) as unknown as { data: string };
   log.trace("Retrieved mirrorId %s", mirrorId);
 
-  // Errors up above for multiple files, so just take the first one here.
-  const fKey = files[0];
-  if (!fKey)
-    throw new Error(
-      "Failed to acquire file key while handling pending document",
-    );
-
-  // Prepare the pdf resource
-  const ab = await zip.file(fKey)!.async("uint8array");
-  const zData = Buffer.alloc(ab.byteLength).map((_, index) => ab[index]!);
-  const pdfKey = crypto.createHash("sha256").update(zData).digest("hex");
-  const pdfId = `resources/${pdfKey}-pdf`;
-
-  try {
-    await oada.put({
-      path: `/${pdfId}`,
-      data: zData,
-      contentType: "application/pdf",
-    });
-    await oada.put({
-      path: `/${pdfId}/_meta`,
-      data: { filename: fKey },
-      contentType: "application/json",
-    });
-    log.trace(`Wrote file [${fKey}] to pdfId ${pdfId}.`);
-  } catch (cError: unknown) {
-    throw Buffer.byteLength(zData) === 0
-      ? new JobError(
-          `Attachment Buffer data 'zData' was empty.`,
-          "bad-fl-attachments",
-        )
-      : (cError as Error);
-  }
-
-  // 4. Create a vdoc entry from the pdf to foodlogiq
-  await oada.put({
-    path: `/${pdfId}/_meta`,
-    data: {
-      filename: fKey,
-      vdoc: {
-        foodlogiq: { _id: mirrorId },
-      },
-      services: {
-        "fl-sync": {
-          jobs: {
-            [jobKey]: { _id: jobId },
-          },
-        },
-      },
-    } as any,
-    contentType: "application/json",
-  });
-  log.trace(
-    "Wrote FL mirror (%s) and fl-sync job (%s) references to _meta of pdf resource %s",
-    mirrorId,
-    jobId,
-    pdfId,
-  );
-
-  await oada.put({
-    path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
-    data: {
-      vdoc: {
-        pdf: {
-          [pdfKey]: { _id: pdfId },
-        },
-      },
-    },
-    contentType: docType,
-  });
-  log.trace(
-    "Wrote pdf vdoc reference into FL mirror _meta for attachment %s",
-    pdfKey,
-  );
-
   await oada.put({
     path: `/${docId}/_meta`,
     data: {
-      vdoc: { pdf: { [pdfKey]: { _id: pdfId } } },
+      vdoc: {
+        pdf: 0,
+      },
       shared: "incoming",
     },
   });
   log.trace(
-    "Wrote pdf vdoc reference into trellis document _meta for attachment %s",
-    pdfKey,
+    "Reset pdf vdoc reference in trellis document metadata for %s",
+    docId,
   );
+
+  const attachmentPdfs: Array<{
+    attachmentKey: string;
+    filename: string;
+    pdfId: string;
+  }> = [];
+
+  for (const fKey of files) {
+    if (!fKey)
+      throw new Error(
+        "Failed to acquire file key while handling pending document",
+      );
+
+    // Prepare one pdf resource per FoodLogiQ attachment.
+    const ab = await zip.file(fKey)!.async("uint8array");
+    const zData = Buffer.alloc(ab.byteLength).map((_, index) => ab[index]!);
+    const pdfKey = crypto.createHash("sha256").update(zData).digest("hex");
+    const pdfId = `resources/${pdfKey}-pdf`;
+
+    try {
+      await oada.put({
+        path: `/${pdfId}`,
+        data: zData,
+        contentType: "application/pdf",
+      });
+      await oada.put({
+        path: `/${pdfId}/_meta`,
+        data: { filename: fKey },
+        contentType: "application/json",
+      });
+      log.trace(`Wrote file [${fKey}] to pdfId ${pdfId}.`);
+    } catch (cError: unknown) {
+      throw Buffer.byteLength(zData) === 0
+        ? new JobError(
+            `Attachment Buffer data 'zData' was empty.`,
+            "bad-fl-attachments",
+          )
+        : (cError as Error);
+    }
+
+    // 4. Create a vdoc entry from the pdf to foodlogiq
+    await oada.put({
+      path: `/${pdfId}/_meta`,
+      data: {
+        filename: fKey,
+        vdoc: {
+          foodlogiq: { _id: mirrorId },
+        },
+        services: {
+          "fl-sync": {
+            jobs: {
+              [jobKey]: { _id: jobId },
+            },
+          },
+        },
+      } as any,
+      contentType: "application/json",
+    });
+    log.trace(
+      "Wrote FL mirror (%s) and fl-sync job (%s) references to _meta of pdf resource %s",
+      mirrorId,
+      jobId,
+      pdfId,
+    );
+
+    await oada.put({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
+      data: {
+        vdoc: {
+          pdf: {
+            [pdfKey]: { _id: pdfId, filename: fKey },
+          },
+        },
+      },
+      contentType: docType,
+    });
+    log.trace(
+      "Wrote pdf vdoc reference into FL mirror _meta for attachment %s",
+      pdfKey,
+    );
+
+    await oada.put({
+      path: `/${docId}/_meta`,
+      data: {
+        vdoc: { pdf: { [pdfKey]: { _id: pdfId, filename: fKey } } },
+        shared: "incoming",
+      },
+    });
+    log.trace(
+      "Wrote pdf vdoc reference into trellis document _meta for attachment %s",
+      pdfKey,
+    );
+
+    attachmentPdfs.push({ attachmentKey: pdfKey, filename: fKey, pdfId });
+  }
 
   // Now that the pdf is in place, drop the document to generate a target job
   await oada.put({
@@ -590,52 +686,111 @@ export async function postTpDocument({
     `Created partial JSON in docs list: /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey}`,
   );
 
-  const targetJob = {
-    service: "target",
-    type: "transcription",
-    "trading-partner": masterid,
-    config: {
-      type: "pdf",
-      pdf: { _id: pdfId },
-      document: { _id: docId },
-      docKey: hashKey,
-      "document-type": docType || "unknown",
-      "oada-doc-type": urlName,
-    },
-  };
-  const targetJobRequest = new JobsRequest({
-    oada: CONNECTION,
-    job: targetJob,
-  });
+  const primaryAttachmentKey = attachmentPdfs[0]?.attachmentKey;
+  if (!primaryAttachmentKey) {
+    throw new Error("No attachment PDFs were prepared while handling pending document");
+  }
 
-  targetJobRequest.on(JobEventType.Status, async ({ job: jobChange }: any) => {
-    const index = await jobChange;
-
-    // Handle final statuses
-    await handleTargetStatus(
-      index as unknown as TargetJob,
-      docJob as unknown as FlSyncJob,
-      log,
-    );
-  });
-  //  TargetJobRequest.on(JobEventType.Update, handleTargetUpdates)
-
-  const { key: targetJobKey, _id: targetJobId } =
-    await targetJobRequest.start();
-  // Add the target info to the in-memory job listing
+  const targetJobsByAttachment: Record<
+    string,
+    { _id?: string; filename: string; pdf: { _id: string }; status?: string; targetJobKey?: string }
+  > = {};
 
   flSyncJobs.set(jobId, {
     ...flSyncJobs.get(jobId),
-    targetJobKey,
-    targetJobId,
+    expectedTargetJobCount: attachmentPdfs.length,
+    targetJobsByAttachment,
+    targetJobsComplete: false,
   });
 
-  await postUpdate(
-    CONNECTION,
-    targetJobId,
-    `Document posted to /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey} (${docId}).`,
-    "in-progress",
-  );
+  for (const attachmentPdf of attachmentPdfs) {
+    targetJobsByAttachment[attachmentPdf.attachmentKey] = {
+      filename: attachmentPdf.filename,
+      pdf: { _id: attachmentPdf.pdfId },
+      status: "pending",
+    };
+
+    const targetJob = {
+      service: "target",
+      type: "transcription",
+      "trading-partner": masterid,
+      config: {
+        type: "pdf",
+        pdf: { _id: attachmentPdf.pdfId },
+        document: { _id: docId },
+        docKey: hashKey,
+        attachmentKey: attachmentPdf.attachmentKey,
+        attachmentFilename: attachmentPdf.filename,
+        "document-type": docType || "unknown",
+        "oada-doc-type": urlName,
+      },
+    };
+    const targetJobRequest = new JobsRequest({
+      oada: CONNECTION,
+      job: targetJob,
+    });
+
+    targetJobRequest.on(JobEventType.Status, async ({ job: jobChange }: any) => {
+      const index = await jobChange;
+
+      await handleAttachmentTargetStatus({
+        targetJob: index as unknown as TargetJob,
+        docJob: docJob as unknown as FlSyncJob,
+        attachmentKey: attachmentPdf.attachmentKey,
+        log,
+      });
+    });
+    //  TargetJobRequest.on(JobEventType.Update, handleTargetUpdates)
+
+    const { key: targetJobKey, _id: targetJobId } =
+      await targetJobRequest.start();
+
+    targetJobsByAttachment[attachmentPdf.attachmentKey] = {
+      ...targetJobsByAttachment[attachmentPdf.attachmentKey],
+      _id: targetJobId,
+      filename: attachmentPdf.filename,
+      pdf: { _id: attachmentPdf.pdfId },
+      targetJobKey,
+    };
+
+    await postUpdate(
+      CONNECTION,
+      targetJobId,
+      `Document attachment ${attachmentPdf.filename} posted to /${masterid}/shared/trellisfw/documents/${urlName}/${hashKey} (${docId}).`,
+      "in-progress",
+    );
+
+    await CONNECTION.put({
+      path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
+      data: {
+        services: {
+          target: {
+            jobs: {
+              [targetJobKey]: {
+                _id: targetJobId,
+                attachmentKey: attachmentPdf.attachmentKey,
+                filename: attachmentPdf.filename,
+                pdf: { _id: attachmentPdf.pdfId },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    log.debug(
+      `[job ${docJob.oadaId}] Noted target job ${targetJobKey} for attachment ${attachmentPdf.attachmentKey} in FL mirror metadata`,
+    );
+  }
+
+  // Add the target info to the in-memory job listing. Keep the singular fields
+  // for existing finishDocument behavior until downstream multi-result handling exists.
+  flSyncJobs.set(jobId, {
+    ...flSyncJobs.get(jobId),
+    targetJobKey: targetJobsByAttachment[primaryAttachmentKey]!.targetJobKey,
+    targetJobId: targetJobsByAttachment[primaryAttachmentKey]!._id,
+    targetJobsByAttachment,
+  });
   await oada.put({
     path: `${jobId}`,
     data: {
@@ -648,26 +803,11 @@ export async function postTpDocument({
   });
 
   await CONNECTION.put({
-    path: `${SERVICE_PATH}/businesses/${bid}/documents/${item._id}/_meta`,
-    data: {
-      services: {
-        target: {
-          jobs: {
-            [targetJobKey]: { _id: targetJobId },
-          },
-        },
-      },
-    },
-  });
-
-  await CONNECTION.put({
     path: `/${jobId}/config/target-jobs`,
-    data: {
-      [targetJobKey]: { _id: targetJobId },
-    },
+    data: targetJobsByAttachment,
   });
   log.debug(
-    `[job ${docJob.oadaId}] Noted target job ${targetJobKey} in fl-sync job ${jobId}`,
+    `[job ${docJob.oadaId}] Noted ${attachmentPdfs.length} target job(s) by attachment in fl-sync job ${jobId}`,
   );
 
   return type;

@@ -155,6 +155,7 @@ export interface JobConfig {
 
 export interface FlObject {
   name: string;
+  originalName?: string;
   _id: string;
   state: string;
   lastUpdate: {
@@ -175,10 +176,14 @@ export interface FlObject {
         _id: string;
       };
     };
+    complianceInfo?: {
+      status?: string;
+    };
     shareSpecificAttributes: {
       effectiveDate: string;
     };
     type: {
+      _id?: string;
       name: string;
     };
     sourceBusiness: {
@@ -193,7 +198,15 @@ export interface FlObject {
       };
     };
     draftVersionId: string | undefined;
+    liveVersion?: boolean;
+    membershipId?: string;
+    originalId?: string;
   };
+  attachments?: Array<{
+    S3Name?: string;
+    fileName?: string;
+    BucketName?: string;
+  }>;
   expirationDate: string;
   versionInfo: {
     createdAt: string;
@@ -513,4 +526,72 @@ export interface CoiAssessment {
     workersDateParseWarning: boolean | "";
   };
   holderCheck?: HolderCheckResult;
+}
+
+export interface CoiReviewCase {
+  id: string;
+  foodLogiqDocumentId: string;
+  supplier: {
+    foodLogiqBusinessId?: string;
+    foodLogiqMembershipId?: string;
+    name?: string;
+    address?: string;
+    productGroup?: string;
+    locationGroup?: string;
+  };
+  source: {
+    documentName?: string;
+    documentTypeId?: string;
+    documentTypeName?: string;
+    approvalStatus?: string;
+    complianceStatus?: string;
+    effectiveDate?: string;
+    expirationDate?: string;
+    draftVersionId?: string;
+    liveVersion?: boolean;
+    currentVersionId?: string;
+    isCurrentVersion?: boolean;
+    link?: string;
+    raw?: FlDocument | FlDocumentError;
+  };
+  attachments: Array<{
+    key: string;
+    foodLogiqDocumentId: string;
+    fileName?: string;
+    sourceS3Name?: string;
+    sourceBucketName?: string;
+    targetStatus: "success" | "failed" | "not-run";
+    targetError?: string;
+    extractedCoiIds?: string[];
+  }>;
+  extraction: {
+    combinedCoi?: CombinedTrellisCOI;
+    individualCois: TrellisCOI[];
+    parsingErrors: string[];
+    additionalFoodLogiqDocumentLinks: string[];
+  };
+  assessment: {
+    recommendation: "approve" | "reject" | "review";
+    passed: boolean;
+    reasons: string[];
+    checks: Array<{
+      key: string;
+      label: string;
+      status: "pass" | "fail" | "warn" | "unknown";
+      expected?: string | number;
+      actual?: string | number;
+      message?: string;
+      evidence?: Array<{
+        source: "foodlogiq" | "target" | "derived" | "manual";
+        pointer?: string;
+        page?: number;
+        snippet?: string;
+      }>;
+    }>;
+  };
+  review?: {
+    decision?: "approve" | "reject" | "request-correction" | "manual-review";
+    messageDraft?: string;
+    reviewerNotes?: string;
+  };
 }

@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
+import { writeFile } from "node:fs/promises";
 import {
   draftsToAwaitingApproval,
+  generateCoiReviewCases,
   gatherCoisReportData,
   generateCoisReport,
 } from "../assessments/coi.js";
@@ -26,6 +28,13 @@ import {
 const filename = `CoiReportData2025-06-26.json`;
 //const filename = `CoiReportData${new Date().toISOString().split('T')[0]}.json`;
 const xlsxFilename = `cois-report-${new Date().toISOString()}.xlsx`;
-await draftsToAwaitingApproval();
+const reviewCasesFilename = `coi-review-cases-${new Date().toISOString().split("T")[0]}.json`;
+
+if (process.argv.includes("--move-drafts-to-awaiting-approval")) {
+  await draftsToAwaitingApproval();
+}
+
 const reportDataSave = await gatherCoisReportData(filename);
+const reviewCases = generateCoiReviewCases(reportDataSave);
+await writeFile(reviewCasesFilename, JSON.stringify(reviewCases, undefined, 2));
 await generateCoisReport(reportDataSave, xlsxFilename);

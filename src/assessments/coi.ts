@@ -33,6 +33,7 @@ import type {
   AttachmentResources,
   AutoLiability,
   CoiAssessment,
+  CoiReviewCase,
   CombinedTrellisCOI,
   ErrObj,
   ExcelRow,
@@ -710,22 +711,21 @@ function checkExpirations(flCoi: FlDocument, combinedTrellisCoi: TrellisCOI) {
     (a, b) => new Date(a).getTime() - new Date(b).getTime(),
   )[0];
   const minExpirationDate = minExpiration && new Date(minExpiration);
+  const minExpirationDay = minExpiration ? minExpiration.split("T")[0] : undefined;
 
   // Verify Expiration Dates
   const expiryPassed = minExpirationDate && minExpirationDate > new Date();
 
-  const flExp = new Date(flCoi.expirationDate);
-  const flExpiration = flExp.toISOString().split("T")[0];
-  flExp.setHours(0);
+  const flExpiration = flCoi.expirationDate.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? new Date(flCoi.expirationDate).toISOString().split("T")[0];
 
   // Check if the FL Document expiration date does not match the minimum of the COI doc
   // False and undefined are treated the same
-  const expiryMismatch = minExpirationDate && minExpirationDate < flExp;
+  const expiryMismatch = Boolean(minExpirationDay && flExpiration && minExpirationDay < flExpiration);
   if (expiryMismatch) {
     warn("The policy expiration date does not match the FL expiration date.");
   }
 
-  return { flExpiration, expiryPassed, minExpiration, expiryMismatch };
+  return { flExpiration, expiryPassed, minExpiration: minExpirationDay, expiryMismatch };
 }
 
 /*
@@ -879,6 +879,182 @@ function gatherComments(coi: FlDocument) {
   return {
     value: comments.join("\n"),
   };
+}
+
+function formatAddress(
+  address?: FlDocument["shareSource"]["sourceBusiness"]["address"],
+) {
+  return [
+    address?.addressLineOne,
+    address?.city,
+    address?.region,
+    address?.postalCode,
+    address?.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function getAttachmentError(trellisCoiOrError: ExtractPdfResult | ErrObj) {
+  if (!("results" in trellisCoiOrError)) {
+    return trellisCoiOrError.msg ?? trellisCoiOrError.serialized?.message;
+  }
+
+  if ("serialized" in trellisCoiOrError.results) {
+    const resultError = trellisCoiOrError.results as ErrObj;
+    const serialized = resultError.serialized as any;
+    return (
+      serialized?.cause?.cause?.information ?? serialized?.message
+    );
+  }
+
+  return undefined;
+}
+
+function attachmentStatus(trellisCoiOrError: ExtractPdfResult | ErrObj) {
+  if (!("results" in trellisCoiOrError)) return "failed";
+  if ("serialized" in trellisCoiOrError.results) return "failed";
+  return "success";
+}
+
+function getExtractedCois(
+  attachments: AttachmentResources | undefined,
+): TrellisCOI[] {
+  if (!attachments || "serialized" in attachments) return [];
+
+  return Object.values(attachments)
+    .filter((value): value is ExtractPdfResult => "results" in value)
+    .flatMap(({ results }) =>
+      "serialized" in results ? [] : Object.values(results),
+    );
+}
+
+function getAttachmentReviewItems(
+  flCoi: FlDocument | FlDocumentError,
+  attachments: AttachmentResources | undefined,
+): CoiReviewCase["attachments"] {
+  const sourceAttachments = "attachments" in flCoi ? flCoi.attachments ?? [] : [];
+
+  if (!attachments || "serialized" in attachments) {
+    const targetError = !attachments
+      ? undefined
+      : (attachments as ErrObj).msg ?? (attachments as ErrObj).serialized?.message;
+
+    return sourceAttachments.map((attachment: any, index: number) => ({
+      key: attachment.fileName ?? attachment.S3Name ?? `attachment-${index + 1}`,
+      foodLogiqDocumentId: flCoi._id,
+      fileName: attachment.fileName,
+      sourceS3Name: attachment.S3Name,
+      sourceBucketName: attachment.BucketName,
+      targetStatus: "not-run",
+      targetError,
+    }));
+  }
+
+  const sourceByKey = new Map<string, any>(
+    sourceAttachments.map((attachment: any) => [
+      attachment.fileName ?? attachment.S3Name,
+      attachment,
+    ]),
+  );
+
+  return Object.entries(attachments).map(([key, trellisCoiOrError]) => {
+    const sourceAttachment = sourceByKey.get(key);
+    const results =
+      "results" in trellisCoiOrError && !("serialized" in trellisCoiOrError.results)
+        ? trellisCoiOrError.results
+        : undefined;
+
+    return {
+      key,
+      foodLogiqDocumentId: flCoi._id,
+      fileName: sourceAttachment?.fileName,
+      sourceS3Name: sourceAttachment?.S3Name,
+      sourceBucketName: sourceAttachment?.BucketName,
+      targetStatus: attachmentStatus(trellisCoiOrError),
+      targetError: getAttachmentError(trellisCoiOrError),
+      extractedCoiIds: results
+        ? Object.values(results as Record<string, TrellisCOI>).map(
+            (coi) => coi._id,
+          )
+        : [],
+    };
+  });
+}
+
+function getAssessmentChecks({
+  minExpiration,
+  expiryPassed,
+  expiryMismatch,
+  flExpiration,
+  parsingError,
+  limitResults,
+  workersCheck,
+  holderCheck,
+}: CoiAssessment): CoiReviewCase["assessment"]["checks"] {
+  const limitChecks: CoiReviewCase["assessment"]["checks"] = Object.entries(
+    limitResults ?? {},
+  ).map(([key, result]) => ({
+    key: `coverage.${key}`,
+    label: result.name,
+    status: result.dateParseWarning ? "warn" : result.pass ? "pass" : "fail",
+    expected: result.limit,
+    actual: result.value,
+    message: result.pass ? undefined : result.outString,
+    evidence: [
+      { source: "target", pointer: `/policies/${result.type}/${result.path}` },
+    ],
+  }));
+
+  return [
+    {
+      key: "extraction.parsing",
+      label: "Attachment parsing",
+      status: parsingError ? "fail" : "pass",
+      message: parsingError ? "One or more attachment extraction errors occurred." : undefined,
+    },
+    {
+      key: "expiration.minimum-policy-date",
+      label: "Minimum policy expiration date",
+      status: expiryPassed === undefined ? "unknown" : expiryPassed ? "pass" : "fail",
+      actual: minExpiration ? minExpiration.split("T")[0] : undefined,
+      message: expiryPassed === false ? "One or more policies are expired." : undefined,
+      evidence: [{ source: "target", pointer: "/policies/*/expire_date" }],
+    },
+    {
+      key: "expiration.foodlogiq-matches-policy",
+      label: "FoodLogiQ expiration does not exceed policy expiration",
+      status: expiryMismatch ? "fail" : "pass",
+      actual: flExpiration,
+      expected: "Match attachment contents",
+      message: expiryMismatch ? "FoodLogiQ expiration is later than the earliest extracted policy expiration." : undefined,
+      evidence: [
+        { source: "foodlogiq", pointer: "/expirationDate" },
+        { source: "target", pointer: "/policies/*/expire_date" },
+      ],
+    },
+    ...limitChecks,
+    {
+      key: "workers-comp.per-statute",
+      label: "Workers compensation per statute",
+      status: workersCheck.workersDateParseWarning
+        ? "warn"
+        : workersCheck.workersPerStatute.startsWith("Yes")
+          ? "pass"
+          : "fail",
+      expected: "Yes",
+      actual: workersCheck.workersPerStatute,
+      evidence: [{ source: "target", pointer: "/policies/wcel/per_statute" }],
+    },
+    {
+      key: "holder.smithfield-address",
+      label: "Certificate holder address",
+      status: holderCheck?.pass ? "pass" : "fail",
+      actual: holderCheck?.holderString,
+      message: holderCheck?.pass ? undefined : "Holder info does not meet requirements.",
+      evidence: [{ source: "target", pointer: "/holder" }],
+    },
+  ];
 }
 
 async function writeExcelFile(
@@ -1116,6 +1292,124 @@ export async function gatherCoisReportData(outputFilename: string) {
 
   await writeFile(outputFilename, JSON.stringify({ flCois, attachments }));
   return { flCois, attachments };
+}
+
+export function generateCoiReviewCases(
+  reportDataSave: ReportDataSave,
+): CoiReviewCase[] {
+  const { flCois, attachments } = reportDataSave;
+
+  const coisBySupplier: Record<
+    string,
+    Array<FlDocument | FlDocumentError>
+  > = groupBy(
+    Object.values(flCois),
+    (flCoi) => flCoi?.shareSource?.sourceBusiness?._id,
+  );
+
+  const reviewCases: CoiReviewCase[] = [];
+  let i = 0;
+  for (const [busId, supplierCois] of Object.entries(coisBySupplier)) {
+    trace(
+      `Processing Business ${busId} (${i++}/${Object.values(coisBySupplier).length})`,
+    );
+
+    const coisToCombine = supplierCois.flatMap(({ _id }) =>
+      getExtractedCois(attachments[_id]),
+    );
+
+    const coisToReport = supplierCois.filter(
+      (flCoi): flCoi is FlDocument =>
+        !("error" in flCoi) &&
+        "shareSource" in flCoi &&
+        flCoi?.shareSource?.approvalInfo?.status === "Awaiting Approval" &&
+        flCoi?.isArchived !== true,
+    );
+
+    const additionalFoodLogiqDocumentLinks = supplierCois.map(({ _id }) =>
+      flIdToLink(_id),
+    );
+
+    const combinedTrellisCoi = combineCois(coisToCombine);
+    const supplierAttachments = supplierCois.flatMap((flCoi) =>
+      getAttachmentReviewItems(flCoi, attachments[flCoi._id]),
+    );
+    const parsingErrors = supplierAttachments
+      .map(({ key, targetError }) => (targetError ? `${key}: ${targetError}` : ""))
+      .filter(Boolean);
+    const parsingError = supplierAttachments.some(
+      ({ targetStatus }) => targetStatus === "failed",
+    );
+    const invalidHolder = parsingErrors.some((value) => value.includes("Holder"));
+
+    for (const flCoi of coisToReport) {
+      const thisCoiAttachments = getExtractedCois(attachments[flCoi._id]);
+      const coiAssessment = assessCoi({
+        flCoi,
+        attachments: thisCoiAttachments,
+        combinedTrellisCoi,
+      });
+      const assessmentWithParsing = {
+        ...coiAssessment,
+        parsingError,
+        invalidHolder,
+      };
+      const recommendation = assessmentWithParsing.assessment.passed
+        ? "approve"
+        : parsingError || assessmentWithParsing.assessment.dateParseWarning
+          ? "review"
+          : "reject";
+      const reasons = assessmentWithParsing.assessment.reasons
+        ? assessmentWithParsing.assessment.reasons.split("\n").filter(Boolean)
+        : [];
+
+      reviewCases.push({
+        id: flCoi._id,
+        foodLogiqDocumentId: flCoi._id,
+        supplier: {
+          foodLogiqBusinessId: flCoi.shareSource.sourceBusiness?._id,
+          foodLogiqMembershipId: flCoi.shareSource.membershipId,
+          name: flCoi.shareSource.sourceBusiness?.name,
+          address: formatAddress(flCoi.shareSource.sourceBusiness?.address),
+        },
+        source: {
+          documentName: flCoi.name,
+          documentTypeId: flCoi.shareSource.type?._id,
+          documentTypeName: flCoi.shareSource.type?.name,
+          approvalStatus: flCoi.shareSource.approvalInfo?.status,
+          complianceStatus: flCoi.shareSource.complianceInfo?.status,
+          effectiveDate: flCoi.shareSource.shareSpecificAttributes?.effectiveDate,
+          expirationDate: flCoi.expirationDate,
+          draftVersionId: flCoi.shareSource.draftVersionId,
+          liveVersion: flCoi.shareSource.liveVersion,
+          currentVersionId: flCoi.versionInfo?.currentVersionId,
+          isCurrentVersion: flCoi.versionInfo?.isCurrentVersion,
+          link: flIdToLink(flCoi._id),
+          raw: flCoi,
+        },
+        attachments: supplierAttachments,
+        extraction: {
+          combinedCoi: combinedTrellisCoi,
+          individualCois: coisToCombine,
+          parsingErrors,
+          additionalFoodLogiqDocumentLinks,
+        },
+        assessment: {
+          recommendation,
+          passed: assessmentWithParsing.assessment.passed,
+          reasons: parsingError
+            ? [
+                `PDF extraction errors occurred.${invalidHolder ? " Invalid Holder info detected." : ""}`,
+                ...reasons,
+              ]
+            : reasons,
+          checks: getAssessmentChecks(assessmentWithParsing),
+        },
+      });
+    }
+  }
+
+  return reviewCases;
 }
 
 export async function generateCoisReport(
