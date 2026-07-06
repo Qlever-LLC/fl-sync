@@ -292,8 +292,34 @@ async function handleAttachmentTargetStatus({
   }
 
   const targetJobsByAttachment = trackedJob.targetJobsByAttachment ?? {};
+  const previousAttachmentJob = targetJobsByAttachment[attachmentKey];
+  if (
+    previousAttachmentJob?._id === targetJob._id &&
+    previousAttachmentJob.status === status &&
+    finalTargetStatuses.has(String(previousAttachmentJob.status))
+  ) return;
+
+  const { data: persistedAttachmentJob } = (await CONNECTION.get({
+    path: `/${docJobId}/config/target-jobs/${attachmentKey}`,
+  }).catch((error: any) => {
+    if (error?.status === 404) return { data: undefined };
+    throw error;
+  })) as unknown as { data?: { _id?: string; status?: string } };
+  if (
+    persistedAttachmentJob?._id === targetJob._id &&
+    persistedAttachmentJob.status === status &&
+    finalTargetStatuses.has(String(persistedAttachmentJob.status))
+  ) {
+    targetJobsByAttachment[attachmentKey] = {
+      ...previousAttachmentJob,
+      ...persistedAttachmentJob,
+    };
+    trackedJob.targetJobsByAttachment = targetJobsByAttachment;
+    return;
+  }
+
   targetJobsByAttachment[attachmentKey] = {
-    ...targetJobsByAttachment[attachmentKey],
+    ...previousAttachmentJob,
     _id: targetJob._id,
     status,
   };
