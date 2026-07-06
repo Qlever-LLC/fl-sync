@@ -1430,11 +1430,11 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
       }
     });
 
-    docsWatch.on(ChangeType.ItemChanged, async ({ change, item, pointer }) => {
-      const ch = await change;
-      if (ch.body?.["food-logiq-mirror"]) {
+    docsWatch.on(ChangeType.ItemChanged, async ({ item, pointer }) => {
+      const it = (await item) as JsonObject;
+      if (it["food-logiq-mirror"]) {
         log.trace(`ListWatch ItemChanged triggered document queue for ${pointer}`);
-        queueDocumentJob((await item) as JsonObject, pointer, log);
+        queueDocumentJob(it, pointer, log);
       }
     });
 
@@ -1457,10 +1457,10 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
     */
     assessWatch.on(
       ChangeType.ItemChanged,
-      async ({ change, item, pointer }) => {
-        const ch = await change;
-        if (ch.body?.["food-logiq-mirror"]) {
-          queueAssessmentJob((await item) as JsonObject, pointer, log);
+      async ({ item, pointer }) => {
+        const it = (await item) as JsonObject;
+        if (it["food-logiq-mirror"]) {
+          queueAssessmentJob(it, pointer, log);
         }
       },
     );
