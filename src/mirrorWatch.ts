@@ -283,7 +283,12 @@ async function handleAttachmentTargetStatus({
 }) {
   const docJobId = docJob.oadaId;
   const { status } = targetJob;
-  if (!finalTargetStatuses.has(status)) return;
+  if (!finalTargetStatuses.has(status)) {
+    log.trace(
+      `[job ${docJobId}] Target job ${targetJob._id} for attachment ${attachmentKey} status event: ${status}. Waiting for final status.`,
+    );
+    return;
+  }
 
   const trackedJob = flSyncJobs.get(docJobId);
   if (!trackedJob) {
@@ -297,7 +302,12 @@ async function handleAttachmentTargetStatus({
     previousAttachmentJob?._id === targetJob._id &&
     previousAttachmentJob.status === status &&
     finalTargetStatuses.has(String(previousAttachmentJob.status))
-  ) return;
+  ) {
+    log.trace(
+      `[job ${docJobId}] Ignoring duplicate final Target status ${status} for attachment ${attachmentKey} job ${targetJob._id} from memory state.`,
+    );
+    return;
+  }
 
   const { data: persistedAttachmentJob } = (await CONNECTION.get({
     path: `/${docJobId}/config/target-jobs/${attachmentKey}`,
@@ -315,6 +325,9 @@ async function handleAttachmentTargetStatus({
       ...persistedAttachmentJob,
     };
     trackedJob.targetJobsByAttachment = targetJobsByAttachment;
+    log.trace(
+      `[job ${docJobId}] Ignoring duplicate final Target status ${status} for attachment ${attachmentKey} job ${targetJob._id} from persisted state.`,
+    );
     return;
   }
 
@@ -326,12 +339,19 @@ async function handleAttachmentTargetStatus({
   trackedJob.targetJobsByAttachment = targetJobsByAttachment;
 
   await CONNECTION.put({
-    path: `/${docJobId}/config/target-jobs/${attachmentKey}`,
+    path: `/${docJobId}/config`,
     data: {
-      _id: targetJob._id,
-      status,
+      "target-jobs": {
+        [attachmentKey]: {
+          _id: targetJob._id,
+          status,
+        },
+      },
     },
   });
+  log.debug(
+    `[job ${docJobId}] Persisted final Target status ${status} for attachment ${attachmentKey} job ${targetJob._id}.`,
+  );
 
   const expectedTargetJobCount = trackedJob.expectedTargetJobCount ?? Object.keys(targetJobsByAttachment).length;
   const targetJobEntries = Object.entries(targetJobsByAttachment) as Array<[
@@ -344,10 +364,20 @@ async function handleAttachmentTargetStatus({
     `[job ${docJobId}] Target job ${targetJob._id} for attachment ${attachmentKey} finished with ${status}. ${finalTargetJobEntries.length}/${expectedTargetJobCount} attachment target jobs complete.`,
   );
 
-  if (trackedJob.targetJobsComplete || finalTargetJobEntries.length < expectedTargetJobCount) return;
+  if (trackedJob.targetJobsComplete) {
+    log.trace(
+      `[job ${docJobId}] All attachment Target jobs were already marked complete. Ignoring final status for ${attachmentKey}.`,
+    );
+    return;
+  }
+
+  if (finalTargetJobEntries.length < expectedTargetJobCount) return;
 
   trackedJob.targetJobsComplete = true;
   const successfulTargetEntry = targetJobEntries.find(([, attachmentJob]) => attachmentJob.status === "success");
+  log.info(
+    `[job ${docJobId}] All ${expectedTargetJobCount} attachment Target job(s) reached final status; ${finalTargetJobEntries.filter(([, attachmentJob]) => attachmentJob.status === "success").length} succeeded. Continuing document workflow.`,
+  );
 
   if (successfulTargetEntry?.[1]._id) {
     const [, successfulTargetJob] = successfulTargetEntry;
@@ -755,6 +785,9 @@ export async function postTpDocument({
       oada: CONNECTION,
       job: targetJob,
     });
+    log.debug(
+      `[job ${docJob.oadaId}] Starting Target transcription job for attachment ${attachmentPdf.attachmentKey} (${attachmentPdf.filename}) pdf ${attachmentPdf.pdfId}`,
+    );
 
     targetJobRequest.on(JobEventType.Status, async ({ job: jobChange }: any) => {
       const index = await jobChange;
@@ -770,6 +803,9 @@ export async function postTpDocument({
 
     const { key: targetJobKey, _id: targetJobId } =
       await targetJobRequest.start();
+    log.info(
+      `[job ${docJob.oadaId}] Started Target transcription job ${targetJobId} for attachment ${attachmentPdf.attachmentKey}.`,
+    );
 
     targetJobsByAttachment[attachmentPdf.attachmentKey] = {
       ...targetJobsByAttachment[attachmentPdf.attachmentKey],
