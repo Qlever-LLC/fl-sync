@@ -315,6 +315,7 @@ async function handleAttachmentTargetStatus({
     if (error?.status === 404) return { data: undefined };
     throw error;
   })) as unknown as { data?: { _id?: string; status?: string } };
+  let shouldPersistTargetStatus = true;
   if (
     persistedAttachmentJob?._id === targetJob._id &&
     persistedAttachmentJob.status === status &&
@@ -328,7 +329,7 @@ async function handleAttachmentTargetStatus({
     log.trace(
       `[job ${docJobId}] Ignoring duplicate final Target status ${status} for attachment ${attachmentKey} job ${targetJob._id} from persisted state.`,
     );
-    return;
+    shouldPersistTargetStatus = false;
   }
 
   targetJobsByAttachment[attachmentKey] = {
@@ -338,20 +339,22 @@ async function handleAttachmentTargetStatus({
   };
   trackedJob.targetJobsByAttachment = targetJobsByAttachment;
 
-  await CONNECTION.put({
-    path: `/${docJobId}/config`,
-    data: {
-      "target-jobs": {
-        [attachmentKey]: {
-          _id: targetJob._id,
-          status,
+  if (shouldPersistTargetStatus) {
+    await CONNECTION.put({
+      path: `/${docJobId}/config`,
+      data: {
+        "target-jobs": {
+          [attachmentKey]: {
+            _id: targetJob._id,
+            status,
+          },
         },
       },
-    },
-  });
-  log.debug(
-    `[job ${docJobId}] Persisted final Target status ${status} for attachment ${attachmentKey} job ${targetJob._id}.`,
-  );
+    });
+    log.debug(
+      `[job ${docJobId}] Persisted final Target status ${status} for attachment ${attachmentKey} job ${targetJob._id}.`,
+    );
+  }
 
   const expectedTargetJobCount = trackedJob.expectedTargetJobCount ?? Object.keys(targetJobsByAttachment).length;
   const targetJobEntries = Object.entries(targetJobsByAttachment) as Array<[
@@ -754,7 +757,7 @@ export async function postTpDocument({
 
   flSyncJobs.set(jobId, {
     ...flSyncJobs.get(jobId),
-    expectedTargetJobCount: attachmentPdfs.length,
+    expectedTargetJobCount: new Set(attachmentPdfs.map(({ attachmentKey }) => attachmentKey)).size,
     targetJobsByAttachment,
     targetJobsComplete: false,
   });
