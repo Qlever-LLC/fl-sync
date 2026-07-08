@@ -281,6 +281,12 @@ const config = convict({
       default: false,
       env: "FL_FORCE_WRITE",
     },
+    writebackEnabled: {
+      doc: "Enable mutating FoodLogiQ writeback calls such as status changes and assessment approve/reject actions.",
+      format: Boolean,
+      default: false,
+      env: "FL_WRITEBACK_ENABLED",
+    },
   },
   incidents: {
     interval: {

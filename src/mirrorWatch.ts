@@ -61,6 +61,7 @@ const FL_TRELLIS_USER = config.get("foodlogiq.trellisUser");
 const APPROVAL_TRELLIS_USER = config.get("foodlogiq.capaTrellisUser");
 const CO_ID = config.get("foodlogiq.community.owner.id");
 const COMMUNITY_ID = config.get("foodlogiq.community.id");
+const FL_WRITEBACK_ENABLED = config.get("foodlogiq.writebackEnabled");
 
 const SERVICE_NAME = config.get("service.name");
 const SERVICE_PATH = `/bookmarks/services/${SERVICE_NAME}`;
@@ -89,6 +90,22 @@ const targetErrors = {
     jobError: "target-unrecognized",
   },
 };
+
+async function foodLogiqWriteback(
+  description: string,
+  url: string,
+  options: RequestInit,
+  log: Logger,
+) {
+  if (!FL_WRITEBACK_ENABLED) {
+    log.warn(
+      `FoodLogiQ writeback disabled by FL_WRITEBACK_ENABLED=false. Skipping ${description}.`,
+    );
+    return undefined;
+  }
+
+  return fetch(url, options);
+}
 
 const multipleFilesErrorMessage =
   "Multiple files attached. Please upload a single PDF per Food LogiQ document.";
@@ -464,7 +481,8 @@ export const handleAssessmentJob: WorkerFunction = async (
       log.trace(
         `[job ${docJobId}] Assessment Auto-${item.state}. [${item._id}]`,
       );
-      await fetch(
+      await foodLogiqWriteback(
+        `[job ${docJobId}] assessment auto-${item.state} ${item._id}`,
         `${FL_DOMAIN}/v2/businesses/${CO_ID}/spawnedassessment/${
           item._id
         }/${failed ? "reject" : "approve"}spawnedassessment`,
@@ -473,6 +491,7 @@ export const handleAssessmentJob: WorkerFunction = async (
           headers: { Authorization: FL_TOKEN },
           body: JSON.stringify(item),
         },
+        log,
       );
       log.trace(`[job ${docJobId}] Assessment Reasons: ${reasons.join(";")}`);
 
@@ -1876,7 +1895,8 @@ async function queueDocumentJob(
       log.trace(
         `Document [${item._id}] has a supplier update. Setting status to 'Awaiting Approval'.`,
       );
-      await fetch(
+      await foodLogiqWriteback(
+        `document ${item.shareSource.draftVersionId} status reset to Awaiting Approval`,
         `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${item.shareSource.draftVersionId}/approvalStatus`,
         {
           method: "put",
@@ -1887,6 +1907,7 @@ async function queueDocumentJob(
             comment: "",
           }),
         },
+        log,
       );
       return;
     }

@@ -61,6 +61,7 @@ const FL_TOKEN = config.get("foodlogiq.token");
 const FL_DOMAIN = config.get("foodlogiq.domain");
 const CO_ID = config.get("foodlogiq.community.owner.id");
 const COMMUNITY_ID = config.get("foodlogiq.community.id");
+const FL_WRITEBACK_ENABLED = config.get("foodlogiq.writebackEnabled");
 
 const fail = "FFb96161";
 const passFill = "FF80a57d";
@@ -1206,6 +1207,13 @@ export async function draftsToAwaitingApproval() {
 
   for await (const [_, coi] of Object.entries(flCois)) {
     const _id = coi.shareSource.draftVersionId;
+    if (!FL_WRITEBACK_ENABLED) {
+      warn(
+        `FoodLogiQ writeback disabled by FL_WRITEBACK_ENABLED=false. Skipping draft ${_id} status reset to Awaiting Approval.`,
+      );
+      continue;
+    }
+
     await ky.put(
       `https://connect-api.foodlogiq.com/v2/businesses/5acf7c2cfd7fa00001ce518d/documents/${_id}/approvalStatus`,
       {
