@@ -107,6 +107,114 @@ async function foodLogiqWriteback(
   return fetch(url, options);
 }
 
+type CoiReviewWritebackJobConfig = {
+  foodLogiqBusinessId?: string;
+  foodLogiqDocumentId?: string;
+  decisionId?: string;
+  decision?: "approve" | "reject";
+  foodLogiqStatus?: "Approved" | "Rejected";
+  message?: string;
+};
+
+export const handleCoiReviewWritebackJob: WorkerFunction = async (
+  job: Job,
+  { log },
+) => {
+  const jobId = job.oadaId;
+  const jobConfig = job.config as unknown as CoiReviewWritebackJobConfig;
+  const { foodLogiqBusinessId, foodLogiqDocumentId, decisionId } = jobConfig;
+  const decisionPath = foodLogiqBusinessId && foodLogiqDocumentId && decisionId
+    ? `${SERVICE_PATH}/businesses/${encodeURIComponent(foodLogiqBusinessId)}/documents/${encodeURIComponent(foodLogiqDocumentId)}/_meta/services/coi-review/decisions/${encodeURIComponent(decisionId)}`
+    : undefined;
+
+  const updateDecision = async (data: JsonObject) => {
+    if (!decisionPath) return;
+    await CONNECTION.put({ path: decisionPath, data });
+  };
+
+  try {
+    if (!foodLogiqBusinessId || !foodLogiqDocumentId || !decisionId) {
+      throw new Error("COI review writeback job is missing business, document, or decision id.");
+    }
+
+    const status = jobConfig.foodLogiqStatus ?? (jobConfig.decision === "approve" ? "Approved" : jobConfig.decision === "reject" ? "Rejected" : undefined);
+    if (status !== "Approved" && status !== "Rejected") {
+      throw new Error("COI review writeback job must request Approved or Rejected status.");
+    }
+
+    const comment = status === "Rejected" ? String(jobConfig.message ?? "").trim() : "";
+    if (status === "Rejected" && !comment) {
+      throw new Error("COI review rejection writeback requires a supplier message.");
+    }
+
+    await updateDecision({ writebackStatus: "submitted", updatedAt: new Date().toISOString() });
+
+    const { data: mirror } = await CONNECTION.get({
+      path: `${SERVICE_PATH}/businesses/${encodeURIComponent(foodLogiqBusinessId)}/documents/${encodeURIComponent(foodLogiqDocumentId)}`,
+    }) as { data: JsonObject };
+    const flMirror = mirror["food-logiq-mirror"] as FlObject | undefined;
+    const currentStatus = flMirror?.shareSource?.approvalInfo?.status;
+    if (currentStatus && currentStatus !== "Awaiting Approval") {
+      await updateDecision({
+        writebackStatus: "skipped",
+        writebackCompletedAt: new Date().toISOString(),
+        writebackError: `FoodLogiQ document status is ${currentStatus}, not Awaiting Approval.`,
+        updatedAt: new Date().toISOString(),
+      });
+      return { status: "skipped" };
+    }
+
+    const response = await foodLogiqWriteback(
+      `[job ${jobId}] COI review decision ${decisionId} document ${foodLogiqDocumentId} -> ${status}`,
+      `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${foodLogiqDocumentId}/approvalStatus`,
+      {
+        method: "put",
+        headers: {
+          Authorization: FL_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status,
+          visibleForSupplier: status === "Rejected",
+          comment,
+        }),
+      },
+      log,
+    );
+
+    if (!response) {
+      await updateDecision({
+        writebackStatus: "skipped",
+        writebackCompletedAt: new Date().toISOString(),
+        writebackError: "FoodLogiQ writeback is disabled by FL_WRITEBACK_ENABLED=false.",
+        updatedAt: new Date().toISOString(),
+      });
+      return { status: "skipped" };
+    }
+
+    if (!response.ok) {
+      throw new Error(`FoodLogiQ approvalStatus writeback failed with HTTP ${response.status}.`);
+    }
+
+    await updateDecision({
+      writebackStatus: "succeeded",
+      writebackCompletedAt: new Date().toISOString(),
+      foodLogiqStatusSubmitted: status,
+      foodLogiqCommentSubmitted: comment,
+      updatedAt: new Date().toISOString(),
+    });
+    return { status: "succeeded" };
+  } catch (error) {
+    await updateDecision({
+      writebackStatus: "failed",
+      writebackCompletedAt: new Date().toISOString(),
+      writebackError: error instanceof Error ? error.message : "Unknown FoodLogiQ writeback failure.",
+      updatedAt: new Date().toISOString(),
+    });
+    throw error;
+  }
+};
+
 const multipleFilesErrorMessage =
   "Multiple files attached. Please upload a single PDF per Food LogiQ document.";
 const attachmentsErrorMessage = "Failed to retreive attachments";

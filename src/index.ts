@@ -26,6 +26,7 @@ import "@oada/lib-prom";
 import type { Change, JsonObject, OADAClient } from "@oada/client";
 import {
   handleAssessmentJob,
+  handleCoiReviewWritebackJob,
   handleDocumentJob,
   queueMirroredDocumentJob,
   startJobCreator,
@@ -583,6 +584,11 @@ export async function initialize({
         "business-lookup",
         config.get("timeouts.mirrorWatch"),
         handleFlBusiness,
+      );
+      svc.on(
+        "coi-review-writeback",
+        config.get("timeouts.mirrorWatch"),
+        handleCoiReviewWritebackJob,
       );
       svc.addReport({
         name: "fl-sync-report",

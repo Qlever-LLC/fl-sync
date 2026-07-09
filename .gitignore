@@ -173,3 +173,6 @@ cois-report-*
 VendorsReport*
 Vendor Report*
 CoiReportData/
+
+incident-sql-dump*
+Incidents_Export_CSV*
