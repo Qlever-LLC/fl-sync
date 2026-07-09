@@ -154,6 +154,7 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
     }) as { data: JsonObject };
     const flMirror = mirror["food-logiq-mirror"] as FlObject | undefined;
     const currentStatus = flMirror?.shareSource?.approvalInfo?.status;
+    const approvalDocumentId = flMirror?.shareSource?.draftVersionId ?? foodLogiqDocumentId;
     if (currentStatus && currentStatus !== "Awaiting Approval") {
       await updateDecision({
         writebackStatus: "skipped",
@@ -165,8 +166,8 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
     }
 
     const response = await foodLogiqWriteback(
-      `[job ${jobId}] COI review decision ${decisionId} document ${foodLogiqDocumentId} -> ${status}`,
-      `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${foodLogiqDocumentId}/approvalStatus`,
+      `[job ${jobId}] COI review decision ${decisionId} document ${approvalDocumentId} -> ${status}`,
+      `${FL_DOMAIN}/v2/businesses/${CO_ID}/documents/${approvalDocumentId}/approvalStatus`,
       {
         method: "put",
         headers: {
@@ -193,7 +194,8 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
     }
 
     if (!response.ok) {
-      throw new Error(`FoodLogiQ approvalStatus writeback failed with HTTP ${response.status}.`);
+      const responseText = await response.text().catch(() => "");
+      throw new Error(`FoodLogiQ approvalStatus writeback failed with HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}.`);
     }
 
     await updateDecision({
