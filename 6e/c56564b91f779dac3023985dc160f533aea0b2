@@ -1,0 +1,19 @@
+yarn.lock
+  s_459335d70aaa15::t_b0bcb0f6fcfc73 6284-6286,6485
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "6ec56564b91f779dac3023985dc160f533aea0b2",
+  "prompts": {},
+  "sessions": {
+    "s_459335d70aaa15": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0419774d4ffehYV3uWct4jsqi9",
+        "model": "gpt-5.3-codex"
+      },
+      "human_author": "Alex Layton <alex@qlever.io>"
+    }
+  }
+}
