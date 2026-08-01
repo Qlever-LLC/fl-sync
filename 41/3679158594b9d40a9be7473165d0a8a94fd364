@@ -1,0 +1,19 @@
+yarn.lock
+  s_459335d70aaa15::t_6a0cf8915fe9ee 2047-2048,2052,2057-2058,2061,2066-2067,2070,3286-3288,4211-4212,4218,5328-5329,5334,6284-6286,6495-6496,6498-6499
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "413679158594b9d40a9be7473165d0a8a94fd364",
+  "prompts": {},
+  "sessions": {
+    "s_459335d70aaa15": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0419774d4ffehYV3uWct4jsqi9",
+        "model": "gpt-5.3-codex"
+      },
+      "human_author": "Alex Layton <alex@qlever.io>"
+    }
+  }
+}
