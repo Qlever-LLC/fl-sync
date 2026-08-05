@@ -123,9 +123,10 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
   const jobId = job.oadaId;
   const jobConfig = job.config as unknown as CoiReviewWritebackJobConfig;
   const { foodLogiqBusinessId, foodLogiqDocumentId, decisionId } = jobConfig;
-  const decisionPath = foodLogiqBusinessId && foodLogiqDocumentId && decisionId
-    ? `${SERVICE_PATH}/businesses/${encodeURIComponent(foodLogiqBusinessId)}/documents/${encodeURIComponent(foodLogiqDocumentId)}/_meta/services/coi-review/decisions/${encodeURIComponent(decisionId)}`
-    : undefined;
+  const decisionPath =
+    foodLogiqBusinessId && foodLogiqDocumentId && decisionId
+      ? `${SERVICE_PATH}/businesses/${encodeURIComponent(foodLogiqBusinessId)}/documents/${encodeURIComponent(foodLogiqDocumentId)}/_meta/services/coi-review/decisions/${encodeURIComponent(decisionId)}`
+      : undefined;
 
   const updateDecision = async (data: JsonObject) => {
     if (!decisionPath) return;
@@ -134,27 +135,44 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
 
   try {
     if (!foodLogiqBusinessId || !foodLogiqDocumentId || !decisionId) {
-      throw new Error("COI review writeback job is missing business, document, or decision id.");
+      throw new Error(
+        "COI review writeback job is missing business, document, or decision id.",
+      );
     }
 
-    const status = jobConfig.foodLogiqStatus ?? (jobConfig.decision === "approve" ? "Approved" : jobConfig.decision === "reject" ? "Rejected" : undefined);
+    const status =
+      jobConfig.foodLogiqStatus ??
+      (jobConfig.decision === "approve"
+        ? "Approved"
+        : jobConfig.decision === "reject"
+          ? "Rejected"
+          : undefined);
     if (status !== "Approved" && status !== "Rejected") {
-      throw new Error("COI review writeback job must request Approved or Rejected status.");
+      throw new Error(
+        "COI review writeback job must request Approved or Rejected status.",
+      );
     }
 
-    const comment = status === "Rejected" ? String(jobConfig.message ?? "").trim() : "";
+    const comment =
+      status === "Rejected" ? String(jobConfig.message ?? "").trim() : "";
     if (status === "Rejected" && !comment) {
-      throw new Error("COI review rejection writeback requires a supplier message.");
+      throw new Error(
+        "COI review rejection writeback requires a supplier message.",
+      );
     }
 
-    await updateDecision({ writebackStatus: "submitted", updatedAt: new Date().toISOString() });
+    await updateDecision({
+      writebackStatus: "submitted",
+      updatedAt: new Date().toISOString(),
+    });
 
-    const { data: mirror } = await CONNECTION.get({
+    const { data: mirror } = (await CONNECTION.get({
       path: `${SERVICE_PATH}/businesses/${encodeURIComponent(foodLogiqBusinessId)}/documents/${encodeURIComponent(foodLogiqDocumentId)}`,
-    }) as { data: JsonObject };
+    })) as { data: JsonObject };
     const flMirror = mirror["food-logiq-mirror"] as FlObject | undefined;
     const currentStatus = flMirror?.shareSource?.approvalInfo?.status;
-    const approvalDocumentId = flMirror?.shareSource?.draftVersionId ?? foodLogiqDocumentId;
+    const approvalDocumentId =
+      flMirror?.shareSource?.draftVersionId ?? foodLogiqDocumentId;
     if (currentStatus && currentStatus !== "Awaiting Approval") {
       await updateDecision({
         writebackStatus: "skipped",
@@ -187,7 +205,8 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
       await updateDecision({
         writebackStatus: "skipped",
         writebackCompletedAt: new Date().toISOString(),
-        writebackError: "FoodLogiQ writeback is disabled by FL_WRITEBACK_ENABLED=false.",
+        writebackError:
+          "FoodLogiQ writeback is disabled by FL_WRITEBACK_ENABLED=false.",
         updatedAt: new Date().toISOString(),
       });
       return { status: "skipped" };
@@ -195,7 +214,9 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
 
     if (!response.ok) {
       const responseText = await response.text().catch(() => "");
-      throw new Error(`FoodLogiQ approvalStatus writeback failed with HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}.`);
+      throw new Error(
+        `FoodLogiQ approvalStatus writeback failed with HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}.`,
+      );
     }
 
     await updateDecision({
@@ -210,7 +231,10 @@ export const handleCoiReviewWritebackJob: WorkerFunction = async (
     await updateDecision({
       writebackStatus: "failed",
       writebackCompletedAt: new Date().toISOString(),
-      writebackError: error instanceof Error ? error.message : "Unknown FoodLogiQ writeback failure.",
+      writebackError:
+        error instanceof Error
+          ? error.message
+          : "Unknown FoodLogiQ writeback failure.",
       updatedAt: new Date().toISOString(),
     });
     throw error;
@@ -313,7 +337,8 @@ async function handleTargetStatus(
   const docJobId = docJob.oadaId;
   const { masterid, key } = docJob.config;
   const approvedMustContinue =
-    docJob.config["allow-rejection"] === false || docJob.config.status === "Approved";
+    docJob.config["allow-rejection"] === false ||
+    docJob.config.status === "Approved";
   if (docJob && approvedMustContinue) {
     log.trace(
       `[job ${docJobId}] Target finished with status ${status} on already-approved doc.`,
@@ -483,12 +508,15 @@ async function handleAttachmentTargetStatus({
     );
   }
 
-  const expectedTargetJobCount = trackedJob.expectedTargetJobCount ?? Object.keys(targetJobsByAttachment).length;
-  const targetJobEntries = Object.entries(targetJobsByAttachment) as Array<[
-    string,
-    { _id?: string; status?: string },
-  ]>;
-  const finalTargetJobEntries = targetJobEntries.filter(([, attachmentJob]) => finalTargetStatuses.has(String(attachmentJob.status)));
+  const expectedTargetJobCount =
+    trackedJob.expectedTargetJobCount ??
+    Object.keys(targetJobsByAttachment).length;
+  const targetJobEntries = Object.entries(targetJobsByAttachment) as Array<
+    [string, { _id?: string; status?: string }]
+  >;
+  const finalTargetJobEntries = targetJobEntries.filter(([, attachmentJob]) =>
+    finalTargetStatuses.has(String(attachmentJob.status)),
+  );
 
   log.trace(
     `[job ${docJobId}] Target job ${targetJob._id} for attachment ${attachmentKey} finished with ${status}. ${finalTargetJobEntries.length}/${expectedTargetJobCount} attachment target jobs complete.`,
@@ -504,7 +532,9 @@ async function handleAttachmentTargetStatus({
   if (finalTargetJobEntries.length < expectedTargetJobCount) return;
 
   trackedJob.targetJobsComplete = true;
-  const successfulTargetEntry = targetJobEntries.find(([, attachmentJob]) => attachmentJob.status === "success");
+  const successfulTargetEntry = targetJobEntries.find(
+    ([, attachmentJob]) => attachmentJob.status === "success",
+  );
   log.info(
     `[job ${docJobId}] All ${expectedTargetJobCount} attachment Target job(s) reached final status; ${finalTargetJobEntries.filter(([, attachmentJob]) => attachmentJob.status === "success").length} succeeded. Continuing document workflow.`,
   );
@@ -876,17 +906,27 @@ export async function postTpDocument({
 
   const primaryAttachmentKey = attachmentPdfs[0]?.attachmentKey;
   if (!primaryAttachmentKey) {
-    throw new Error("No attachment PDFs were prepared while handling pending document");
+    throw new Error(
+      "No attachment PDFs were prepared while handling pending document",
+    );
   }
 
   const targetJobsByAttachment: Record<
     string,
-    { _id?: string; filename: string; pdf: { _id: string }; status?: string; targetJobKey?: string }
+    {
+      _id?: string;
+      filename: string;
+      pdf: { _id: string };
+      status?: string;
+      targetJobKey?: string;
+    }
   > = {};
 
   flSyncJobs.set(jobId, {
     ...flSyncJobs.get(jobId),
-    expectedTargetJobCount: new Set(attachmentPdfs.map(({ attachmentKey }) => attachmentKey)).size,
+    expectedTargetJobCount: new Set(
+      attachmentPdfs.map(({ attachmentKey }) => attachmentKey),
+    ).size,
     targetJobsByAttachment,
     targetJobsComplete: false,
   });
@@ -921,16 +961,19 @@ export async function postTpDocument({
       `[job ${docJob.oadaId}] Starting Target transcription job for attachment ${attachmentPdf.attachmentKey} (${attachmentPdf.filename}) pdf ${attachmentPdf.pdfId}`,
     );
 
-    targetJobRequest.on(JobEventType.Status, async ({ job: jobChange }: any) => {
-      const index = await jobChange;
+    targetJobRequest.on(
+      JobEventType.Status,
+      async ({ job: jobChange }: any) => {
+        const index = await jobChange;
 
-      await handleAttachmentTargetStatus({
-        targetJob: index as unknown as TargetJob,
-        docJob: docJob as unknown as FlSyncJob,
-        attachmentKey: attachmentPdf.attachmentKey,
-        log,
-      });
-    });
+        await handleAttachmentTargetStatus({
+          targetJob: index as unknown as TargetJob,
+          docJob: docJob as unknown as FlSyncJob,
+          attachmentKey: attachmentPdf.attachmentKey,
+          log,
+        });
+      },
+    );
     //  TargetJobRequest.on(JobEventType.Update, handleTargetUpdates)
 
     const { key: targetJobKey, _id: targetJobId } =
@@ -1616,10 +1659,12 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
       onNewList: AssumeState.Handled,
     });
 
-    docsWatch.on(ChangeType.ItemAdded, async ({item, pointer}) => {
+    docsWatch.on(ChangeType.ItemAdded, async ({ item, pointer }) => {
       const it = (await item) as JsonObject;
-      if (it['food-logiq-mirror']) {
-        log.trace(`ListWatch ItemAdded triggered document queue for ${pointer}`);
+      if (it["food-logiq-mirror"]) {
+        log.trace(
+          `ListWatch ItemAdded triggered document queue for ${pointer}`,
+        );
         queueDocumentJob(it, pointer, log);
       }
     });
@@ -1627,7 +1672,9 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
     docsWatch.on(ChangeType.ItemChanged, async ({ item, pointer }) => {
       const it = (await item) as JsonObject;
       if (it["food-logiq-mirror"]) {
-        log.trace(`ListWatch ItemChanged triggered document queue for ${pointer}`);
+        log.trace(
+          `ListWatch ItemChanged triggered document queue for ${pointer}`,
+        );
         queueDocumentJob(it, pointer, log);
       }
     });
@@ -1649,15 +1696,12 @@ export async function startJobCreator(oada: OADAClient, log: Logger) {
       }
     });
     */
-    assessWatch.on(
-      ChangeType.ItemChanged,
-      async ({ item, pointer }) => {
-        const it = (await item) as JsonObject;
-        if (it["food-logiq-mirror"]) {
-          queueAssessmentJob(it, pointer, log);
-        }
-      },
-    );
+    assessWatch.on(ChangeType.ItemChanged, async ({ item, pointer }) => {
+      const it = (await item) as JsonObject;
+      if (it["food-logiq-mirror"]) {
+        queueAssessmentJob(it, pointer, log);
+      }
+    });
   } catch (cError: unknown) {
     log.error(cError);
     throw cError as Error;

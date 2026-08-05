@@ -14,7 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import '@oada/pino-debug';
+import "@oada/pino-debug";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import type { OADAClient } from "@oada/client";
+import { connect } from "@oada/client";
+import { doJob } from "@oada/client/jobs";
+import debug from "debug";
+import Excel from "exceljs";
+// @ts-expect-error jsonpath lacks types
+import jp from "jsonpath";
+import JsZip from "jszip";
+import { type ErrorObject, serializeError } from "serialize-error";
+import config from "../config.js";
 import type {
   AttachmentResources,
   AutoLiability,
@@ -37,86 +48,76 @@ import type {
   TrellisCOI,
   UmbrellaLiability,
   WorkersCompensation,
-} from '../types.js';
-import { type ErrorObject, serializeError } from 'serialize-error';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { groupBy, minimumDate, sum } from '../utils.js';
-import config from '../config.js';
-import { connect } from '@oada/client';
-import debug from 'debug';
-import { doJob } from '@oada/client/jobs';
-// @ts-expect-error jsonpath lacks types
-import jp from 'jsonpath';
+} from "../types.js";
+import { groupBy, minimumDate, sum } from "../utils.js";
 
-import Excel from 'exceljs';
-import JsZip from 'jszip';
-import type { OADAClient } from '@oada/client';
-const { domain, token } = config.get('trellis');
-const FL_TOKEN = config.get('foodlogiq.token');
-const FL_DOMAIN = config.get('foodlogiq.domain');
-const CO_ID = config.get('foodlogiq.community.owner.id');
-const COMMUNITY_ID = config.get('foodlogiq.community.id');
+const { domain, token } = config.get("trellis");
+const FL_TOKEN = config.get("foodlogiq.token");
+const FL_DOMAIN = config.get("foodlogiq.domain");
+const CO_ID = config.get("foodlogiq.community.owner.id");
+const COMMUNITY_ID = config.get("foodlogiq.community.id");
 
-const fail = 'FFb96161';
-const passFill = 'FF80a57d';
-const warnFill = 'FFffff93';
-const actionFill = 'FFffffa6';
+const fail = "FFb96161";
+const passFill = "FF80a57d";
+const warnFill = "FFffff93";
+const actionFill = "FFffffa6";
 
 const limits: Record<string, Limit> = {
-  '$.policies.cgl.each_occurrence': {
+  "$.policies.cgl.each_occurrence": {
     limit: 2_000_000,
     title:
-      'General Liability\n(Per Occurrence)\n(Greater than or equal\nto 2000000)',
-    name: 'General Liability',
-    longname: 'General Liability (Per Occurrence)',
-    path: '$.policies.cgl.each_occurrence',
-    type: 'cgl',
+      "General Liability\n(Per Occurrence)\n(Greater than or equal\nto 2000000)",
+    name: "General Liability",
+    longname: "General Liability (Per Occurrence)",
+    path: "$.policies.cgl.each_occurrence",
+    type: "cgl",
   },
-  '$.policies.cgl.general_aggregate': {
+  "$.policies.cgl.general_aggregate": {
     limit: 5_000_000,
-    title: 'General Liability\n(Aggregate)\n(Greater than or equal\nto 5000000)',
-    name: 'General Liability',
-    longname: 'General Liability (Aggregate)',
-    path: '$.policies.cgl.general_aggregate',
-    type: 'cgl',
+    title:
+      "General Liability\n(Aggregate)\n(Greater than or equal\nto 5000000)",
+    name: "General Liability",
+    longname: "General Liability (Aggregate)",
+    path: "$.policies.cgl.general_aggregate",
+    type: "cgl",
   },
-  '$.policies.al.combined_single_limit': {
+  "$.policies.al.combined_single_limit": {
     limit: 1_000_000,
-    title: 'Automobile Liability\n(Greater than or equal\nto 1000000)',
-    name: 'Automobile Liability',
-    path: '$.policies.al.combined_single_limit',
-    type: 'al',
+    title: "Automobile Liability\n(Greater than or equal\nto 1000000)",
+    name: "Automobile Liability",
+    path: "$.policies.al.combined_single_limit",
+    type: "al",
   },
-  '$.policies.el.el_each_accident': {
+  "$.policies.el.el_each_accident": {
     limit: 1_000_000,
     title: `Employer's Liability\n(Greater than or equal\nto 1000000)`,
     name: `Employer's Liability`,
-    path: '$.policies.el.el_each_accident',
-    type: 'el',
+    path: "$.policies.el.el_each_accident",
+    type: "el",
   },
 };
 
 const coiReportColumns = {
-  'Trading Partner': 40,
-  'FoodLogiq Document Link': 35,
-  'Grouped FoodLogiq\nDocuments': 18,
-  'Recommended Action': 18,
-  'ACTION SELECTION': 18,
-  'Rejection Reasons': 30,
-  'Custom Message': 30,
-  'Minimum Policy\nExpiration Date': 15,
-  'Different FoodLogiq\nExpiration Date': 20,
+  "Trading Partner": 40,
+  "FoodLogiq Document Link": 35,
+  "Grouped FoodLogiq\nDocuments": 18,
+  "Recommended Action": 18,
+  "ACTION SELECTION": 18,
+  "Rejection Reasons": 30,
+  "Custom Message": 30,
+  "Minimum Policy\nExpiration Date": 15,
+  "Different FoodLogiq\nExpiration Date": 20,
   ...Object.fromEntries(Object.values(limits).map(({ title }) => [title, 20])),
-  'Umbrella Liability': 15,
-  'Workers Compensation\n(per Statutory Requirements)\n(Is equal to Yes)': 20,
-  'FoodLogiq Comments': 30,
-  'Attachment Parsing Details': 30,
-  'Additional FoodLogiq \nDocs Considered': 20,
-}
+  "Umbrella Liability": 15,
+  "Workers Compensation\n(per Statutory Requirements)\n(Is equal to Yes)": 20,
+  "FoodLogiq Comments": 30,
+  "Attachment Parsing Details": 30,
+  "Additional FoodLogiq \nDocs Considered": 20,
+};
 
-const info = debug('fl-sync:info');
-const error = debug('fl-sync:error');
-const warn = debug('fl-sync:warn');
+const info = debug("fl-sync:info");
+const error = debug("fl-sync:error");
+const warn = debug("fl-sync:warn");
 let oada: OADAClient;
 try {
   oada = await connect({ domain, token });
@@ -124,13 +125,9 @@ try {
   error(error_);
 }
 
-export async function rejectDoc() {
+export async function rejectDoc() {}
 
-}
-
-export async function approveDoc() {
-
-}
+export async function approveDoc() {}
 
 /*
 export async function archiveDoc(_id: string) {

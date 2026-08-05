@@ -18,8 +18,8 @@
 import { writeFile } from "node:fs/promises";
 import {
   draftsToAwaitingApproval,
-  generateCoiReviewCases,
   gatherCoisReportData,
+  generateCoiReviewCases,
   generateCoisReport,
 } from "../assessments/coi.js";
 

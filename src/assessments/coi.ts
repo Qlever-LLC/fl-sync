@@ -712,21 +712,32 @@ function checkExpirations(flCoi: FlDocument, combinedTrellisCoi: TrellisCOI) {
     (a, b) => new Date(a).getTime() - new Date(b).getTime(),
   )[0];
   const minExpirationDate = minExpiration && new Date(minExpiration);
-  const minExpirationDay = minExpiration ? minExpiration.split("T")[0] : undefined;
+  const minExpirationDay = minExpiration
+    ? minExpiration.split("T")[0]
+    : undefined;
 
   // Verify Expiration Dates
   const expiryPassed = minExpirationDate && minExpirationDate > new Date();
 
-  const flExpiration = flCoi.expirationDate.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? new Date(flCoi.expirationDate).toISOString().split("T")[0];
+  const flExpiration =
+    flCoi.expirationDate.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ??
+    new Date(flCoi.expirationDate).toISOString().split("T")[0];
 
   // Check if the FL Document expiration date does not match the minimum of the COI doc
   // False and undefined are treated the same
-  const expiryMismatch = Boolean(minExpirationDay && flExpiration && minExpirationDay < flExpiration);
+  const expiryMismatch = Boolean(
+    minExpirationDay && flExpiration && minExpirationDay < flExpiration,
+  );
   if (expiryMismatch) {
     warn("The policy expiration date does not match the FL expiration date.");
   }
 
-  return { flExpiration, expiryPassed, minExpiration: minExpirationDay, expiryMismatch };
+  return {
+    flExpiration,
+    expiryPassed,
+    minExpiration: minExpirationDay,
+    expiryMismatch,
+  };
 }
 
 /*
@@ -904,9 +915,7 @@ function getAttachmentError(trellisCoiOrError: ExtractPdfResult | ErrObj) {
   if ("serialized" in trellisCoiOrError.results) {
     const resultError = trellisCoiOrError.results as ErrObj;
     const serialized = resultError.serialized as any;
-    return (
-      serialized?.cause?.cause?.information ?? serialized?.message
-    );
+    return serialized?.cause?.cause?.information ?? serialized?.message;
   }
 
   return undefined;
@@ -934,15 +943,18 @@ function getAttachmentReviewItems(
   flCoi: FlDocument | FlDocumentError,
   attachments: AttachmentResources | undefined,
 ): CoiReviewCase["attachments"] {
-  const sourceAttachments = "attachments" in flCoi ? flCoi.attachments ?? [] : [];
+  const sourceAttachments =
+    "attachments" in flCoi ? (flCoi.attachments ?? []) : [];
 
   if (!attachments || "serialized" in attachments) {
     const targetError = !attachments
       ? undefined
-      : (attachments as ErrObj).msg ?? (attachments as ErrObj).serialized?.message;
+      : ((attachments as ErrObj).msg ??
+        (attachments as ErrObj).serialized?.message);
 
     return sourceAttachments.map((attachment: any, index: number) => ({
-      key: attachment.fileName ?? attachment.S3Name ?? `attachment-${index + 1}`,
+      key:
+        attachment.fileName ?? attachment.S3Name ?? `attachment-${index + 1}`,
       foodLogiqDocumentId: flCoi._id,
       fileName: attachment.fileName,
       sourceS3Name: attachment.S3Name,
@@ -962,7 +974,8 @@ function getAttachmentReviewItems(
   return Object.entries(attachments).map(([key, trellisCoiOrError]) => {
     const sourceAttachment = sourceByKey.get(key);
     const results =
-      "results" in trellisCoiOrError && !("serialized" in trellisCoiOrError.results)
+      "results" in trellisCoiOrError &&
+      !("serialized" in trellisCoiOrError.results)
         ? trellisCoiOrError.results
         : undefined;
 
@@ -1012,14 +1025,20 @@ function getAssessmentChecks({
       key: "extraction.parsing",
       label: "Attachment parsing",
       status: parsingError ? "fail" : "pass",
-      message: parsingError ? "One or more attachment extraction errors occurred." : undefined,
+      message: parsingError
+        ? "One or more attachment extraction errors occurred."
+        : undefined,
     },
     {
       key: "expiration.minimum-policy-date",
       label: "Minimum policy expiration date",
-      status: expiryPassed === undefined ? "unknown" : expiryPassed ? "pass" : "fail",
+      status:
+        expiryPassed === undefined ? "unknown" : expiryPassed ? "pass" : "fail",
       actual: minExpiration ? minExpiration.split("T")[0] : undefined,
-      message: expiryPassed === false ? "One or more policies are expired." : undefined,
+      message:
+        expiryPassed === false
+          ? "One or more policies are expired."
+          : undefined,
       evidence: [{ source: "target", pointer: "/policies/*/expire_date" }],
     },
     {
@@ -1028,7 +1047,9 @@ function getAssessmentChecks({
       status: expiryMismatch ? "fail" : "pass",
       actual: flExpiration,
       expected: "Match attachment contents",
-      message: expiryMismatch ? "FoodLogiQ expiration is later than the earliest extracted policy expiration." : undefined,
+      message: expiryMismatch
+        ? "FoodLogiQ expiration is later than the earliest extracted policy expiration."
+        : undefined,
       evidence: [
         { source: "foodlogiq", pointer: "/expirationDate" },
         { source: "target", pointer: "/policies/*/expire_date" },
@@ -1052,7 +1073,9 @@ function getAssessmentChecks({
       label: "Certificate holder address",
       status: holderCheck?.pass ? "pass" : "fail",
       actual: holderCheck?.holderString,
-      message: holderCheck?.pass ? undefined : "Holder info does not meet requirements.",
+      message: holderCheck?.pass
+        ? undefined
+        : "Holder info does not meet requirements.",
       evidence: [{ source: "target", pointer: "/holder" }],
     },
   ];
@@ -1343,12 +1366,16 @@ export function generateCoiReviewCases(
       getAttachmentReviewItems(flCoi, attachments[flCoi._id]),
     );
     const parsingErrors = supplierAttachments
-      .map(({ key, targetError }) => (targetError ? `${key}: ${targetError}` : ""))
+      .map(({ key, targetError }) =>
+        targetError ? `${key}: ${targetError}` : "",
+      )
       .filter(Boolean);
     const parsingError = supplierAttachments.some(
       ({ targetStatus }) => targetStatus === "failed",
     );
-    const invalidHolder = parsingErrors.some((value) => value.includes("Holder"));
+    const invalidHolder = parsingErrors.some((value) =>
+      value.includes("Holder"),
+    );
 
     for (const flCoi of coisToReport) {
       const thisCoiAttachments = getExtractedCois(attachments[flCoi._id]);
@@ -1386,7 +1413,8 @@ export function generateCoiReviewCases(
           documentTypeName: flCoi.shareSource.type?.name,
           approvalStatus: flCoi.shareSource.approvalInfo?.status,
           complianceStatus: flCoi.shareSource.complianceInfo?.status,
-          effectiveDate: flCoi.shareSource.shareSpecificAttributes?.effectiveDate,
+          effectiveDate:
+            flCoi.shareSource.shareSpecificAttributes?.effectiveDate,
           expirationDate: flCoi.expirationDate,
           draftVersionId: flCoi.shareSource.draftVersionId,
           liveVersion: flCoi.shareSource.liveVersion,
