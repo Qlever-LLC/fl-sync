@@ -1,0 +1,19 @@
+yarn.lock
+  s_22b2758dac11f6::t_ebf5892acb28f2 4218-4219,4225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9e24fb0f391ac6c4f496527bef3986c862128b88",
+  "prompts": {},
+  "sessions": {
+    "s_22b2758dac11f6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_00d9fc69effeIPyStl97zGbXC3",
+        "model": "gpt-5.3-codex"
+      },
+      "human_author": "Alex Layton <alex@qlever.io>"
+    }
+  }
+}
